@@ -37,7 +37,6 @@ import (
 	"github.com/awslabs/operatorpkg/reasonable"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
-	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 
@@ -76,10 +75,6 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	if err = c.tagInstance(ctx, nodeClaim, id); err != nil {
 		return reconcile.Result{}, cloudprovider.IgnoreNodeClaimNotFoundError(err)
 	}
-	nodeClaim.Annotations = lo.Assign(nodeClaim.Annotations, map[string]string{
-		v1.AnnotationInstanceTagged:                 "true",
-		v1.AnnotationClusterNameTaggedCompatability: "true",
-	})
 	if !equality.Semantic.DeepEqual(nodeClaim, stored) {
 		if err := c.kubeClient.Patch(ctx, nodeClaim, client.MergeFrom(stored)); err != nil {
 			return reconcile.Result{}, client.IgnoreNotFound(err)
@@ -104,9 +99,8 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 
 func (c *Controller) tagInstance(ctx context.Context, nc *karpv1.NodeClaim, id string) error {
 	tags := map[string]string{
-		v1.NameTagKey:           nc.Status.NodeName,
-		v1.NodeClaimTagKey:      nc.Name,
-		v1.EKSClusterNameTagKey: options.FromContext(ctx).ClusterName,
+		v1.NameTagKey:      nc.Status.NodeName,
+		v1.NodeClaimTagKey: nc.Name,
 	}
 
 	// Remove tags which have been already populated
@@ -131,8 +125,7 @@ func (c *Controller) tagInstance(ctx context.Context, nc *karpv1.NodeClaim, id s
 func isTaggable(nc *karpv1.NodeClaim) bool {
 	// Instance has already been tagged
 	instanceTagged := nc.Annotations[v1.AnnotationInstanceTagged]
-	clusterNameTagged := nc.Annotations[v1.AnnotationClusterNameTaggedCompatability]
-	if instanceTagged == "true" && clusterNameTagged == "true" {
+	if instanceTagged == "true" {
 		return false
 	}
 	// Node name is not yet known

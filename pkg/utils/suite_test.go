@@ -32,7 +32,7 @@ func TestUtils(t *testing.T) {
 
 var _ = Describe("GetNodeClassHash", func() {
 	It("should return formatted hash with UID and Generation", func() {
-		nodeClass := &v1.EC2NodeClass{
+		nodeClass := &v1.LinodeNodeClass{
 			ObjectMeta: metav1.ObjectMeta{
 				UID:        "test-uid-123",
 				Generation: 5,

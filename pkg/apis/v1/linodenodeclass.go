@@ -1,6 +1,4 @@
 /*
-Copyright The Kubernetes Authors.
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -465,4 +463,13 @@ func (in *LinodeNodeClass) SetConditions(conditions []status.Condition) {
 func (in *LinodeNodeClass) StatusConditions() status.ConditionSet {
 	conds := []string{}
 	return status.NewReadyConditions(conds...).For(in)
+}
+
+// +kubebuilder:object:root=true
+
+// LinodeNodeClassList contains a list of LinodeNodeClass
+type LinodeNodeClassList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []LinodeNodeClass `json:"items"`
 }

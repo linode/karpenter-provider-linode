@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: linodenodeclasses.karpenter.k8s.aws
+  name: linodenodeclasses.karpenter.k8s.linode
 spec:
-  group: karpenter.k8s.aws
+  group: karpenter.k8s.linode
   names:
     categories:
     - karpenter

@@ -25,7 +25,7 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
-func WaitingOnNodeClaimTerminationEvent(nodeClass *v1.EC2NodeClass, names []string) events.Event {
+func WaitingOnNodeClaimTerminationEvent(nodeClass *v1.LinodeNodeClass, names []string) events.Event {
 	return events.Event{
 		InvolvedObject: nodeClass,
 		Type:           corev1.EventTypeNormal,

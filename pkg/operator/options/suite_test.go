@@ -61,8 +61,6 @@ var _ = Describe("Options", func() {
 			"--cluster-endpoint", "https://env-cluster",
 			"--isolated-vpc",
 			"--vm-memory-overhead-percent", "0.1",
-			"--interruption-queue", "env-cluster",
-			"--reserved-enis", "10",
 			"--disable-dry-run")
 		Expect(err).ToNot(HaveOccurred())
 		expectOptionsEqual(opts, test.Options(test.OptionsFields{
@@ -71,8 +69,6 @@ var _ = Describe("Options", func() {
 			ClusterEndpoint:         lo.ToPtr("https://env-cluster"),
 			IsolatedVPC:             lo.ToPtr(true),
 			VMMemoryOverheadPercent: lo.ToPtr[float64](0.1),
-			InterruptionQueue:       lo.ToPtr("env-cluster"),
-			ReservedENIs:            lo.ToPtr(10),
 			DisableDryRun:           lo.ToPtr(true),
 		}))
 	})
@@ -82,8 +78,6 @@ var _ = Describe("Options", func() {
 		os.Setenv("CLUSTER_ENDPOINT", "https://env-cluster")
 		os.Setenv("ISOLATED_VPC", "true")
 		os.Setenv("VM_MEMORY_OVERHEAD_PERCENT", "0.1")
-		os.Setenv("INTERRUPTION_QUEUE", "env-cluster")
-		os.Setenv("RESERVED_ENIS", "10")
 		os.Setenv("DISABLE_DRY_RUN", "false")
 
 		// Add flags after we set the environment variables so that the parsing logic correctly refers
@@ -97,8 +91,6 @@ var _ = Describe("Options", func() {
 			ClusterEndpoint:         lo.ToPtr("https://env-cluster"),
 			IsolatedVPC:             lo.ToPtr(true),
 			VMMemoryOverheadPercent: lo.ToPtr[float64](0.1),
-			InterruptionQueue:       lo.ToPtr("env-cluster"),
-			ReservedENIs:            lo.ToPtr(10),
 			DisableDryRun:           lo.ToPtr(false),
 		}))
 	})
@@ -119,10 +111,6 @@ var _ = Describe("Options", func() {
 			err := opts.Parse(fs, "--cluster-name", "test-cluster", "--vm-memory-overhead-percent", "-0.01")
 			Expect(err).To(HaveOccurred())
 		})
-		It("should fail when reservedENIs is negative", func() {
-			err := opts.Parse(fs, "--cluster-name", "test-cluster", "--reserved-enis", "-1")
-			Expect(err).To(HaveOccurred())
-		})
 	})
 })
 
@@ -133,7 +121,5 @@ func expectOptionsEqual(optsA *options.Options, optsB *options.Options) {
 	Expect(optsA.ClusterEndpoint).To(Equal(optsB.ClusterEndpoint))
 	Expect(optsA.IsolatedVPC).To(Equal(optsB.IsolatedVPC))
 	Expect(optsA.VMMemoryOverheadPercent).To(Equal(optsB.VMMemoryOverheadPercent))
-	Expect(optsA.InterruptionQueue).To(Equal(optsB.InterruptionQueue))
-	Expect(optsA.ReservedENIs).To(Equal(optsB.ReservedENIs))
 	Expect(optsA.DisableDryRun).To(Equal(optsB.DisableDryRun))
 }

@@ -16,6 +16,7 @@ package instancetype
 
 import (
 	"context"
+
 	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,6 +46,16 @@ type DefaultProvider struct {
 	recorder      events.Recorder
 	client        *linodego.Client
 	instanceCache *cache.Cache
+}
+
+func (d DefaultProvider) Get(ctx context.Context, class NodeClass, instance linodego.Instance) (*cloudprovider.InstanceType, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (d DefaultProvider) List(ctx context.Context, class NodeClass) ([]*cloudprovider.InstanceType, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func NewDefaultProvider(

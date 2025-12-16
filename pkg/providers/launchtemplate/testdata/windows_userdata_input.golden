@@ -1,2 +1,0 @@
-Write-Host "Running custom user data script"
-Write-Host "Finished running custom user data script"

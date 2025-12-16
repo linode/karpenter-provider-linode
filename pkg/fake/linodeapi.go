@@ -12,20 +12,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package noop
+package fake
 
-import (
-	"github.com/linode/karpenter-provider-linode/pkg/controllers/interruption/messages"
-)
+import "github.com/linode/linodego"
 
-type Message struct {
-	messages.Metadata
+type LinodeAPI struct {
+	*linodego.Client
 }
 
-func (Message) EC2InstanceIDs() []string {
-	return []string{}
+func NewLinodeAPI() *LinodeAPI {
+	return &LinodeAPI{}
 }
 
-func (Message) Kind() messages.Kind {
-	return messages.NoOpKind
+func (l *LinodeAPI) Reset() {
+
 }

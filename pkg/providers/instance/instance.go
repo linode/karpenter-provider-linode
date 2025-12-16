@@ -33,13 +33,6 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
-const (
-	// falling back to on-demand without flexibility risks insufficient capacity errors
-	instanceTypeFlexibilityThreshold = 5
-	// The maximum number of instance types to include in a Create request
-	maxInstanceTypes = 60
-)
-
 type Provider interface {
 	Create(context.Context, *v1.LinodeNodeClass, *karpv1.NodeClaim, map[string]string, []*cloudprovider.InstanceType) (*Instance, error)
 	Get(context.Context, string, ...Options) (*Instance, error)
@@ -65,13 +58,7 @@ type DefaultProvider struct {
 	instanceCache *cache.Cache
 }
 
-func (p *DefaultProvider) CreateTags(ctx context.Context, s string, m map[string]string) error {
-	//TODO implement me
-	panic("implement me")
-}
-
 func NewDefaultProvider(
-	ctx context.Context,
 	region string,
 	recorder events.Recorder,
 	client *linodego.Client,
@@ -87,6 +74,22 @@ func NewDefaultProvider(
 }
 
 func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*Instance, error) {
+	// Merge tags from NodeClaim and LinodeNodeClass
+	tagList := nodeClass.Spec.Tags
+	for k, v := range tags {
+		tagList = append(tagList, fmt.Sprintf("%s:%s", k, v))
+	}
+
+	// Deduplicate tags
+	uniqueTagsSet := make(map[string]struct{})
+	for _, tag := range tagList {
+		uniqueTagsSet[tag] = struct{}{}
+	}
+	uniqueTags := make([]string, len(uniqueTagsSet))
+	for tag := range uniqueTagsSet {
+		uniqueTags = append(uniqueTags, tag)
+	}
+
 	createOpts := linodego.InstanceCreateOptions{
 		Region:          p.region,
 		Type:            nodeClass.Spec.Type,
@@ -97,7 +100,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		BackupsEnabled:  nodeClass.Spec.BackupsEnabled,
 		PrivateIP:       nodeClass.Spec.PrivateIP,
 		NetworkHelper:   nodeClass.Spec.NetworkHelper,
-		Tags:            nodeClass.Spec.Tags, // TODO: merge with tags from nodeClaim
+		Tags:            uniqueTags,
 		FirewallID:      nodeClass.Spec.FirewallID,
 		// NOTE: Linode Interfaces may not currently be available to all users.
 		LinodeInterfaces: constructLinodeInterfaceCreateOpts(nodeClass.Spec.LinodeInterfaces),
@@ -327,19 +330,23 @@ func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (p *DefaultProvider) CreateTag(ctx context.Context, id, tag string) error {
+// NOTE: Linode's API only supports creating tags one at a time. This might be a problem if we want to add multiple tags at once.
+func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[string]string) error {
 	intId, err := strconv.Atoi(id)
 	if err != nil {
 		return fmt.Errorf("invalid instance id %s, %w", id, err)
 	}
-	if _, err := p.client.CreateTag(ctx, linodego.TagCreateOptions{
-		Linodes: []int{intId},
-		Label:   tag,
-	}); err != nil {
-		if linodego.IsNotFound(err) {
-			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("tagging instance, %w", err))
+	for k, v := range tags {
+		if _, err := p.client.CreateTag(ctx, linodego.TagCreateOptions{
+			Linodes: []int{intId},
+			Label:   fmt.Sprintf("%s:%s", k, v),
+		}); err != nil {
+			if linodego.IsNotFound(err) {
+				return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("tagging instance, %w", err))
+			}
+			return fmt.Errorf("tagging instance, %w", err)
 		}
-		return fmt.Errorf("tagging instance, %w", err)
 	}
+
 	return nil
 }
