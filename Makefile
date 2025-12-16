@@ -1,0 +1,143 @@
+CLUSTER_NAME ?= $(shell kubectl config view --minify -o jsonpath='{.clusters[].name}' | rev | cut -d"/" -f1 | rev | cut -d"." -f1)
+
+## Inject the app version into operator.Version
+LDFLAGS ?= -ldflags=-X=sigs.k8s.io/karpenter/pkg/operator.Version=$(shell git describe --tags --always | cut -d"v" -f2)
+
+GOFLAGS ?= $(LDFLAGS)
+WITH_GOFLAGS = GOFLAGS="$(GOFLAGS)"
+
+# CR for local builds of Karpenter
+KARPENTER_NAMESPACE ?= kube-system
+KARPENTER_VERSION ?= $(shell git tag --sort=committerdate | tail -1 | cut -d"v" -f2)
+
+# Common Directories
+MOD_DIRS = $(shell find . -path "./website" -prune -o -name go.mod -type f -print | xargs dirname)
+KARPENTER_CORE_DIR = $(shell go list -m -f '{{ .Dir }}' sigs.k8s.io/karpenter)
+
+# TEST_SUITE enables you to select a specific test suite directory to run "make e2etests" against
+TEST_SUITE ?= "..."
+TMPFILE := $(shell mktemp)
+
+# Filename when building the binary controller only
+GOARCH ?= $(shell go env GOARCH)
+BINARY_FILENAME = karpenter-provider-linode-$(GOARCH)
+
+help: ## Display help
+	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+
+presubmit: verify test ## Run all steps in the developer loop
+
+ci-test: test coverage ## Runs tests and submits coverage
+
+ci-non-test: verify vulncheck ## Runs checks other than tests
+
+run: ## Run Karpenter controller binary against your local cluster
+	SYSTEM_NAMESPACE=${KARPENTER_NAMESPACE} \
+		KUBERNETES_MIN_VERSION="1.19.0-0" \
+		DISABLE_LEADER_ELECTION=true \
+		CLUSTER_NAME=${CLUSTER_NAME} \
+		INTERRUPTION_QUEUE=${CLUSTER_NAME} \
+		FEATURE_GATES="SpotToSpotConsolidation=true,NodeOverlay=true,StaticCapacity=true" \
+		LOG_LEVEL="debug" \
+		go run ./cmd/controller/main.go
+
+test: ## Run tests
+	go test ./pkg/... \
+		-cover -coverprofile=coverage.out -outputdir=. -coverpkg=./... \
+		--ginkgo.focus="${FOCUS}" \
+		--ginkgo.randomize-all \
+		--ginkgo.vv
+
+deflake: ## Run randomized, racing tests until the test fails to catch flakes
+	ginkgo \
+		--race \
+		--focus="${FOCUS}" \
+		--randomize-all \
+		--until-it-fails \
+		-v \
+		./pkg/...
+
+e2etests: ## Run the e2e suite against your local cluster
+	cd test && CLUSTER_ENDPOINT=${CLUSTER_ENDPOINT} \
+		CLUSTER_NAME=${CLUSTER_NAME} \
+		INTERRUPTION_QUEUE=${CLUSTER_NAME} \
+		go test \
+		-p 1 \
+		-count 1 \
+		-timeout 3.25h \
+		-v \
+		./suites/$(shell echo $(TEST_SUITE) | tr A-Z a-z)/... \
+		--ginkgo.focus="${FOCUS}" \
+		--ginkgo.timeout=3h \
+		--ginkgo.grace-period=3m \
+		--ginkgo.vv
+
+upstream-e2etests: tidy download
+	CLUSTER_NAME=${CLUSTER_NAME} envsubst < $(shell pwd)/test/pkg/environment/linode/default_linodenodeclass.yaml > ${TMPFILE}
+	go test \
+		-count 1 \
+		-timeout 3.25h \
+		-v \
+		$(KARPENTER_CORE_DIR)/test/suites/... \
+		--ginkgo.focus="${FOCUS}" \
+		--ginkgo.timeout=3h \
+		--ginkgo.grace-period=5m \
+		--ginkgo.vv \
+		--default-nodeclass="$(TMPFILE)"\
+		--default-nodepool="$(shell pwd)/test/pkg/environment/linode/default_nodepool.yaml"
+
+e2etests-deflake: ## Run the e2e suite against your local cluster
+	cd test && CLUSTER_NAME=${CLUSTER_NAME} ginkgo \
+		--focus="${FOCUS}" \
+		--timeout=3h \
+		--grace-period=3m \
+		--until-it-fails \
+		--vv \
+		./suites/$(shell echo $(TEST_SUITE) | tr A-Z a-z) \
+
+benchmark:
+	go test -tags=test_performance -run=NoTests -bench=. ./...
+
+coverage:
+	go tool cover -html coverage.out -o coverage.html
+
+verify: tidy download ## Verify code. Includes dependencies, linting, formatting, etc
+	go generate ./...
+	hack/boilerplate.sh
+	cp  $(KARPENTER_CORE_DIR)/pkg/apis/crds/* pkg/apis/crds
+	# cp pkg/apis/crds/* charts/karpenter-crd/templates
+	$(foreach dir,$(MOD_DIRS),cd $(dir) && golangci-lint run $(newline))
+	@git diff --quiet ||\
+		{ echo "New file modification detected in the Git working tree. Please check in before commit."; git --no-pager diff --name-only | uniq | awk '{print "  - " $$0}'; \
+		if [ "${CI}" = true ]; then\
+			exit 1;\
+		fi;}
+
+vulncheck: ## Verify code vulnerabilities
+	@govulncheck ./pkg/...
+
+image: ## Build the Karpenter controller images using ko build
+	$(eval CONTROLLER_IMG=$(shell $(WITH_GOFLAGS) KOCACHE=$(KOCACHE) KO_DOCKER_REPO="$(KO_DOCKER_REPO)" ko build --bare github.com/linode/karpenter-provider-linode/cmd/controller))
+	$(eval IMG_REPOSITORY=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 1 | cut -d ":" -f 1))
+	$(eval IMG_TAG=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 1 | cut -d ":" -f 2 -s))
+	$(eval IMG_DIGEST=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 2))
+
+binary: ## Build the Karpenter controller binary using go build
+	go build $(GOFLAGS) -o $(BINARY_FILENAME) ./cmd/controller/...
+
+tidy: ## Recursively "go mod tidy" on all directories where go.mod exists
+	$(foreach dir,$(MOD_DIRS),cd $(dir) && go mod tidy $(newline))
+
+download: ## Recursively "go mod download" on all directories where go.mod exists
+	$(foreach dir,$(MOD_DIRS),cd $(dir) && go mod download $(newline))
+
+update-karpenter: ## Update kubernetes-sigs/karpenter to latest
+	go get -u sigs.k8s.io/karpenter@HEAD
+	go mod tidy
+
+.PHONY: help presubmit ci-test ci-non-test run test deflake e2etests e2etests-deflake benchmark coverage verify vulncheck image apply install delete docgen codegen tidy download update-karpenter
+
+define newline
+
+
+endef

@@ -1,0 +1,19 @@
+name: InstallHelm
+description: 'Installs helm'
+inputs:
+  version:
+    description: "Version of Helm to install"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: install helm
+      shell: bash
+      env:
+        HELM_VERSION: ${{ inputs.version }}
+      run: |
+        ./test/hack/e2e_scripts/install_helm.sh
+    - name: install helm-diff
+      shell: bash
+      run: |
+        helm plugin install https://github.com/databus23/helm-diff || true

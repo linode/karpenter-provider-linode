@@ -1,0 +1,128 @@
+name: E2EMatrix
+on:
+  workflow_call:
+    inputs:
+      region:
+        type: string
+        default: "us-east-2"
+      k8s_version:
+        type: string
+        default: "1.34"
+      cleanup:
+        type: boolean
+        required: true
+      git_ref:
+        type: string
+      workflow_trigger:
+        type: string
+        required: true
+      parallelism:
+        type: number
+    secrets:
+      SLACK_WEBHOOK_URL:
+        required: true
+  workflow_dispatch:
+    inputs:
+      region:
+        type: choice
+        options:
+          - "us-east-1"
+          - "us-east-2"
+          - "us-west-2"
+          - "eu-west-1"
+        default: "us-east-2"
+      k8s_version:
+        type: choice
+        options:
+          - "1.28"
+          - "1.29"
+          - "1.30"
+          - "1.31"
+          - "1.32"
+          - "1.33"
+          - "1.34"
+        default: "1.34"
+      cleanup:
+        type: boolean
+        required: true
+        default: true
+# All jobs will run under the following conditions:
+#   1. Upstream Karpenter repo triggered the job by schedule, push, or dispatch
+#   2. Upstream Karpenter repo triggered the job by workflow_run, which requires maintainer check to succeed
+#   3. Downstream fork triggered the job through dispatch and has set 'ENABLE_E2E' in repo environment variables
+jobs:
+  e2e:
+    permissions:
+      id-token: write # aws-actions/configure-aws-credentials@v4.0.1
+      statuses: write # ./.github/actions/commit-status/start
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ inputs.parallelism || 100 }}
+      matrix:
+        suite:
+          - name: IPv6
+            region: ${{ inputs.region }}
+            source: aws
+          - name: AMI
+            region: ${{ inputs.region }}
+            source: aws
+          - name: Scheduling
+            region: ${{ inputs.region }}
+            source: aws
+          - name: Storage
+            region: ${{ inputs.region }}
+            source: aws
+          - name: Integration
+            region: ${{ inputs.region }}
+            source: all
+          - name: NodeClaim
+            region: ${{ inputs.region }}
+            source: all
+          - name: Consolidation
+            region: ${{ inputs.region }}
+            source: aws
+          - name: Interruption
+            region: ${{ inputs.region }}
+            source: aws
+          - name: Drift
+            region: ${{ inputs.region }}
+            source: all
+          - name: Expiration
+            region: ${{ inputs.region }}
+            source: upstream
+          - name: Chaos
+            region: ${{ inputs.region }}
+            source: upstream
+          - name: Termination
+            region: ${{ inputs.region }}
+            source: upstream
+          - name: LocalZone
+            # LAX is the only local zone available in the CI account, therefore only use us-west-2
+            region: us-west-2
+            source: aws
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      suite: ${{ matrix.suite.name }}
+      git_ref: ${{ inputs.git_ref }}
+      region: ${{ matrix.suite.region }}
+      k8s_version: ${{ inputs.k8s_version }}
+      cleanup: ${{ inputs.cleanup }}
+      workflow_trigger: ${{ inputs.workflow_trigger }}
+      source: ${{ matrix.suite.source }}
+    secrets:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+  e2e-upgrade:
+    permissions:
+      id-token: write # aws-actions/configure-aws-credentials@v4.0.1
+      statuses: write # ./.github/actions/commit-status/start
+    uses: ./.github/workflows/e2e-upgrade.yaml
+    with:
+      from_git_ref: 0a0d38d93a7b0ce5ae5555443ee67c02e7d0c1ca
+      to_git_ref: ${{ inputs.git_ref }}
+      region: ${{ inputs.region }}
+      k8s_version: ${{ inputs.k8s_version }}
+      cleanup: ${{ inputs.cleanup }}
+      workflow_trigger: ${{ inputs.workflow_trigger }}
+      source: all
+    secrets:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

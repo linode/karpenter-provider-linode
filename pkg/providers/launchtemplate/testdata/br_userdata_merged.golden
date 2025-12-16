@@ -1,0 +1,33 @@
+[settings]
+[settings.kubernetes]
+api-server = 'https://test-cluster'
+cloud-provider = 'external'
+cluster-certificate = 'Y2EtYnVuZGxlCg=='
+cluster-name = 'test-cluster'
+cluster-dns-ip = '10.0.100.10'
+max-pods = 110
+
+[settings.kubernetes.node-labels]
+custom-node-label = 'custom'
+'karpenter.k8s.aws/ec2nodeclass' = '%s'
+'karpenter.sh/capacity-type' = 'on-demand'
+'karpenter.sh/do-not-sync-taints' = 'true'
+'%s' = '%s'
+'testing/cluster' = 'unspecified'
+
+[settings.kubernetes.node-taints]
+baz = ['bin:NoExecute']
+foo = ['bar:NoExecute']
+'karpenter.sh/unregistered' = [':NoExecute']
+
+[settings.kubernetes.eviction-hard]
+'memory.available' = '12%%'
+
+[settings.network]
+hostname = 'test.local'
+hosts = [['10.0.0.0', ['test.example.com', 'test1.example.com']]]
+https-proxy = '1.2.3.4:8080'
+no-proxy = ['localhost', '127.0.0.1']
+
+[settings.ntp]
+time-servers = ['169.254.169.123']

@@ -1,0 +1,113 @@
+/*
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package controllers
+
+import (
+	"context"
+
+	"github.com/awslabs/operatorpkg/controller"
+	"github.com/awslabs/operatorpkg/status"
+	"github.com/patrickmn/go-cache"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	servicesqs "github.com/aws/aws-sdk-go-v2/service/sqs"
+
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	sdk "github.com/linode/karpenter-provider-linode/pkg/aws"
+	crcapacitytype "github.com/linode/karpenter-provider-linode/pkg/controllers/capacityreservation/capacitytype"
+	crexpiration "github.com/linode/karpenter-provider-linode/pkg/controllers/capacityreservation/expiration"
+	"github.com/linode/karpenter-provider-linode/pkg/controllers/metrics"
+	"github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclass"
+	nodeclasshash "github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclass/hash"
+	controllersinstancetype "github.com/linode/karpenter-provider-linode/pkg/controllers/providers/instancetype"
+	controllersinstancetypecapacity "github.com/linode/karpenter-provider-linode/pkg/controllers/providers/instancetype/capacity"
+	controllerspricing "github.com/linode/karpenter-provider-linode/pkg/controllers/providers/pricing"
+	ssminvalidation "github.com/linode/karpenter-provider-linode/pkg/controllers/providers/ssm/invalidation"
+	controllersversion "github.com/linode/karpenter-provider-linode/pkg/controllers/providers/version"
+	capacityreservationprovider "github.com/linode/karpenter-provider-linode/pkg/providers/capacityreservation"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/launchtemplate"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/version"
+
+	"k8s.io/utils/clock"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"sigs.k8s.io/karpenter/pkg/events"
+
+	awscache "github.com/linode/karpenter-provider-linode/pkg/cache"
+	"github.com/linode/karpenter-provider-linode/pkg/controllers/interruption"
+	nodeclaimgarbagecollection "github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclaim/garbagecollection"
+	nodeclaimtagging "github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclaim/tagging"
+	nodeclassgarbagecollection "github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclass/garbagecollection"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/amifamily"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/instanceprofile"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/pricing"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/securitygroup"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/sqs"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/subnet"
+)
+
+func NewControllers(
+	ctx context.Context,
+	mgr manager.Manager,
+	cfg aws.Config,
+	clk clock.Clock,
+	ec2api sdk.EC2API,
+	kubeClient client.Client,
+	recorder events.Recorder,
+	unavailableOfferings *awscache.UnavailableOfferings,
+	ssmCache *cache.Cache,
+	validationCache *cache.Cache,
+	recreationCache *cache.Cache,
+	cloudProvider cloudprovider.CloudProvider,
+	subnetProvider subnet.Provider,
+	securityGroupProvider securitygroup.Provider,
+	instanceProfileProvider instanceprofile.Provider,
+	instanceProvider instance.Provider,
+	pricingProvider pricing.Provider,
+	amiProvider amifamily.Provider,
+	launchTemplateProvider launchtemplate.Provider,
+	versionProvider *version.DefaultProvider,
+	instanceTypeProvider *instancetype.DefaultProvider,
+	capacityReservationProvider capacityreservationprovider.Provider,
+	amiResolver amifamily.Resolver,
+) []controller.Controller {
+	controllers := []controller.Controller{
+		nodeclasshash.NewController(kubeClient),
+		nodeclass.NewController(clk, kubeClient, cloudProvider, recorder, cfg.Region, subnetProvider, securityGroupProvider, amiProvider, instanceProfileProvider, instanceTypeProvider, launchTemplateProvider, capacityReservationProvider, ec2api, validationCache, recreationCache, amiResolver, options.FromContext(ctx).DisableDryRun),
+		nodeclaimgarbagecollection.NewController(kubeClient, cloudProvider),
+		nodeclassgarbagecollection.NewController(kubeClient, cloudProvider, instanceProfileProvider, cfg.Region),
+		nodeclaimtagging.NewController(kubeClient, cloudProvider, instanceProvider),
+		controllerspricing.NewController(pricingProvider),
+		controllersinstancetype.NewController(instanceTypeProvider),
+		controllersinstancetypecapacity.NewController(kubeClient, cloudProvider, instanceTypeProvider),
+		ssminvalidation.NewController(ssmCache, amiProvider),
+		status.NewController[*v1.EC2NodeClass](kubeClient, mgr.GetEventRecorderFor("karpenter"), status.EmitDeprecatedMetrics),
+		controllersversion.NewController(versionProvider, versionProvider.UpdateVersionWithValidation),
+		crcapacitytype.NewController(kubeClient, cloudProvider),
+		crexpiration.NewController(clk, kubeClient, cloudProvider, capacityReservationProvider),
+		metrics.NewController(kubeClient, cloudProvider),
+	}
+	if options.FromContext(ctx).InterruptionQueue != "" {
+		sqsAPI := servicesqs.NewFromConfig(cfg)
+		prov, _ := sqs.NewSQSProvider(ctx, sqsAPI)
+		controllers = append(controllers, interruption.NewController(kubeClient, cloudProvider, clk, recorder, prov, sqsAPI, unavailableOfferings))
+	}
+	return controllers
+}
