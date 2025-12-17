@@ -16,9 +16,10 @@ package instance_test
 
 import (
 	"context"
+	"testing"
+
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/karpenter/pkg/events"
-	"testing"
 
 	"github.com/awslabs/operatorpkg/object"
 	"github.com/samber/lo"

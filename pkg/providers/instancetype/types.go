@@ -13,3 +13,37 @@ limitations under the License.
 */
 
 package instancetype
+
+import (
+	"context"
+
+	"github.com/linode/linodego"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+)
+
+type Resolver interface {
+	// CacheKey tells the InstanceType cache if something changes about the InstanceTypes or Offerings based on the NodeClass.
+	CacheKey(NodeClass) string
+	// Resolve generates an InstanceType based on raw LinodeType and NodeClass setting data
+	Resolve(ctx context.Context, info linodego.LinodeType, zones []string, nodeClass NodeClass) *cloudprovider.InstanceType
+}
+
+type DefaultResolver struct {
+	region string
+}
+
+func (d DefaultResolver) CacheKey(class NodeClass) string {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (d DefaultResolver) Resolve(ctx context.Context, info linodego.LinodeType, zones []string, nodeClass NodeClass) *cloudprovider.InstanceType {
+	//TODO implement me
+	panic("implement me")
+}
+
+func NewDefaultResolver(region string) *DefaultResolver {
+	return &DefaultResolver{
+		region: region,
+	}
+}

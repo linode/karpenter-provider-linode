@@ -14,11 +14,36 @@ limitations under the License.
 
 package v1
 
-import "github.com/awslabs/operatorpkg/status"
+import (
+	"github.com/awslabs/operatorpkg/status"
+)
+
+// LinodeImage contains resolved AMI selector values utilized for node launch
+type LinodeImage struct {
+	// ID of the Image
+	// +required
+	ID string `json:"id"`
+	// Deprecation status of the Image
+	// +optional
+	Deprecated bool `json:"deprecated,omitempty"`
+	// Label of the Image
+	// +optional
+	Label string `json:"label,omitempty"`
+
+	// TODO: Add more fields as necessary
+}
 
 // LinodeNodeClassStatus contains the resolved state of the LinodeNodeClass
 type LinodeNodeClassStatus struct {
+	// LinodeImage contains the current LinodeImage values that are available to the
+	// cluster under the LinodeImage selectors.
+	// +optional
+	LinodeImages []LinodeImage `json:"linodeImages,omitempty"`
 	// Conditions contains signals for health and readiness
 	// +optional
 	Conditions []status.Condition `json:"conditions,omitempty"`
+}
+
+func (in *LinodeNodeClass) LinodeImages() []LinodeImage {
+	return in.Status.LinodeImages
 }

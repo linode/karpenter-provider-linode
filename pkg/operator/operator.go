@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"time"
 
 	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
@@ -30,10 +29,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/operator"
 
+	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
@@ -62,10 +61,20 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		log.FromContext(ctx).WithValues("kube-dns-ip", kubeDNSIP).V(1).Info("discovered kube dns")
 	}
 
-	instanceTypeProvider := instancetype.NewDefaultProvider("", nil, &linodeAPI, cache.New(time.Minute*5, time.Minute))
+	instanceTypeProvider := instancetype.NewDefaultProvider(
+		&linodeAPI,
+		instancetype.NewDefaultResolver("dummy"),
+		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
+		cache.New(linodecache.DiscoveredCapacityCacheTTL, linodecache.DefaultCleanupInterval),
+	)
 	// Ensure we're able to hydrate instance types before starting any reliant controllers.
 	// Instance type updates are hydrated asynchronously after this by controllers.
-	instanceProvider := instance.NewDefaultProvider("", nil, &linodeAPI, cache.New(time.Minute*5, time.Minute))
+	instanceProvider := instance.NewDefaultProvider(
+		"dummy",
+		operator.EventRecorder,
+		&linodeAPI,
+		cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
+	)
 
 	return ctx, &Operator{
 		Operator:              operator,

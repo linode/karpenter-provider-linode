@@ -690,6 +690,27 @@ spec:
                   - type
                   type: object
                 type: array
+              linodeImages:
+                description: |-
+                  LinodeImage contains the current LinodeImage values that are available to the
+                  cluster under the LinodeImage selectors.
+                items:
+                  description: LinodeImage contains resolved AMI selector values utilized
+                    for node launch
+                  properties:
+                    deprecated:
+                      description: Deprecation status of the Image
+                      type: boolean
+                    id:
+                      description: ID of the Image
+                      type: string
+                    label:
+                      description: Label of the Image
+                      type: string
+                  required:
+                  - id
+                  type: object
+                type: array
             type: object
         type: object
     served: true

@@ -19,18 +19,17 @@ import (
 	"time"
 
 	"github.com/patrickmn/go-cache"
+	"github.com/samber/lo"
 	clock "k8s.io/utils/clock/testing"
+	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/karpenter/pkg/controllers/nodeoverlay"
+	coretest "sigs.k8s.io/karpenter/pkg/test"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
-	awscache "github.com/linode/karpenter-provider-linode/pkg/cache"
+	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
-
-	coretest "sigs.k8s.io/karpenter/pkg/test"
-
-	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 func init() {
@@ -47,18 +46,14 @@ type Environment struct {
 	LinodeAPI *fake.LinodeAPI
 
 	// Cache
-	LinodeCache                   *cache.Cache
-	InstanceTypeCache             *cache.Cache
-	InstanceCache                 *cache.Cache
-	LaunchTemplateCache           *cache.Cache
-	AvailableIPAdressCache        *cache.Cache
-	AssociatePublicIPAddressCache *cache.Cache
-	RecreationCache               *cache.Cache
-	ProtectedProfilesCache        *cache.Cache
+	LinodeCache       *cache.Cache
+	InstanceTypeCache *cache.Cache
+	InstanceCache     *cache.Cache
 
 	// Providers
 	InstanceTypesProvider *instancetype.DefaultProvider
 	InstanceProvider      *instance.DefaultProvider
+	InstanceTypesResolver *instancetype.DefaultResolver
 }
 
 func NewEnvironment(ctx context.Context, env *coretest.Environment) *Environment {
@@ -70,23 +65,24 @@ func NewEnvironment(ctx context.Context, env *coretest.Environment) *Environment
 	linodeAPI := fake.NewLinodeAPI()
 
 	// cache
-	LinodeCache := cache.New(awscache.DefaultTTL, awscache.DefaultCleanupInterval)
-	instanceTypeCache := cache.New(awscache.DefaultTTL, awscache.DefaultCleanupInterval)
-	instanceCache := cache.New(awscache.DefaultTTL, awscache.DefaultCleanupInterval)
-	launchTemplateCache := cache.New(awscache.DefaultTTL, awscache.DefaultCleanupInterval)
-	availableIPAdressCache := cache.New(awscache.AvailableIPAddressTTL, awscache.DefaultCleanupInterval)
-	associatePublicIPAddressCache := cache.New(awscache.AssociatePublicIPAddressTTL, awscache.DefaultCleanupInterval)
-	protectedProfilesCache := cache.New(awscache.DefaultTTL, awscache.DefaultCleanupInterval)
-	recreationCache := cache.New(awscache.DefaultTTL, awscache.DefaultCleanupInterval)
+	linodeCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
+	instanceTypeCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
+	instanceCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
+	discoveredCapacityCache := cache.New(linodecache.DiscoveredCapacityCacheTTL, linodecache.DefaultCleanupInterval)
 	eventRecorder := coretest.NewEventRecorder()
 
 	// Providers
 	instanceTypesProvider := instancetype.NewDefaultProvider(
-		"",
-		eventRecorder,
 		linodeAPI.Client,
+		instancetype.NewDefaultResolver(fake.DefaultRegion),
 		instanceTypeCache,
+		discoveredCapacityCache,
 	)
+	// Ensure we're able to hydrate instance types before starting any reliant controllers.
+	// Instance type updates are hydrated asynchronously after this by controllers.
+	lo.Must0(instanceTypesProvider.UpdateInstanceTypes(ctx))
+	lo.Must0(instanceTypesProvider.UpdateInstanceTypeOfferings(ctx))
+
 	instanceProvider := instance.NewDefaultProvider(
 		"",
 		eventRecorder,
@@ -101,15 +97,9 @@ func NewEnvironment(ctx context.Context, env *coretest.Environment) *Environment
 
 		LinodeAPI: linodeAPI,
 
-		LinodeCache:       LinodeCache,
+		LinodeCache:       linodeCache,
 		InstanceTypeCache: instanceTypeCache,
 		InstanceCache:     instanceCache,
-
-		LaunchTemplateCache:           launchTemplateCache,
-		AvailableIPAdressCache:        availableIPAdressCache,
-		AssociatePublicIPAddressCache: associatePublicIPAddressCache,
-		RecreationCache:               recreationCache,
-		ProtectedProfilesCache:        protectedProfilesCache,
 
 		InstanceTypesProvider: instanceTypesProvider,
 		InstanceProvider:      instanceProvider,
@@ -122,11 +112,6 @@ func (env *Environment) Reset() {
 
 	env.LinodeCache.Flush()
 	env.InstanceCache.Flush()
-	env.LaunchTemplateCache.Flush()
-	env.AssociatePublicIPAddressCache.Flush()
-	env.AvailableIPAdressCache.Flush()
-	env.RecreationCache.Flush()
-	env.ProtectedProfilesCache.Flush()
 	mfs, err := crmetrics.Registry.Gather()
 	if err != nil {
 		for _, mf := range mfs {

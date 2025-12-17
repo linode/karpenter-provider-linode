@@ -41,9 +41,9 @@ func (o *Options) validateEndpoint() error {
 	return nil
 }
 
-func (o *Options) validateRequiredFields() error {
+/* func (o *Options) validateRequiredFields() error {
 	if o.ClusterID == "" {
 		return fmt.Errorf("missing field, cluster-id")
 	}
 	return nil
-}
+} */
