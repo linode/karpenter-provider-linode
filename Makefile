@@ -1,4 +1,5 @@
 CLUSTER_NAME ?= $(shell kubectl config view --minify -o jsonpath='{.clusters[].name}' | rev | cut -d"/" -f1 | rev | cut -d"." -f1)
+ENVTEST_K8S_VERSION := $(shell go list -m -f '{{.Version}}' k8s.io/client-go)
 
 ## Inject the app version into operator.Version
 LDFLAGS ?= -ldflags=-X=sigs.k8s.io/karpenter/pkg/operator.Version=$(shell git describe --tags --always | cut -d"v" -f2)
@@ -22,6 +23,28 @@ TMPFILE := $(shell mktemp)
 GOARCH ?= $(shell go env GOARCH)
 BINARY_FILENAME = karpenter-provider-linode-$(GOARCH)
 
+# Use CACHE_BIN for tools that cannot use devbox and LOCALBIN for tools that can use either method
+CACHE_BIN ?= $(CURDIR)/bin
+LOCALBIN  ?= $(CACHE_BIN)
+
+export PATH := $(CACHE_BIN):$(PATH)
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
+$(CACHE_BIN):
+	mkdir -p $(CACHE_BIN)
+
+# Tooling
+ENVTEST   ?= $(CACHE_BIN)/setup-envtest
+# renovate: datasource=go depName=sigs.k8s.io/controller-runtime/tools/setup-envtest
+ENVTEST_VERSION ?= release-0.22
+
+.PHONY: envtest
+envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
+$(ENVTEST): $(CACHE_BIN)
+	GOBIN=$(CACHE_BIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION)
+
+
 help: ## Display help
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
@@ -41,8 +64,9 @@ run: ## Run Karpenter controller binary against your local cluster
 		LOG_LEVEL="debug" \
 		go run ./cmd/controller/main.go
 
-test: ## Run tests
-	go test ./pkg/... \
+test: envtest ## Run tests
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION#v} --bin-dir $(CACHE_BIN) -p path)" \
+		go test ./pkg/... \
 		-cover -coverprofile=coverage.out -outputdir=. -coverpkg=./...
 
 deflake: ## Run randomized, racing tests until the test fails to catch flakes
@@ -52,10 +76,11 @@ deflake: ## Run randomized, racing tests until the test fails to catch flakes
 		-v \
 		./pkg/...
 
-e2etests: ## Run the e2e suite against your local cluster
+e2etests: envtest ## Run the e2e suite against your local cluster
 	cd test && CLUSTER_ENDPOINT=${CLUSTER_ENDPOINT} \
 		CLUSTER_NAME=${CLUSTER_NAME} \
 		INTERRUPTION_QUEUE=${CLUSTER_NAME} \
+		KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION#v} --bin-dir $(CACHE_BIN) -p path)" \
 		go test \
 		-p 1 \
 		-count 1 \
@@ -65,8 +90,9 @@ e2etests: ## Run the e2e suite against your local cluster
 		--ginkgo.timeout=3h \
 		--ginkgo.grace-period=3m
 
-upstream-e2etests: tidy download
+upstream-e2etests: tidy download envtest
 	CLUSTER_NAME=${CLUSTER_NAME} envsubst < $(shell pwd)/test/pkg/environment/linode/default_linodenodeclass.yaml > ${TMPFILE}
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION#v} --bin-dir $(CACHE_BIN) -p path)" \
 	go test \
 		-count 1 \
 		-timeout 3.25h \
@@ -85,8 +111,9 @@ e2etests-deflake: ## Run the e2e suite against your local cluster
 		--vv \
 		./suites/$(shell echo $(TEST_SUITE) | tr A-Z a-z) \
 
-benchmark:
-	go test -tags=test_performance -run=NoTests -bench=. ./...
+benchmark: envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION#v} --bin-dir $(CACHE_BIN) -p path)" \
+		go test -tags=test_performance -run=NoTests -bench=. ./...
 
 coverage:
 	go tool cover -html coverage.out -o coverage.html

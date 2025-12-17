@@ -18,32 +18,25 @@ import (
 	"fmt"
 
 	"github.com/imdario/mergo"
-	"sigs.k8s.io/karpenter/pkg/test"
+	"github.com/samber/lo"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 )
 
-func LinodeNodeClass(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {
-	options := v1.LinodeNodeClass{}
+type OptionsFields struct {
+	ClusterID       *string
+	ClusterEndpoint *string
+}
+
+func Options(overrides ...OptionsFields) *options.Options {
+	opts := OptionsFields{}
 	for _, override := range overrides {
-		if err := mergo.Merge(&options, override, mergo.WithOverride); err != nil {
+		if err := mergo.Merge(&opts, override, mergo.WithOverride); err != nil {
 			panic(fmt.Sprintf("Failed to merge settings: %s", err))
 		}
 	}
-	if options.Spec.Type == "" {
-		options.Spec.Type = "g6-standard-2"
+	return &options.Options{
+		ClusterID:       lo.FromPtrOr(opts.ClusterID, "123456789012"),
+		ClusterEndpoint: lo.FromPtrOr(opts.ClusterEndpoint, "https://test-cluster"),
 	}
-	return &v1.LinodeNodeClass{
-		ObjectMeta: test.ObjectMeta(options.ObjectMeta),
-		Spec:       options.Spec,
-		Status:     options.Status,
-	}
-}
-
-type TestNodeClass struct {
-	v1.LinodeNodeClass
-}
-
-func (t *TestNodeClass) InstanceProfileTags(clusterName string) map[string]string {
-	return nil
 }
