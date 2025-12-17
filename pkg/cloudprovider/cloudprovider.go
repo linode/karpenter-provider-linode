@@ -34,7 +34,6 @@ import (
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
-	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 
 	"github.com/samber/lo"
@@ -99,15 +98,11 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	if nodeClassReady != nil && nodeClassReady.ObservedGeneration != nodeClass.Generation {
 		return nil, cloudprovider.NewNodeClassNotReadyError(fmt.Errorf("nodeclass status has not been reconciled against the latest spec"))
 	}
-	tags, err := utils.GetTags(nodeClass, nodeClaim, options.FromContext(ctx).ClusterName)
-	if err != nil {
-		return nil, cloudprovider.NewNodeClassNotReadyError(err)
-	}
 	instanceTypes, err := c.instanceTypeProvider.List(ctx, nodeClass)
 	if err != nil {
 		return nil, cloudprovider.NewCreateError(fmt.Errorf("resolving instance types, %w", err), "InstanceTypeResolutionFailed", "Error resolving instance types")
 	}
-	instance, err := c.instanceProvider.Create(ctx, nodeClass, nodeClaim, tags, instanceTypes)
+	instance, err := c.instanceProvider.Create(ctx, nodeClass, nodeClaim, nil, instanceTypes)
 	if err != nil {
 		return nil, fmt.Errorf("creating instance, %w", err)
 	}

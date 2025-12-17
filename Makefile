@@ -43,16 +43,11 @@ run: ## Run Karpenter controller binary against your local cluster
 
 test: ## Run tests
 	go test ./pkg/... \
-		-cover -coverprofile=coverage.out -outputdir=. -coverpkg=./... \
-		--ginkgo.focus="${FOCUS}" \
-		--ginkgo.randomize-all \
-		--ginkgo.vv
+		-cover -coverprofile=coverage.out -outputdir=. -coverpkg=./...
 
 deflake: ## Run randomized, racing tests until the test fails to catch flakes
 	ginkgo \
 		--race \
-		--focus="${FOCUS}" \
-		--randomize-all \
 		--until-it-fails \
 		-v \
 		./pkg/...
@@ -67,10 +62,8 @@ e2etests: ## Run the e2e suite against your local cluster
 		-timeout 3.25h \
 		-v \
 		./suites/$(shell echo $(TEST_SUITE) | tr A-Z a-z)/... \
-		--ginkgo.focus="${FOCUS}" \
 		--ginkgo.timeout=3h \
-		--ginkgo.grace-period=3m \
-		--ginkgo.vv
+		--ginkgo.grace-period=3m
 
 upstream-e2etests: tidy download
 	CLUSTER_NAME=${CLUSTER_NAME} envsubst < $(shell pwd)/test/pkg/environment/linode/default_linodenodeclass.yaml > ${TMPFILE}
@@ -79,16 +72,13 @@ upstream-e2etests: tidy download
 		-timeout 3.25h \
 		-v \
 		$(KARPENTER_CORE_DIR)/test/suites/... \
-		--ginkgo.focus="${FOCUS}" \
 		--ginkgo.timeout=3h \
 		--ginkgo.grace-period=5m \
-		--ginkgo.vv \
 		--default-nodeclass="$(TMPFILE)"\
 		--default-nodepool="$(shell pwd)/test/pkg/environment/linode/default_nodepool.yaml"
 
 e2etests-deflake: ## Run the e2e suite against your local cluster
 	cd test && CLUSTER_NAME=${CLUSTER_NAME} ginkgo \
-		--focus="${FOCUS}" \
 		--timeout=3h \
 		--grace-period=3m \
 		--until-it-fails \

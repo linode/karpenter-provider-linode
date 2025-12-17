@@ -29,7 +29,6 @@ import (
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
-	karpopts "github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
@@ -287,7 +286,6 @@ func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...Options) (
 func (p *DefaultProvider) List(ctx context.Context) ([]*Instance, error) {
 	listFilter := utils.Filter{
 		Tags: []string{
-			karpopts.FromContext(ctx).ClusterName,
 			karpv1.NodePoolLabelKey,
 			apis.Group + "/linodenodeclass",
 		},

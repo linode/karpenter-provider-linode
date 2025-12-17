@@ -34,7 +34,6 @@ import (
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/operator"
 
-	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
@@ -68,10 +67,6 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	// Instance type updates are hydrated asynchronously after this by controllers.
 	instanceProvider := instance.NewDefaultProvider("", nil, &linodeAPI, cache.New(time.Minute*5, time.Minute))
 
-	// Setup field indexers on instanceID -- specifically for the interruption controller
-	if options.FromContext(ctx).InterruptionQueue != "" {
-		SetupIndexers(ctx, operator.Manager)
-	}
 	return ctx, &Operator{
 		Operator:              operator,
 		InstanceTypesProvider: instanceTypeProvider,

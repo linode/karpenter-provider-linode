@@ -29,7 +29,6 @@ import (
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/test"
 )
 
@@ -44,7 +43,6 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	ctx = options.ToContext(ctx, test.Options())
 	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(v1alpha1.CRDs...))
 	awsEnv = test.NewEnvironment(ctx, env)
 })
