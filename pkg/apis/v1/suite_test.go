@@ -34,7 +34,7 @@ import (
 
 var ctx context.Context
 var env *coretest.Environment
-var awsEnv *test.Environment
+var linodeEnv *test.Environment
 
 func TestAPIs(t *testing.T) {
 	ctx = TestContextWithLogger(t)
@@ -44,7 +44,7 @@ func TestAPIs(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(v1alpha1.CRDs...))
-	awsEnv = test.NewEnvironment(ctx, env)
+	linodeEnv = test.NewEnvironment(ctx)
 })
 
 var _ = AfterEach(func() {

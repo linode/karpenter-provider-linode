@@ -33,7 +33,7 @@ import (
 var ctx context.Context
 var stop context.CancelFunc
 var env *coretest.Environment
-var fakeLinodeAPI *fake.LinodeAPI
+var fakeLinodeAPI *fake.LinodeClient
 
 func TestLinode(t *testing.T) {
 	ctx = TestContextWithLogger(t)
@@ -45,7 +45,7 @@ var _ = BeforeSuite(func() {
 	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(v1alpha1.CRDs...))
 	ctx, stop = context.WithCancel(ctx)
 
-	fakeLinodeAPI = &fake.LinodeAPI{}
+	fakeLinodeAPI = &fake.LinodeClient{}
 })
 
 var _ = AfterSuite(func() {

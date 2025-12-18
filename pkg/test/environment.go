@@ -43,12 +43,14 @@ type Environment struct {
 	InstanceTypeStore *nodeoverlay.InstanceTypeStore
 
 	// API
-	LinodeAPI *fake.LinodeAPI
+	LinodeAPI *fake.LinodeClient
 
 	// Cache
-	LinodeCache       *cache.Cache
-	InstanceTypeCache *cache.Cache
-	InstanceCache     *cache.Cache
+	LinodeCache               *cache.Cache
+	InstanceTypeCache         *cache.Cache
+	InstanceCache             *cache.Cache
+	OfferingCache             *cache.Cache
+	UnavailableOfferingsCache *linodecache.UnavailableOfferings
 
 	// Providers
 	InstanceTypesProvider *instancetype.DefaultProvider
@@ -56,27 +58,30 @@ type Environment struct {
 	InstanceTypesResolver *instancetype.DefaultResolver
 }
 
-func NewEnvironment(ctx context.Context, env *coretest.Environment) *Environment {
+func NewEnvironment(ctx context.Context) *Environment {
 	// Mock
 	clock := &clock.FakeClock{}
 	store := nodeoverlay.NewInstanceTypeStore()
 
-	// API
-	linodeAPI := fake.NewLinodeAPI()
+	linodeClient := fake.NewLinodeClient()
 
 	// cache
 	linodeCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
 	instanceTypeCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
 	instanceCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
 	discoveredCapacityCache := cache.New(linodecache.DiscoveredCapacityCacheTTL, linodecache.DefaultCleanupInterval)
+	offeringCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
+	unavailableOfferingsCache := linodecache.NewUnavailableOfferings()
 	eventRecorder := coretest.NewEventRecorder()
 
 	// Providers
 	instanceTypesProvider := instancetype.NewDefaultProvider(
-		linodeAPI.Client,
+		linodeClient,
 		instancetype.NewDefaultResolver(fake.DefaultRegion),
 		instanceTypeCache,
+		offeringCache,
 		discoveredCapacityCache,
+		unavailableOfferingsCache,
 	)
 	// Ensure we're able to hydrate instance types before starting any reliant controllers.
 	// Instance type updates are hydrated asynchronously after this by controllers.
@@ -84,9 +89,9 @@ func NewEnvironment(ctx context.Context, env *coretest.Environment) *Environment
 	lo.Must0(instanceTypesProvider.UpdateInstanceTypeOfferings(ctx))
 
 	instanceProvider := instance.NewDefaultProvider(
-		"",
+		"dummy",
 		eventRecorder,
-		linodeAPI.Client,
+		linodeClient,
 		instanceCache,
 	)
 
@@ -95,11 +100,12 @@ func NewEnvironment(ctx context.Context, env *coretest.Environment) *Environment
 		EventRecorder:     eventRecorder,
 		InstanceTypeStore: store,
 
-		LinodeAPI: linodeAPI,
+		LinodeAPI: linodeClient,
 
 		LinodeCache:       linodeCache,
 		InstanceTypeCache: instanceTypeCache,
 		InstanceCache:     instanceCache,
+		OfferingCache:     offeringCache,
 
 		InstanceTypesProvider: instanceTypesProvider,
 		InstanceProvider:      instanceProvider,

@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	DefaultRegion  = "us-west-2"
+	DefaultRegion  = "us-east"
 	DefaultAccount = "123456789"
 )
 

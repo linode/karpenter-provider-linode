@@ -15,8 +15,12 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+
 	"github.com/awslabs/operatorpkg/status"
 	"github.com/linode/linodego"
+	"github.com/mitchellh/hashstructure/v2"
+	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -450,6 +454,22 @@ type LinodeNodeClass struct {
 
 	Spec   LinodeNodeClassSpec   `json:"spec,omitempty"`
 	Status LinodeNodeClassStatus `json:"status,omitempty"`
+}
+
+// We need to bump the LinodeNodeClassHashVersion when we make an update to the LinodeNodeClassHashVersion CRD under these conditions:
+// 1. A field changes its default value for an existing field that is already hashed
+// 2. A field is added to the hash calculation with an already-set value
+// 3. A field is removed from the hash calculations
+const LinodeNodeClassHashVersion = "v1"
+
+func (in *LinodeNodeClass) Hash() string {
+	return fmt.Sprint(lo.Must(hashstructure.Hash([]interface{}{
+		in.Spec,
+	}, hashstructure.FormatV2, &hashstructure.HashOptions{
+		SlicesAsSets:    true,
+		IgnoreZeroValue: true,
+		ZeroNil:         true,
+	})))
 }
 
 func (in *LinodeNodeClass) GetConditions() []status.Condition {

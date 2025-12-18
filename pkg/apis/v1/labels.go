@@ -21,7 +21,10 @@ import (
 )
 
 var (
-	AnnotationInstanceTagged = apis.Group + "/tagged"
-	NodeClaimTagKey          = coreapis.Group + "/nodeclaim"
-	NameTagKey               = "Name"
+	AnnotationInstanceTagged             = apis.Group + "/tagged"
+	NodeClaimTagKey                      = coreapis.Group + "/nodeclaim"
+	NameTagKey                           = "Name"
+	NodeClassTagKey                      = apis.Group + "/linodenodeclass"
+	AnnotationLinodeNodeClassHash        = apis.Group + "/linodenodeclass-hash"
+	AnnotationLinodeNodeClassHashVersion = apis.Group + "/linodenodeclass-hash-version"
 )

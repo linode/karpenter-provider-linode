@@ -58,8 +58,13 @@ var _ = BeforeSuite(func() {
 	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(testv1alpha1.CRDs...))
 	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
 	ctx, stop = context.WithCancel(ctx)
-	linodeEnv = test.NewEnvironment(ctx, env)
-	cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.InstanceProvider, events.NewRecorder(&record.FakeRecorder{}), env.Client)
+	linodeEnv = test.NewEnvironment(ctx)
+	cloudProvider = cloudprovider.New(
+		linodeEnv.InstanceTypesProvider,
+		linodeEnv.InstanceProvider,
+		events.NewRecorder(&record.FakeRecorder{}),
+		env.Client,
+	)
 })
 
 var _ = AfterSuite(func() {
@@ -69,12 +74,6 @@ var _ = AfterSuite(func() {
 
 var _ = BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{}))
-	ctx = options.ToContext(ctx, test.Options())
-	linodeEnv.Reset()
-})
-
-var _ = BeforeEach(func() {
-	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
 	linodeEnv.Reset()
 })
@@ -112,7 +111,8 @@ var _ = Describe("InstanceProvider", func() {
 				},
 			},
 		})
-		// Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypes(ctx)).To(Succeed())
+		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypes(ctx)).To(Succeed())
+		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeOfferings(ctx)).To(Succeed())
 	})
 	It("should create a dedicated instance", func() {
 		nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strconv"
 
+	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
+
 	"github.com/awslabs/operatorpkg/option"
 	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
@@ -53,14 +55,14 @@ var SkipCache = func(opts *options) {
 type DefaultProvider struct {
 	region        string
 	recorder      events.Recorder
-	client        *linodego.Client
+	client        sdk.LinodeAPI
 	instanceCache *cache.Cache
 }
 
 func NewDefaultProvider(
 	region string,
 	recorder events.Recorder,
-	client *linodego.Client,
+	client sdk.LinodeAPI,
 	instanceCache *cache.Cache,
 ) *DefaultProvider {
 

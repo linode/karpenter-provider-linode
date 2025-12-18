@@ -26,16 +26,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/operator"
 
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
-	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
 func init() {
@@ -47,11 +44,12 @@ type Operator struct {
 	*operator.Operator
 	InstanceTypesProvider *instancetype.DefaultProvider
 	InstanceProvider      instance.Provider
-	LinodeClient          *linodego.Client
+	LinodeClient          linodego.Client
 }
 
 func NewOperator(ctx context.Context, operator *operator.Operator) (context.Context, *Operator) {
-	linodeAPI := linodego.NewClient(&http.Client{})
+	linodeClient := linodego.NewClient(&http.Client{})
+	unavailableOfferingsCache := linodecache.NewUnavailableOfferings()
 	kubeDNSIP, err := KubeDNSIP(ctx, operator.KubernetesInterface)
 	if err != nil {
 		// If we fail to get the kube-dns IP, we don't want to crash because this causes issues with custom DNS setups
@@ -62,17 +60,19 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	}
 
 	instanceTypeProvider := instancetype.NewDefaultProvider(
-		&linodeAPI,
+		&linodeClient,
 		instancetype.NewDefaultResolver("dummy"),
 		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
+		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
 		cache.New(linodecache.DiscoveredCapacityCacheTTL, linodecache.DefaultCleanupInterval),
+		unavailableOfferingsCache,
 	)
 	// Ensure we're able to hydrate instance types before starting any reliant controllers.
 	// Instance type updates are hydrated asynchronously after this by controllers.
 	instanceProvider := instance.NewDefaultProvider(
 		"dummy",
 		operator.EventRecorder,
-		&linodeAPI,
+		&linodeClient,
 		cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
 	)
 
@@ -96,27 +96,4 @@ func KubeDNSIP(ctx context.Context, kubernetesInterface kubernetes.Interface) (n
 		return nil, fmt.Errorf("parsing cluster IP")
 	}
 	return kubeDNSIP, nil
-}
-
-func SetupIndexers(ctx context.Context, mgr manager.Manager) {
-	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &karpv1.NodeClaim{}, "status.instanceID", func(o client.Object) []string {
-		if o.(*karpv1.NodeClaim).Status.ProviderID == "" {
-			return nil
-		}
-		id, e := utils.ParseInstanceID(o.(*karpv1.NodeClaim).Status.ProviderID)
-		if e != nil || id == "" {
-			return nil
-		}
-		return []string{id}
-	}), "failed to setup nodeclaim instanceID indexer")
-	lo.Must0(mgr.GetFieldIndexer().IndexField(ctx, &corev1.Node{}, "spec.instanceID", func(o client.Object) []string {
-		if o.(*corev1.Node).Spec.ProviderID == "" {
-			return nil
-		}
-		id, e := utils.ParseInstanceID(o.(*corev1.Node).Spec.ProviderID)
-		if e != nil || id == "" {
-			return nil
-		}
-		return []string{id}
-	}), "failed to setup node instanceID indexer")
 }

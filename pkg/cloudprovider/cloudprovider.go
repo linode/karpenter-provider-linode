@@ -18,7 +18,10 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"strings"
 	"time"
+
+	coreapis "sigs.k8s.io/karpenter/pkg/apis"
 
 	"github.com/linode/linodego"
 
@@ -74,8 +77,6 @@ func New(
 }
 
 // Create a NodeClaim given the constraints.
-//
-//nolint:gocyclo
 func (c *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*karpv1.NodeClaim, error) {
 	nodeClass, err := c.resolveNodeClassFromNodeClaim(ctx, nodeClaim)
 	if err != nil {
@@ -110,7 +111,10 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		return i.Name == instance.Type
 	})
 	nc := c.instanceToNodeClaim(instance, instanceType)
-	nc.Annotations = lo.Assign(nc.Annotations, map[string]string{})
+	nc.Annotations = lo.Assign(nc.Annotations, map[string]string{
+		v1.AnnotationLinodeNodeClassHash:        nodeClass.Hash(),
+		v1.AnnotationLinodeNodeClassHashVersion: v1.LinodeNodeClassHashVersion,
+	})
 	return nc, nil
 }
 
@@ -121,14 +125,10 @@ func (c *CloudProvider) List(ctx context.Context) ([]*karpv1.NodeClaim, error) {
 	}
 	var nodeClaims []*karpv1.NodeClaim
 	for _, it := range instances {
-		instanceType, err := c.resolveInstanceTypeFromInstance()
+		instanceType, err := c.resolveInstanceTypeFromInstance(ctx, it)
 		if err != nil {
 			return nil, fmt.Errorf("resolving instance type, %w", err)
 		}
-		/* nc, err := c.resolveNodeClassFromInstance()
-		if client.IgnoreNotFound(err) != nil {
-			return nil, fmt.Errorf("resolving nodeclass, %w", err)
-		} */
 		nodeClaims = append(nodeClaims, c.instanceToNodeClaim(it, instanceType))
 	}
 	return nodeClaims, nil
@@ -144,14 +144,10 @@ func (c *CloudProvider) Get(ctx context.Context, providerID string) (*karpv1.Nod
 	if err != nil {
 		return nil, fmt.Errorf("getting instance, %w", err)
 	}
-	instanceType, err := c.resolveInstanceTypeFromInstance()
+	instanceType, err := c.resolveInstanceTypeFromInstance(ctx, instance)
 	if err != nil {
 		return nil, fmt.Errorf("resolving instance type, %w", err)
 	}
-	/*nc, err := c.resolveNodeClassFromInstance()
-	if client.IgnoreNotFound(err) != nil {
-		return nil, fmt.Errorf("resolving nodeclass, %w", err)
-	}*/
 	return c.instanceToNodeClaim(instance, instanceType), nil
 }
 
@@ -174,9 +170,8 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *karpv1.N
 	return instanceTypes, nil
 }
 
-/*
 // getInstanceType returns a specific instance type to avoid re-constructing all InstanceTypes
-func (c *CloudProvider) getInstanceType(ctx context.Context, nodePool *karpv1.NodePool, name linodego.Instance) (*cloudprovider.InstanceType, error) {
+func (c *CloudProvider) getInstanceType(ctx context.Context, nodePool *karpv1.NodePool, name string) (*cloudprovider.InstanceType, error) {
 	nodeClass, err := c.resolveNodeClassFromNodePool(ctx, nodePool)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -190,15 +185,9 @@ func (c *CloudProvider) getInstanceType(ctx context.Context, nodePool *karpv1.No
 	if err != nil {
 		return nil, fmt.Errorf("resolving instancetype, %w", err)
 	}
-	if karpoptions.FromContext(ctx).FeatureGates.NodeOverlay {
-		it, err = c.instanceTypeStore.Apply(nodePool.Name, it)
-		if err != nil {
-			return nil, fmt.Errorf("resolving instancetype, %w", err)
-		}
-	}
 
 	return it, err
-} */
+}
 
 func (c *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim) error {
 	id, err := utils.ParseInstanceID(nodeClaim.Status.ProviderID)
@@ -322,22 +311,31 @@ func (c *CloudProvider) resolveNodeClassFromNodePool(ctx context.Context, nodePo
 	return nodeClass, nil
 }
 
-/*
-func (c *CloudProvider) resolveNodeClassFromInstance() (*v1.LinodeNodeClass, error) {
+/* func (c *CloudProvider) resolveNodeClassFromInstance(ctx context.Context, instance *instance.Instance) (*v1.LinodeNodeClass, error) {
+	tags := make(map[string]string, len(instance.Tags))
+	for _, tag := range instance.Tags {
+		parts := strings.Split(tag, "=")
+		if len(parts) != 2 {
+			continue
+		}
+		tags[parts[0]] = parts[1]
+	}
+	name, ok := tags[v1.NodeClassTagKey]
+	if !ok {
+		return nil, errors.NewNotFound(schema.GroupResource{Group: apis.Group, Resource: "linodenodeclasses"}, "")
+	}
 	nc := &v1.LinodeNodeClass{}
+	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: name}, nc); err != nil {
+		return nil, fmt.Errorf("resolving linodenodeclass, %w", err)
+	}
 	if !nc.DeletionTimestamp.IsZero() {
 		// For the purposes of NodeClass CloudProvider resolution, we treat deleting NodeClasses as NotFound,
 		// but we return a different error message to be clearer to users
 		return nil, newTerminatingNodeClassError(nc.Name)
 	}
 	return nc, nil
-}
-
-func (c *CloudProvider) resolveNodePoolFromInstance() (*karpv1.NodePool, error) {
-	return nil, errors.NewNotFound(schema.GroupResource{Group: coreapis.Group, Resource: "nodepools"}, "")
 } */
 
-//nolint:gocyclo
 func (c *CloudProvider) instanceToNodeClaim(i *instance.Instance, instanceType *cloudprovider.InstanceType) *karpv1.NodeClaim {
 	nodeClaim := &karpv1.NodeClaim{}
 	labels := map[string]string{}
@@ -380,8 +378,38 @@ func (c *CloudProvider) instanceToNodeClaim(i *instance.Instance, instanceType *
 	return nodeClaim
 }
 
-func (c *CloudProvider) resolveInstanceTypeFromInstance() (*cloudprovider.InstanceType, error) {
-	return nil, nil
+func (c *CloudProvider) resolveInstanceTypeFromInstance(ctx context.Context, instance *instance.Instance) (*cloudprovider.InstanceType, error) {
+	nodePool, err := c.resolveNodePoolFromInstance(ctx, instance)
+	if err != nil {
+		// If we can't resolve the NodePool, we fall back to not getting instance type info
+		return nil, client.IgnoreNotFound(fmt.Errorf("resolving nodepool, %w", err))
+	}
+	instanceType, err := c.getInstanceType(ctx, nodePool, instance.Type)
+	if err != nil {
+		// If we can't resolve the NodePool, we fall back to not getting instance type info
+		return nil, client.IgnoreNotFound(fmt.Errorf("resolving instance type, %w", err))
+	}
+	return instanceType, nil
+}
+
+func (c *CloudProvider) resolveNodePoolFromInstance(ctx context.Context, instance *instance.Instance) (*karpv1.NodePool, error) {
+	tags := make(map[string]string, len(instance.Tags))
+	for _, tag := range instance.Tags {
+		parts := strings.Split(tag, "=")
+		if len(parts) != 2 {
+			continue
+		}
+		tags[parts[0]] = parts[1]
+	}
+
+	if nodePoolName, ok := tags[karpv1.NodePoolLabelKey]; ok {
+		nodePool := &karpv1.NodePool{}
+		if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nodePoolName}, nodePool); err != nil {
+			return nil, err
+		}
+		return nodePool, nil
+	}
+	return nil, errors.NewNotFound(schema.GroupResource{Group: coreapis.Group, Resource: "nodepools"}, "")
 }
 
 // newTerminatingNodeClassError returns a NotFound error for handling by

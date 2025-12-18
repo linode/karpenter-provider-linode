@@ -17,6 +17,9 @@ package instancetype
 import (
 	"context"
 	"fmt"
+
+	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
+
 	"sync"
 
 	"github.com/linode/linodego"
@@ -27,9 +30,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+	"sigs.k8s.io/karpenter/pkg/utils/pretty"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype/offering"
+	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
 type NodeClass interface {
@@ -43,7 +51,7 @@ type Provider interface {
 }
 
 type DefaultProvider struct {
-	client                *linodego.Client
+	client                sdk.LinodeAPI
 	instanceTypesResolver Resolver
 
 	muInstanceTypesInfo sync.RWMutex
@@ -51,22 +59,23 @@ type DefaultProvider struct {
 
 	muInstanceTypesOfferings sync.RWMutex
 	instanceTypesOfferings   map[string]sets.Set[string]
-	// allZones                 sets.Set[string]
+	allZones                 sets.Set[string]
 
 	instanceTypesCache      *cache.Cache
 	discoveredCapacityCache *cache.Cache
+	cm                      *pretty.ChangeMonitor
+
+	offeringProvider *offering.DefaultProvider
 }
 
 func NewDefaultProvider(
-	client *linodego.Client,
+	client sdk.LinodeAPI,
 	instanceTypesResolver Resolver,
-
 	instanceTypesCache *cache.Cache,
+	offeringCache *cache.Cache,
 	discoveredCapacityCache *cache.Cache,
+	unavailableOfferingsCache *linodecache.UnavailableOfferings,
 	// Note: I don't think we actually need a pricing provider like AWS for Linode it's right in the instance type info
-	// offeringCache *cache.Cache,
-
-	// unavailableOfferingsCache *linodecache.UnavailableOfferings,
 ) *DefaultProvider {
 	return &DefaultProvider{
 		client:                  client,
@@ -75,11 +84,53 @@ func NewDefaultProvider(
 		instanceTypesResolver:   instanceTypesResolver,
 		instanceTypesCache:      instanceTypesCache,
 		discoveredCapacityCache: discoveredCapacityCache,
-		/* offeringProvider: offering.NewDefaultProvider(
+		cm:                      pretty.NewChangeMonitor(),
+		offeringProvider: offering.NewDefaultProvider(
+			client,
 			unavailableOfferingsCache,
 			offeringCache,
-		), */
+		),
 	}
+}
+
+func (p *DefaultProvider) List(ctx context.Context, nodeClass NodeClass) ([]*cloudprovider.InstanceType, error) {
+	p.muInstanceTypesInfo.RLock()
+	p.muInstanceTypesOfferings.RLock()
+	defer p.muInstanceTypesInfo.RUnlock()
+	defer p.muInstanceTypesOfferings.RUnlock()
+
+	if len(p.instanceTypesInfo) == 0 {
+		return nil, fmt.Errorf("no instance types found")
+	}
+	if len(p.instanceTypesOfferings) == 0 {
+		return nil, fmt.Errorf("no instance types offerings found")
+	}
+
+	key := p.cacheKey(nodeClass)
+	var instanceTypes []*cloudprovider.InstanceType
+	if item, ok := p.instanceTypesCache.Get(key); ok {
+		// Ensure what's returned from this function is a shallow-copy of the slice (not a deep-copy of the data itself)
+		// so that modifications to the ordering of the data don't affect the original
+		instanceTypes = item.([]*cloudprovider.InstanceType)
+	} else {
+		instanceTypes = lo.FilterMapToSlice(p.instanceTypesInfo, func(name string, info linodego.LinodeType) (*cloudprovider.InstanceType, bool) {
+			it, err := p.get(ctx, nodeClass, name)
+			if err != nil {
+				return nil, false
+			}
+			return it, true
+		})
+		p.instanceTypesCache.SetDefault(key, instanceTypes)
+	}
+	// Offerings aren't cached along with the rest of the instance type info because reserved offerings need to have up to
+	// date capacity information. Rather than incurring a cache miss each time an instance is launched into a reserved
+	// offering (or terminated), offerings are injected to the cached instance types on each call.
+	return p.offeringProvider.InjectOfferings(
+		ctx,
+		instanceTypes,
+		nodeClass,
+		p.allZones,
+	), nil
 }
 
 func (p *DefaultProvider) Get(ctx context.Context, nodeClass NodeClass, name string) (*cloudprovider.InstanceType, error) {
@@ -134,12 +185,93 @@ func (p *DefaultProvider) get(ctx context.Context, nodeClass NodeClass, name str
 }
 
 func (p *DefaultProvider) cacheKey(nodeClass NodeClass) string {
-	return p.instanceTypesResolver.CacheKey(nodeClass)
+	// Compute hash key against node class Images (used to force cache rebuild when Images change)
+	imageHash, _ := hashstructure.Hash(nodeClass.LinodeImages(), hashstructure.FormatV2, &hashstructure.HashOptions{SlicesAsSets: true})
+	return fmt.Sprintf("%016x-%s",
+		imageHash,
+		p.instanceTypesResolver.CacheKey(nodeClass),
+	)
 }
 
-func (p *DefaultProvider) List(ctx context.Context, class NodeClass) ([]*cloudprovider.InstanceType, error) {
-	//TODO implement me
-	panic("implement me")
+func (p *DefaultProvider) UpdateInstanceTypes(ctx context.Context) error {
+	// DO NOT REMOVE THIS LOCK ----------------------------------------------------------------------------
+	// We lock here so that multiple callers to getInstanceTypeOfferings do not result in cache misses and multiple
+	// calls to Linode API when we could have just made one call.
+	p.muInstanceTypesInfo.Lock()
+	defer p.muInstanceTypesInfo.Unlock()
+
+	instanceTypes, err := p.client.ListTypes(ctx, &linodego.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("listing linode instance types, %w", err)
+	}
+
+	if p.cm.HasChanged("instance-types", instanceTypes) {
+		// Only update instanceTypesSeqNun with the instance types have been changed
+		// This is to not create new keys with duplicate instance types option
+		p.instanceTypesCache.Flush() // None of the cached instance type info is valid when the instance type info changes
+		log.FromContext(ctx).WithValues("count", len(instanceTypes)).V(1).Info("discovered instance types")
+	}
+	p.instanceTypesInfo = lo.SliceToMap(instanceTypes, func(i linodego.LinodeType) (string, linodego.LinodeType) {
+		return i.ID, i
+	})
+	return nil
+}
+
+func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error {
+	// DO NOT REMOVE THIS LOCK ----------------------------------------------------------------------------
+	// We lock here so that multiple callers to GetInstanceTypes do not result in cache misses and multiple
+	// calls to Linode API when we could have just made one call. This lock is here because multiple callers to Linode API result
+	// in A LOT of extra memory generated from the response for simultaneous callers.
+	p.muInstanceTypesOfferings.Lock()
+	defer p.muInstanceTypesOfferings.Unlock()
+
+	// Get offerings from Linode API
+	instanceTypeOfferings := map[string]sets.Set[string]{}
+
+	listFilter := utils.Filter{
+		AdditionalFilters: map[string]string{}, // TODO: filter by region (do we expect to support multiple regions?)
+	}
+	filter, err := listFilter.String()
+	if err != nil {
+		return err
+	}
+
+	regionAvail, err := p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{
+		Filter:   filter,
+		PageSize: 1000,
+	})
+	if err != nil {
+		return fmt.Errorf("listing region availability %w", err)
+	}
+
+	for _, offering := range regionAvail {
+		if _, ok := instanceTypeOfferings[offering.Plan]; !ok {
+			instanceTypeOfferings[offering.Plan] = sets.New[string]()
+		}
+		if offering.Available {
+			instanceTypeOfferings[offering.Plan].Insert(offering.Region)
+		}
+	}
+
+	if p.cm.HasChanged("instance-type-offering", instanceTypeOfferings) {
+		// Only update instanceTypesSeqNun with the instance type offerings have been changed
+		// This is to not create new keys with duplicate instance type offerings option
+		p.instanceTypesCache.Flush() // None of the cached instance type info is valid when the instance type offerings info changes
+		log.FromContext(ctx).WithValues("instance-type-count", len(instanceTypeOfferings)).V(1).Info("discovered offerings for instance types")
+	}
+	p.instanceTypesOfferings = instanceTypeOfferings
+
+	allZones := sets.New[string]()
+	for _, offeringZones := range instanceTypeOfferings {
+		for zone := range offeringZones {
+			allZones.Insert(zone)
+		}
+	}
+	if p.cm.HasChanged("zones", allZones) {
+		log.FromContext(ctx).WithValues("zones", allZones.UnsortedList()).V(1).Info("discovered zones")
+	}
+	p.allZones = allZones
+	return nil
 }
 
 func (p *DefaultProvider) Reset() {
@@ -147,14 +279,6 @@ func (p *DefaultProvider) Reset() {
 	p.instanceTypesOfferings = map[string]sets.Set[string]{}
 	p.instanceTypesCache.Flush()
 	p.discoveredCapacityCache.Flush()
-}
-
-func (p *DefaultProvider) UpdateInstanceTypes(ctx context.Context) error {
-	return nil
-}
-
-func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error {
-	return nil
 }
 
 func discoveredCapacityCacheKey(instanceType string, nodeClass NodeClass) string {

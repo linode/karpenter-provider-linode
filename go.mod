@@ -4,8 +4,6 @@ go 1.24.6
 
 require (
 	github.com/Pallinder/go-randomdata v1.2.0
-	github.com/aws/aws-sdk-go-v2 v1.39.0
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.251.2
 	github.com/awslabs/operatorpkg v0.0.0-20250909182303-e8e550b6f339
 	github.com/google/uuid v1.6.0
 	github.com/imdario/mergo v0.3.16
@@ -30,7 +28,6 @@ require (
 require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/avast/retry-go v3.0.0+incompatible // indirect
-	github.com/aws/smithy-go v1.23.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
