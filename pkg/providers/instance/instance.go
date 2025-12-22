@@ -92,17 +92,18 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	}
 
 	createOpts := linodego.InstanceCreateOptions{
-		Region:          p.region,
-		Type:            nodeClass.Spec.Type,
-		RootPass:        nodeClass.Spec.RootPass,
-		AuthorizedKeys:  nodeClass.Spec.AuthorizedKeys,
-		AuthorizedUsers: nodeClass.Spec.AuthorizedUsers,
-		Image:           nodeClass.Spec.Image,
-		BackupsEnabled:  nodeClass.Spec.BackupsEnabled,
-		PrivateIP:       nodeClass.Spec.PrivateIP,
-		NetworkHelper:   nodeClass.Spec.NetworkHelper,
-		Tags:            uniqueTags,
-		FirewallID:      nodeClass.Spec.FirewallID,
+		Region:              p.region,
+		Type:                nodeClass.Spec.Type,
+		RootPass:            nodeClass.Spec.RootPass,
+		AuthorizedKeys:      nodeClass.Spec.AuthorizedKeys,
+		AuthorizedUsers:     nodeClass.Spec.AuthorizedUsers,
+		Image:               nodeClass.Spec.Image,
+		BackupsEnabled:      nodeClass.Spec.BackupsEnabled,
+		PrivateIP:           nodeClass.Spec.PrivateIP,
+		NetworkHelper:       nodeClass.Spec.NetworkHelper,
+		Tags:                uniqueTags,
+		FirewallID:          nodeClass.Spec.FirewallID,
+		InterfaceGeneration: linodego.GenerationLinode, // We're not supporting legacy interfaces going forward.
 		// NOTE: Linode Interfaces may not currently be available to all users.
 		LinodeInterfaces: constructLinodeInterfaceCreateOpts(nodeClass.Spec.LinodeInterfaces),
 		// NOTE: Disk encryption may not currently be available to all users.

@@ -20,6 +20,9 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 )
 
+func init() {
+}
+
 var (
 	AnnotationInstanceTagged             = apis.Group + "/tagged"
 	NodeClaimTagKey                      = coreapis.Group + "/nodeclaim"
@@ -27,4 +30,8 @@ var (
 	NodeClassTagKey                      = apis.Group + "/linodenodeclass"
 	AnnotationLinodeNodeClassHash        = apis.Group + "/linodenodeclass-hash"
 	AnnotationLinodeNodeClassHashVersion = apis.Group + "/linodenodeclass-hash-version"
+	LabelInstanceNetworkBandwidth        = apis.Group + "/instance-network-bandwidth"
+	LabelInstanceCPU                     = apis.Group + "/instance-cpu"
+	LabelInstanceGPUCount                = apis.Group + "/instance-gpu-count"
+	LabelInstanceMemory                  = apis.Group + "/instance-memory"
 )

@@ -114,7 +114,7 @@ func (p *DefaultProvider) List(ctx context.Context, nodeClass NodeClass) ([]*clo
 		instanceTypes = item.([]*cloudprovider.InstanceType)
 	} else {
 		instanceTypes = lo.FilterMapToSlice(p.instanceTypesInfo, func(name string, info linodego.LinodeType) (*cloudprovider.InstanceType, bool) {
-			it, err := p.get(ctx, nodeClass, name)
+			it, err := p.get(nodeClass, name)
 			if err != nil {
 				return nil, false
 			}
@@ -154,7 +154,7 @@ func (p *DefaultProvider) Get(ctx context.Context, nodeClass NodeClass, name str
 	}
 	if instanceType == nil {
 		var err error
-		instanceType, err = p.get(ctx, nodeClass, name)
+		instanceType, err = p.get(nodeClass, name)
 		if err != nil {
 			return nil, err
 		}
@@ -162,13 +162,12 @@ func (p *DefaultProvider) Get(ctx context.Context, nodeClass NodeClass, name str
 	return instanceType, nil
 }
 
-func (p *DefaultProvider) get(ctx context.Context, nodeClass NodeClass, name string) (*cloudprovider.InstanceType, error) {
+func (p *DefaultProvider) get(nodeClass NodeClass, name string) (*cloudprovider.InstanceType, error) {
 	info, ok := p.instanceTypesInfo[name]
 	if !ok {
 		return nil, fmt.Errorf("instance type %s not found in cache", name)
 	}
-	// The ID is something like "g6-standard-2", the label would be something like "Linode 4GB"
-	it := p.instanceTypesResolver.Resolve(ctx, info, p.instanceTypesOfferings[info.ID].UnsortedList(), nodeClass)
+	it := p.instanceTypesResolver.Resolve(info)
 	if it == nil {
 		return nil, fmt.Errorf("failed to generate instance type %s", name)
 	}

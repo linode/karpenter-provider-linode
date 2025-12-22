@@ -34,36 +34,79 @@ var (
 			Price:    &linodego.LinodePrice{Monthly: 10.0, Hourly: 0.015},
 		},
 	}
+	defaultRegionAvailabilityList = []linodego.RegionAvailability{
+		{
+			Region:    "us-east",
+			Plan:      "g6-standard-2",
+			Available: true,
+		},
+		{
+			Region:    "us-east",
+			Plan:      "g6-standard-4",
+			Available: true,
+		},
+		{
+			Region:    "us-east",
+			Plan:      "g6-dedicated-4",
+			Available: false,
+		},
+	}
 )
 
 type LinodeAPIBehavior struct {
-	LinodeTypeList         AtomicPtr[[]linodego.LinodeType]
-	CreateInstanceBehavior MockedFunction[linodego.InstanceCreateOptions, *linodego.Instance]
-	DeleteInstanceBehavior MockedFunction[int, error]
-	ListInstancesBehavior  MockedFunction[linodego.ListOptions, []linodego.Instance]
-	CreateTagsBehavior     MockedFunction[linodego.TagCreateOptions, linodego.Tag]
-	ListTypesBehavior      MockedFunction[linodego.ListOptions, []linodego.LinodeType]
-	NextError              AtomicError
-	Instances              sync.Map
+	LinodeTypeList                  AtomicPtr[[]linodego.LinodeType]
+	RegionAvailabilityList          AtomicPtr[[]linodego.RegionAvailability]
+	GetTypeBehavior                 MockedFunction[string, *linodego.LinodeType]
+	ListRegionsAvailabilityBehavior MockedFunction[linodego.ListOptions, []linodego.RegionAvailability]
+	CreateInstanceBehavior          MockedFunction[linodego.InstanceCreateOptions, *linodego.Instance]
+	GetInstanceBehavior             MockedFunction[int, *linodego.Instance]
+	DeleteInstanceBehavior          MockedFunction[int, error]
+	ListInstancesBehavior           MockedFunction[linodego.ListOptions, []linodego.Instance]
+	CreateTagsBehavior              MockedFunction[linodego.TagCreateOptions, linodego.Tag]
+	ListTypesBehavior               MockedFunction[linodego.ListOptions, []linodego.LinodeType]
+	NextError                       AtomicError
+	Instances                       sync.Map
 }
 
 type LinodeClient struct {
 	LinodeAPIBehavior
 }
 
-func (l *LinodeClient) GetType(ctx context.Context, typeID string) (*linodego.LinodeType, error) {
-	//TODO implement me
-	panic("implement me")
+func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.LinodeType, error) {
+	linodeType, err := l.GetTypeBehavior.Invoke(&typeID, func(typeID *string) (**linodego.LinodeType, error) {
+		// TODO: return the other fields as well when support is added to map types to resources
+		return ptr.To(&linodego.LinodeType{
+			ID: *typeID,
+		}), nil
+	})
+	if linodeType == nil {
+		return nil, err
+	}
+	return *linodeType, err
 }
 
-func (l *LinodeClient) ListRegionsAvailability(ctx context.Context, opts *linodego.ListOptions) ([]linodego.RegionAvailability, error) {
-	//TODO implement me
-	panic("implement me")
+func (l *LinodeClient) ListRegionsAvailability(_ context.Context, _ *linodego.ListOptions) ([]linodego.RegionAvailability, error) {
+	if !l.NextError.IsNil() {
+		defer l.NextError.Reset()
+		return nil, l.NextError.Get()
+	}
+	if !l.LinodeTypeList.IsNil() {
+		return *l.RegionAvailabilityList.Clone(), nil
+	}
+	return defaultRegionAvailabilityList, nil
 }
 
-func (l *LinodeClient) GetInstance(ctx context.Context, linodeID int) (*linodego.Instance, error) {
-	//TODO implement me
-	panic("implement me")
+func (l *LinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.Instance, error) {
+	instance, err := l.GetInstanceBehavior.Invoke(&linodeID, func(linodeID *int) (**linodego.Instance, error) {
+		return ptr.To(&linodego.Instance{
+			ID:     *linodeID,
+			Status: linodego.InstanceRunning,
+		}), nil
+	})
+	if instance == nil {
+		return nil, err
+	}
+	return *instance, err
 }
 
 func NewLinodeClient() *LinodeClient {
@@ -83,11 +126,12 @@ func (l *LinodeClient) Reset() {
 func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceCreateOptions) (*linodego.Instance, error) {
 	instance, err := l.CreateInstanceBehavior.Invoke(&opts, func(opts *linodego.InstanceCreateOptions) (**linodego.Instance, error) {
 		return ptr.To(&linodego.Instance{
-			ID:     len(opts.Label) + 1, // just a simple way to generate an ID
-			Label:  opts.Label,
-			Type:   opts.Type,
-			Region: opts.Region,
-			Status: linodego.InstanceRunning,
+			ID:                  len(opts.Label) + 1, // just a simple way to generate an ID
+			Label:               opts.Label,
+			Type:                opts.Type,
+			Region:              opts.Region,
+			InterfaceGeneration: opts.InterfaceGeneration,
+			Status:              linodego.InstanceRunning,
 		}), nil
 	})
 	if instance == nil {
