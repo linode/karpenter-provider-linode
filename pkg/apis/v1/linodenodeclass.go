@@ -116,6 +116,14 @@ type LinodeNodeClassSpec struct {
 
 	// swapSize is the size of the swap disk in MiB.
 	SwapSize *int `json:"swap_size,omitempty"`
+
+	// Kubelet defines args to be used when configuring kubelet on provisioned nodes.
+	// They are a subset of the upstream types, recognizing not all options may be supported.
+	// Wherever possible, the types and names should reflect the upstream kubelet types.
+	// +kubebuilder:validation:XValidation:message="evictionSoft OwnerKey does not have a matching evictionSoftGracePeriod",rule="has(self.evictionSoft) ? self.evictionSoft.all(e, (e in self.evictionSoftGracePeriod)):true"
+	// +kubebuilder:validation:XValidation:message="evictionSoftGracePeriod OwnerKey does not have a matching evictionSoft",rule="has(self.evictionSoftGracePeriod) ? self.evictionSoftGracePeriod.all(e, (e in self.evictionSoft)):true"
+	// +optional
+	Kubelet *KubeletConfiguration `json:"kubelet,omitempty"`
 }
 
 type InstanceCreatePlacementGroupOptions struct {
@@ -440,6 +448,58 @@ type VPCIPv4 struct {
 	NAT1To1 string `json:"nat1to1,omitempty"`
 }
 
+// KubeletConfiguration defines args to be used when configuring kubelet on provisioned nodes.
+// They are a subset of the upstream types, recognizing not all options may be supported.
+// Wherever possible, the types and names should reflect the upstream kubelet types.
+// https://pkg.go.dev/k8s.io/kubelet/config/v1beta1#KubeletConfiguration
+// https://github.com/kubernetes/kubernetes/blob/9f82d81e55cafdedab619ea25cabf5d42736dacf/cmd/kubelet/app/options/options.go#L53
+type KubeletConfiguration struct {
+	// clusterDNS is a list of IP addresses for the cluster DNS server.
+	// Note that not all providers may use all addresses.
+	//+optional
+	ClusterDNS []string `json:"clusterDNS,omitempty"`
+	// MaxPods is an override for the maximum number of pods that can run on
+	// a worker node instance.
+	// +kubebuilder:validation:Minimum:=0
+	// +optional
+	MaxPods *int32 `json:"maxPods,omitempty"`
+	// PodsPerCore is an override for the number of pods that can run on a worker node
+	// instance based on the number of cpu cores. This value cannot exceed MaxPods, so, if
+	// MaxPods is a lower value, that value will be used.
+	// +kubebuilder:validation:Minimum:=0
+	// +optional
+	PodsPerCore *int32 `json:"podsPerCore,omitempty"`
+	// SystemReserved contains resources reserved for OS system daemons and kernel memory.
+	// +kubebuilder:validation:XValidation:message="valid keys for systemReserved are ['cpu','memory','ephemeral-storage','pid']",rule="self.all(x, x=='cpu' || x=='memory' || x=='ephemeral-storage' || x=='pid')"
+	// +kubebuilder:validation:XValidation:message="systemReserved value cannot be a negative resource quantity",rule="self.all(x, !self[x].startsWith('-'))"
+	// +optional
+	SystemReserved map[string]string `json:"systemReserved,omitempty"`
+	// KubeReserved contains resources reserved for Kubernetes system components.
+	// +kubebuilder:validation:XValidation:message="valid keys for kubeReserved are ['cpu','memory','ephemeral-storage','pid']",rule="self.all(x, x=='cpu' || x=='memory' || x=='ephemeral-storage' || x=='pid')"
+	// +kubebuilder:validation:XValidation:message="kubeReserved value cannot be a negative resource quantity",rule="self.all(x, !self[x].startsWith('-'))"
+	// +optional
+	KubeReserved map[string]string `json:"kubeReserved,omitempty"`
+	// EvictionHard is the map of signal names to quantities that define hard eviction thresholds
+	// +kubebuilder:validation:XValidation:message="valid keys for evictionHard are ['memory.available','nodefs.available','nodefs.inodesFree','imagefs.available','imagefs.inodesFree','pid.available']",rule="self.all(x, x in ['memory.available','nodefs.available','nodefs.inodesFree','imagefs.available','imagefs.inodesFree','pid.available'])"
+	// +optional
+	EvictionHard map[string]string `json:"evictionHard,omitempty"`
+	// EvictionSoft is the map of signal names to quantities that define soft eviction thresholds
+	// +kubebuilder:validation:XValidation:message="valid keys for evictionSoft are ['memory.available','nodefs.available','nodefs.inodesFree','imagefs.available','imagefs.inodesFree','pid.available']",rule="self.all(x, x in ['memory.available','nodefs.available','nodefs.inodesFree','imagefs.available','imagefs.inodesFree','pid.available'])"
+	// +optional
+	EvictionSoft map[string]string `json:"evictionSoft,omitempty"`
+	// EvictionSoftGracePeriod is the map of signal names to quantities that define grace periods for each eviction signal
+	// +kubebuilder:validation:XValidation:message="valid keys for evictionSoftGracePeriod are ['memory.available','nodefs.available','nodefs.inodesFree','imagefs.available','imagefs.inodesFree','pid.available']",rule="self.all(x, x in ['memory.available','nodefs.available','nodefs.inodesFree','imagefs.available','imagefs.inodesFree','pid.available'])"
+	// +optional
+	EvictionSoftGracePeriod map[string]metav1.Duration `json:"evictionSoftGracePeriod,omitempty"`
+	// EvictionMaxPodGracePeriod is the maximum allowed grace period (in seconds) to use when terminating pods in
+	// response to soft eviction thresholds being met.
+	// +optional
+	EvictionMaxPodGracePeriod *int32 `json:"evictionMaxPodGracePeriod,omitempty"`
+	// CPUCFSQuota enables CPU CFS quota enforcement for containers that specify CPU limits.
+	// +optional
+	CPUCFSQuota *bool `json:"cpuCFSQuota,omitempty"`
+}
+
 // LinodeNodeClass is the Schema for the LinodeNodeClass API
 // +kubebuilder:object:root=true
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
@@ -470,6 +530,10 @@ func (in *LinodeNodeClass) Hash() string {
 		IgnoreZeroValue: true,
 		ZeroNil:         true,
 	})))
+}
+
+func (in *LinodeNodeClass) KubeletConfiguration() *KubeletConfiguration {
+	return in.Spec.Kubelet
 }
 
 func (in *LinodeNodeClass) GetConditions() []status.Condition {

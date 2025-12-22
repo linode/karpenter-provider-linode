@@ -23,15 +23,16 @@ import (
 )
 
 var (
+	// TODO: get this list from a static file
 	defaultLinodeTypeList = []linodego.LinodeType{
 		{
-			ID:       "g6-standard-1",
-			Label:    "g6-standard-1",
-			Memory:   2048,
-			VCPUs:    1,
-			Disk:     25000,
-			Transfer: 2000,
-			Price:    &linodego.LinodePrice{Monthly: 10.0, Hourly: 0.015},
+			ID:       "g6-standard-2",
+			Label:    "Linode 4GB",
+			Memory:   4096,
+			VCPUs:    2,
+			Disk:     81920,
+			Transfer: 1000,
+			Price:    &linodego.LinodePrice{Monthly: 20.0, Hourly: 0.03},
 		},
 	}
 	defaultRegionAvailabilityList = []linodego.RegionAvailability{

@@ -17,10 +17,9 @@ package instancetype
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
-
-	"sync"
 
 	"github.com/linode/linodego"
 	"github.com/mitchellh/hashstructure/v2"
@@ -42,6 +41,7 @@ import (
 
 type NodeClass interface {
 	client.Object
+	KubeletConfiguration() *v1.KubeletConfiguration
 	LinodeImages() []v1.LinodeImage
 }
 
@@ -167,7 +167,7 @@ func (p *DefaultProvider) get(nodeClass NodeClass, name string) (*cloudprovider.
 	if !ok {
 		return nil, fmt.Errorf("instance type %s not found in cache", name)
 	}
-	it := p.instanceTypesResolver.Resolve(info)
+	it := p.instanceTypesResolver.Resolve(info, nodeClass)
 	if it == nil {
 		return nil, fmt.Errorf("failed to generate instance type %s", name)
 	}
@@ -281,6 +281,6 @@ func (p *DefaultProvider) Reset() {
 }
 
 func discoveredCapacityCacheKey(instanceType string, nodeClass NodeClass) string {
-	amiHash, _ := hashstructure.Hash(nodeClass.LinodeImages(), hashstructure.FormatV2, &hashstructure.HashOptions{SlicesAsSets: true})
-	return fmt.Sprintf("%s-%016x", instanceType, amiHash)
+	imageHash, _ := hashstructure.Hash(nodeClass.LinodeImages(), hashstructure.FormatV2, &hashstructure.HashOptions{SlicesAsSets: true})
+	return fmt.Sprintf("%s-%016x", instanceType, imageHash)
 }
