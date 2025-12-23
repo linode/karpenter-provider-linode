@@ -368,7 +368,9 @@ func (c *CloudProvider) instanceToNodeClaim(i *instance.Instance, instanceType *
 
 	nodeClaim.Labels = labels
 	nodeClaim.Annotations = annotations
-	nodeClaim.CreationTimestamp = metav1.Time{Time: *i.Created}
+	if i != nil && i.Created != nil {
+		nodeClaim.CreationTimestamp = metav1.Time{Time: *i.Created}
+	}
 	// Set the deletionTimestamp to be the current time if the instance is currently terminating
 	if i.Status == linodego.InstanceDeleting || i.Status == linodego.InstanceShuttingDown {
 		nodeClaim.DeletionTimestamp = &metav1.Time{Time: time.Now()}

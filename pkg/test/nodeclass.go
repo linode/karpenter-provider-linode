@@ -43,7 +43,3 @@ func LinodeNodeClass(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {
 type TestNodeClass struct {
 	v1.LinodeNodeClass
 }
-
-func (t *TestNodeClass) InstanceProfileTags(clusterName string) map[string]string {
-	return nil
-}

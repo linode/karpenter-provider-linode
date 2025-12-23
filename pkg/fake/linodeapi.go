@@ -17,6 +17,7 @@ package fake
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/linode/linodego"
 	"k8s.io/utils/ptr"
@@ -78,6 +79,10 @@ func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.Lino
 		// TODO: return the other fields as well when support is added to map types to resources
 		return ptr.To(&linodego.LinodeType{
 			ID: *typeID,
+			Price: &linodego.LinodePrice{
+				Monthly: 20.0,
+				Hourly:  0.03,
+			},
 		}), nil
 	})
 	if linodeType == nil {
@@ -100,8 +105,13 @@ func (l *LinodeClient) ListRegionsAvailability(_ context.Context, _ *linodego.Li
 func (l *LinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.Instance, error) {
 	instance, err := l.GetInstanceBehavior.Invoke(&linodeID, func(linodeID *int) (**linodego.Instance, error) {
 		return ptr.To(&linodego.Instance{
-			ID:     *linodeID,
-			Status: linodego.InstanceRunning,
+			ID:      *linodeID,
+			Image:   "linode/ubuntu22.04",
+			Label:   "example-instance",
+			Type:    "g6-standard-2",
+			Region:  DefaultRegion,
+			Created: ptr.To(time.Now().Add(-1 * time.Hour)),
+			Status:  linodego.InstanceRunning,
 		}), nil
 	})
 	if instance == nil {
@@ -128,10 +138,12 @@ func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceC
 	instance, err := l.CreateInstanceBehavior.Invoke(&opts, func(opts *linodego.InstanceCreateOptions) (**linodego.Instance, error) {
 		return ptr.To(&linodego.Instance{
 			ID:                  len(opts.Label) + 1, // just a simple way to generate an ID
+			Image:               opts.Image,
 			Label:               opts.Label,
 			Type:                opts.Type,
 			Region:              opts.Region,
 			InterfaceGeneration: opts.InterfaceGeneration,
+			Created:             ptr.To(time.Now()),
 			Status:              linodego.InstanceRunning,
 		}), nil
 	})

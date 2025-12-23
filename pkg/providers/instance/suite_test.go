@@ -121,7 +121,7 @@ var _ = Describe("InstanceProvider", func() {
 					Key:      karpv1.CapacityTypeLabelKey,
 					Operator: corev1.NodeSelectorOpIn,
 					Values: []string{
-						"dedicated",
+						v1.CapacityTypeDedicated,
 					},
 				},
 			},

@@ -89,7 +89,7 @@ func NewEnvironment(ctx context.Context) *Environment {
 	lo.Must0(instanceTypesProvider.UpdateInstanceTypeOfferings(ctx))
 
 	instanceProvider := instance.NewDefaultProvider(
-		"dummy",
+		fake.DefaultRegion,
 		eventRecorder,
 		linodeClient,
 		instanceCache,

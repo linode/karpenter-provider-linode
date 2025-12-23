@@ -108,7 +108,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 									Key:      karpv1.CapacityTypeLabelKey,
 									Operator: corev1.NodeSelectorOpIn,
 									Values: []string{
-										"standard",
+										v1.CapacityTypeStandard,
 									},
 								},
 							},
@@ -136,7 +136,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 			corev1.LabelInstanceTypeStable: "g6-standard-2",
 			corev1.LabelOSStable:           "linux",
 			corev1.LabelArchStable:         "amd64",
-			karpv1.CapacityTypeLabelKey:    "standard",
+			karpv1.CapacityTypeLabelKey:    v1.CapacityTypeStandard,
 			// Well Known to Linode
 			v1.LabelInstanceCPU:              "2",
 			v1.LabelInstanceMemory:           "4096",
@@ -149,6 +149,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 			pods = append(pods, coretest.UnschedulablePod(coretest.PodOptions{NodeSelector: map[string]string{key: value}}))
 		}
 		ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
+		// FIXME
 		/* for _, pod := range pods {
 			ExpectScheduled(ctx, env.Client, pod)
 		} */

@@ -36,7 +36,7 @@ var _ corecloudprovider.CloudProvider = (*CloudProvider)(nil)
 
 type CloudProvider struct {
 	InstanceTypes []*corecloudprovider.InstanceType
-	ValidAMIs     []string
+	Validimages   []string
 }
 
 func (c *CloudProvider) Create(_ context.Context, _ *karpv1.NodeClaim) (*karpv1.NodeClaim, error) {

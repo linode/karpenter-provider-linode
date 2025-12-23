@@ -22,12 +22,9 @@ import (
 
 	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
-	"github.com/samber/lo"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/operator"
 
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
@@ -36,10 +33,9 @@ import (
 )
 
 func init() {
-	karpv1.NormalizedLabels = lo.Assign(karpv1.NormalizedLabels, map[string]string{"topology.ebs.csi.aws.com/zone": corev1.LabelTopologyZone})
 }
 
-// Operator is injected into the AWS CloudProvider's factories
+// Operator is injected into the Linode CloudProvider's factories
 type Operator struct {
 	*operator.Operator
 	InstanceTypesProvider *instancetype.DefaultProvider
@@ -61,7 +57,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 
 	instanceTypeProvider := instancetype.NewDefaultProvider(
 		&linodeClient,
-		instancetype.NewDefaultResolver("dummy"),
+		instancetype.NewDefaultResolver("us-east"), // TODO: make region configurable
 		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
 		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
 		cache.New(linodecache.DiscoveredCapacityCacheTTL, linodecache.DefaultCleanupInterval),
@@ -70,7 +66,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	// Ensure we're able to hydrate instance types before starting any reliant controllers.
 	// Instance type updates are hydrated asynchronously after this by controllers.
 	instanceProvider := instance.NewDefaultProvider(
-		"dummy",
+		"us-east", // TODO: make region configurable
 		operator.EventRecorder,
 		&linodeClient,
 		cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
