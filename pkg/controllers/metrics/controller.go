@@ -16,6 +16,7 @@ package metrics
 
 import (
 	"context"
+	corev1 "k8s.io/api/core/v1"
 	"time"
 
 	"github.com/awslabs/operatorpkg/reconciler"
@@ -33,7 +34,7 @@ import (
 type metricDimensions struct {
 	instanceType string
 	capacityType string
-	zone         string
+	region       string
 }
 
 type Controller struct {
@@ -62,16 +63,16 @@ func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 			return reconciler.Result{}, err
 		}
 		for _, instanceType := range instanceTypes {
-			zones := sets.New[string]()
+			regions := sets.New[string]()
 			for _, offering := range instanceType.Offerings {
-				dimensions := metricDimensions{instanceType: instanceType.Name, capacityType: offering.CapacityType(), zone: offering.Zone()}
+				dimensions := metricDimensions{instanceType: instanceType.Name, capacityType: offering.CapacityType(), region: offering.Requirements.Get(corev1.LabelTopologyRegion).Any()}
 				availability[dimensions] = availability[dimensions] || offering.Available
 				price[dimensions] = offering.Price
-				zones.Insert(offering.Zone())
+				regions.Insert(offering.Requirements.Get(corev1.LabelTopologyRegion).Any())
 			}
 			if coreoptions.FromContext(ctx).FeatureGates.ReservedCapacity {
-				for zone := range zones {
-					dimensions := metricDimensions{instanceType: instanceType.Name, capacityType: karpv1.CapacityTypeReserved, zone: zone}
+				for region := range regions {
+					dimensions := metricDimensions{instanceType: instanceType.Name, capacityType: karpv1.CapacityTypeReserved, region: region}
 					if _, ok := availability[dimensions]; !ok {
 						availability[dimensions] = false
 						price[dimensions] = 0
@@ -85,14 +86,14 @@ func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 		InstanceTypeOfferingAvailable.Set(float64(lo.Ternary(available, 1, 0)), map[string]string{
 			instanceTypeLabel: dimensions.instanceType,
 			capacityTypeLabel: dimensions.capacityType,
-			zoneLabel:         dimensions.zone,
+			regionLabel:       dimensions.region,
 		})
 	}
 	for dimensions, p := range price {
 		InstanceTypeOfferingPriceEstimate.Set(p, map[string]string{
 			instanceTypeLabel: dimensions.instanceType,
 			capacityTypeLabel: dimensions.capacityType,
-			zoneLabel:         dimensions.zone,
+			regionLabel:       dimensions.region,
 		})
 	}
 	return reconciler.Result{RequeueAfter: time.Minute}, nil

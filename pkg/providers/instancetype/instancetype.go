@@ -59,7 +59,7 @@ type DefaultProvider struct {
 
 	muInstanceTypesOfferings sync.RWMutex
 	instanceTypesOfferings   map[string]sets.Set[string]
-	allZones                 sets.Set[string]
+	allRegions               sets.Set[string]
 
 	instanceTypesCache      *cache.Cache
 	discoveredCapacityCache *cache.Cache
@@ -75,7 +75,7 @@ func NewDefaultProvider(
 	offeringCache *cache.Cache,
 	discoveredCapacityCache *cache.Cache,
 	unavailableOfferingsCache *linodecache.UnavailableOfferings,
-	// Note: I don't think we actually need a pricing provider like AWS for Linode it's right in the instance type info
+// Note: I don't think we actually need a pricing provider like AWS for Linode it's right in the instance type info
 ) *DefaultProvider {
 	return &DefaultProvider{
 		client:                  client,
@@ -129,7 +129,7 @@ func (p *DefaultProvider) List(ctx context.Context, nodeClass NodeClass) ([]*clo
 		ctx,
 		instanceTypes,
 		nodeClass,
-		p.allZones,
+		p.allRegions,
 	), nil
 }
 
@@ -260,16 +260,16 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 	}
 	p.instanceTypesOfferings = instanceTypeOfferings
 
-	allZones := sets.New[string]()
-	for _, offeringZones := range instanceTypeOfferings {
-		for zone := range offeringZones {
-			allZones.Insert(zone)
+	allRegions := sets.New[string]()
+	for _, offeringRegions := range instanceTypeOfferings {
+		for region := range offeringRegions {
+			allRegions.Insert(region)
 		}
 	}
-	if p.cm.HasChanged("zones", allZones) {
-		log.FromContext(ctx).WithValues("zones", allZones.UnsortedList()).V(1).Info("discovered zones")
+	if p.cm.HasChanged("Regions", allRegions) {
+		log.FromContext(ctx).WithValues("Regions", allRegions.UnsortedList()).V(1).Info("discovered Regions")
 	}
-	p.allZones = allZones
+	p.allRegions = allRegions
 	return nil
 }
 

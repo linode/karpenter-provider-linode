@@ -19,10 +19,7 @@ import (
 	"fmt"
 	"sync"
 
-	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
-
 	"github.com/linode/linodego"
-
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/patrickmn/go-cache"
 	corev1 "k8s.io/api/core/v1"
@@ -33,6 +30,7 @@ import (
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
+	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 )
 
 type Provider interface {
@@ -65,14 +63,14 @@ func (p *DefaultProvider) InjectOfferings(
 	ctx context.Context,
 	instanceTypes []*cloudprovider.InstanceType,
 	nodeClass NodeClass,
-	allZones sets.Set[string],
+	allRegions sets.Set[string],
 ) []*cloudprovider.InstanceType {
 	var its []*cloudprovider.InstanceType
 	for _, it := range instanceTypes {
 		offerings := p.createOfferings(
 			ctx,
 			it,
-			allZones,
+			allRegions,
 		)
 		// NOTE: By making this copy one level deep, we can modify the offerings without mutating the results from previous
 		// GetInstanceTypes calls. This should still be done with caution - it is currently done here in the provider, and
@@ -92,10 +90,10 @@ func (p *DefaultProvider) InjectOfferings(
 func (p *DefaultProvider) createOfferings(
 	ctx context.Context,
 	it *cloudprovider.InstanceType,
-	allZones sets.Set[string],
+	allRegions sets.Set[string],
 ) cloudprovider.Offerings {
 	var offerings []*cloudprovider.Offering
-	itZones := sets.New(it.Requirements.Get(corev1.LabelTopologyZone).Values()...)
+	itRegions := sets.New(it.Requirements.Get(corev1.LabelTopologyRegion).Values()...)
 
 	// If the sequence number has changed for the unavailable offerings, we know that we can't use the previously cached value
 	lastSeqNum, ok := p.lastUnavailableOfferingsSeqNum.Load(it.Name)
@@ -107,28 +105,25 @@ func (p *DefaultProvider) createOfferings(
 		offerings = append(offerings, ofs.([]*cloudprovider.Offering)...)
 	} else {
 		var cachedOfferings []*cloudprovider.Offering
-		for zone := range allZones {
-			for _, capacityType := range it.Requirements.Get(karpv1.CapacityTypeLabelKey).Values() {
-				isUnavailable := p.unavailableOfferings.IsUnavailable(it.Name, zone)
-				linodeType, err := p.getLinodeType(ctx, it.Name)
-				if err != nil {
-					continue
-				}
-				var price float64
-				if linodeType != nil && linodeType.Price != nil {
-					// I'm not sure why we have both hourly and monthly prices, but stick to hourly for now
-					price = float64(linodeType.Price.Hourly)
-				}
-				offering := &cloudprovider.Offering{
-					Requirements: scheduling.NewRequirements(
-						scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, capacityType),
-						scheduling.NewRequirement(corev1.LabelTopologyZone, corev1.NodeSelectorOpIn, zone),
-					),
-					Price:     price,
-					Available: !isUnavailable && itZones.Has(zone),
-				}
-				cachedOfferings = append(cachedOfferings, offering)
+		for region := range allRegions {
+			isUnavailable := p.unavailableOfferings.IsUnavailable(it.Name, region)
+			linodeType, err := p.getLinodeType(ctx, it.Name)
+			if err != nil {
+				continue
 			}
+			var price float64
+			if linodeType != nil && linodeType.Price != nil {
+				// I'm not sure why we have both hourly and monthly prices, but stick to hourly for now
+				price = float64(linodeType.Price.Hourly)
+			}
+			offering := &cloudprovider.Offering{
+				Requirements: scheduling.NewRequirements(
+					scheduling.NewRequirement(corev1.LabelTopologyRegion, corev1.NodeSelectorOpIn, region),
+				),
+				Price:     price,
+				Available: !isUnavailable && itRegions.Has(region),
+			}
+			cachedOfferings = append(cachedOfferings, offering)
 		}
 		p.cache.SetDefault(p.cacheKeyFromInstanceType(it), cachedOfferings)
 		p.lastUnavailableOfferingsSeqNum.Store(it.Name, seqNum)
@@ -147,8 +142,8 @@ func (p *DefaultProvider) getLinodeType(ctx context.Context, instanceTypeID stri
 }
 
 func (p *DefaultProvider) cacheKeyFromInstanceType(it *cloudprovider.InstanceType) string {
-	zonesHash, _ := hashstructure.Hash(
-		it.Requirements.Get(corev1.LabelTopologyZone).Values(),
+	regionsHash, _ := hashstructure.Hash(
+		it.Requirements.Get(corev1.LabelTopologyRegion).Values(),
 		hashstructure.FormatV2,
 		&hashstructure.HashOptions{SlicesAsSets: true},
 	)
@@ -160,7 +155,7 @@ func (p *DefaultProvider) cacheKeyFromInstanceType(it *cloudprovider.InstanceTyp
 	return fmt.Sprintf(
 		"%s-%016x-%016x",
 		it.Name,
-		zonesHash,
+		regionsHash,
 		capacityTypesHash,
 	)
 }
