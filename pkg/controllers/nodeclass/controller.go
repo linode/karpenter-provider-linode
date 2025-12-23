@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/utils/result"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 type Controller struct {
@@ -74,7 +75,20 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1.LinodeNodeClas
 	if !nodeClass.GetDeletionTimestamp().IsZero() {
 		return c.finalize(ctx, nodeClass)
 	}
+	if !controllerutil.ContainsFinalizer(nodeClass, v1.TerminationFinalizer) {
+		stored := nodeClass.DeepCopy()
+		controllerutil.AddFinalizer(nodeClass, v1.TerminationFinalizer)
 
+		// We use client.MergeFromWithOptimisticLock because patching a list with a JSON merge patch
+		// can cause races due to the fact that it fully replaces the list on a change
+		// Here, we are updating the finalizer list
+		if err := c.kubeClient.Patch(ctx, nodeClass, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); client.IgnoreNotFound(err) != nil {
+			if errors.IsConflict(err) {
+				return reconcile.Result{Requeue: true}, nil
+			}
+			return reconcile.Result{}, err
+		}
+	}
 	stored := nodeClass.DeepCopy()
 
 	var results []reconcile.Result
@@ -112,7 +126,7 @@ func (c *Controller) finalize(ctx context.Context, nodeClass *v1.LinodeNodeClass
 		c.recorder.Publish(WaitingOnNodeClaimTerminationEvent(nodeClass, lo.Map(nodeClaims.Items, func(nc karpv1.NodeClaim, _ int) string { return nc.Name })))
 		return reconcile.Result{RequeueAfter: time.Minute * 10}, nil // periodically fire the event
 	}
-
+	controllerutil.RemoveFinalizer(nodeClass, v1.TerminationFinalizer)
 	if !equality.Semantic.DeepEqual(stored, nodeClass) {
 		// We use client.MergeFromWithOptimisticLock because patching a list with a JSON merge patch
 		// can cause races due to the fact that it fully replaces the list on a change

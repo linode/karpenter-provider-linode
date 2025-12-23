@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/operator"
 
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
 )
@@ -49,7 +50,6 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	kubeDNSIP, err := KubeDNSIP(ctx, operator.KubernetesInterface)
 	if err != nil {
 		// If we fail to get the kube-dns IP, we don't want to crash because this causes issues with custom DNS setups
-		// https://github.com/linode/karpenter-provider-linode/issues/2787
 		log.FromContext(ctx).V(1).Info(fmt.Sprintf("unable to detect the IP of the kube-dns service, %s", err))
 	} else {
 		log.FromContext(ctx).WithValues("kube-dns-ip", kubeDNSIP).V(1).Info("discovered kube dns")
@@ -57,7 +57,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 
 	instanceTypeProvider := instancetype.NewDefaultProvider(
 		&linodeClient,
-		instancetype.NewDefaultResolver("us-east"), // TODO: make region configurable
+		instancetype.NewDefaultResolver(options.FromContext(ctx).ClusterRegion),
 		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
 		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
 		cache.New(linodecache.DiscoveredCapacityCacheTTL, linodecache.DefaultCleanupInterval),
@@ -66,7 +66,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	// Ensure we're able to hydrate instance types before starting any reliant controllers.
 	// Instance type updates are hydrated asynchronously after this by controllers.
 	instanceProvider := instance.NewDefaultProvider(
-		"us-east", // TODO: make region configurable
+		options.FromContext(ctx).ClusterRegion,
 		operator.EventRecorder,
 		&linodeClient,
 		cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),

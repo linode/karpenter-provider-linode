@@ -38,17 +38,17 @@ var (
 	}
 	defaultRegionAvailabilityList = []linodego.RegionAvailability{
 		{
-			Region:    "us-east",
+			Region:    DefaultRegion,
 			Plan:      "g6-standard-2",
 			Available: true,
 		},
 		{
-			Region:    "us-east",
+			Region:    DefaultRegion,
 			Plan:      "g6-standard-4",
 			Available: true,
 		},
 		{
-			Region:    "us-east",
+			Region:    DefaultRegion,
 			Plan:      "g6-dedicated-4",
 			Available: false,
 		},

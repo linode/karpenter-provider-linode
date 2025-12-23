@@ -42,3 +42,28 @@ var _ = Describe("GetNodeClassHash", func() {
 		Expect(hash).To(Equal("test-uid-123-5"))
 	})
 })
+
+var _ = Describe("TagListToMap", func() {
+	It("should return a map for key:pair tags", func() {
+		tagList := []string{"name:test-uid-123-5", "env:prod", "malformatedtag"}
+		tagMap := utils.TagListToMap(tagList)
+		Expect(tagMap).To(Equal(map[string]string{
+			"name": "test-uid-123-5",
+			"env":  "prod",
+		}))
+	})
+})
+
+var _ = Describe("ParseInstanceID", func() {
+	It("should parse valid instance IDs", func() {
+		providerID := "linode://123456"
+		instanceID, err := utils.ParseInstanceID(providerID)
+		Expect(err).To(BeNil())
+		Expect(instanceID).To(Equal("123456"))
+	})
+	It("should return error for no provider name", func() {
+		instanceID := "123456"
+		_, err := utils.ParseInstanceID(instanceID)
+		Expect(err).ToNot(BeNil())
+	})
+})

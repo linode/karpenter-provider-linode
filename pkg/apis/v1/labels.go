@@ -30,14 +30,16 @@ const (
 )
 
 var (
+	TerminationFinalizer                 = apis.Group + "/termination"
 	AnnotationInstanceTagged             = apis.Group + "/tagged"
 	NodeClaimTagKey                      = coreapis.Group + "/nodeclaim"
 	NameTagKey                           = "Name"
-	NodeClassTagKey                      = apis.Group + "/linodenodeclass"
+	LabelNodeClass                       = apis.Group + "/linodenodeclass"
 	AnnotationLinodeNodeClassHash        = apis.Group + "/linodenodeclass-hash"
 	AnnotationLinodeNodeClassHashVersion = apis.Group + "/linodenodeclass-hash-version"
 	LabelInstanceNetworkBandwidth        = apis.Group + "/instance-network-bandwidth"
 	LabelInstanceCPU                     = apis.Group + "/instance-cpu"
 	LabelInstanceGPUCount                = apis.Group + "/instance-gpu-count"
 	LabelInstanceMemory                  = apis.Group + "/instance-memory"
+	LKEClusterNameTagKey                 = "lke-cluster-name"
 )

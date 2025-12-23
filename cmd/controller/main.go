@@ -24,6 +24,7 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
 	"github.com/linode/karpenter-provider-linode/pkg/controllers"
 	"github.com/linode/karpenter-provider-linode/pkg/operator"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 )
 
 func main() {
@@ -52,7 +53,7 @@ func main() {
 			op.InstanceTypeStore,
 		)...).
 		WithControllers(ctx, controllers.NewControllers(
-			"",
+			options.FromContext(ctx).ClusterRegion,
 			op.Manager,
 			op.GetClient(),
 			op.EventRecorder,

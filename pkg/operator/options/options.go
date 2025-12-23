@@ -33,11 +33,13 @@ type optionsKey struct{}
 
 type Options struct {
 	ClusterID       string
+	ClusterRegion   string
 	ClusterEndpoint string
 }
 
 func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
 	fs.StringVar(&o.ClusterID, "cluster-id", env.WithDefaultString("CLUSTER_ID", "0"), "[REQUIRED] The kubernetes cluster ID for resource discovery.")
+	fs.StringVar(&o.ClusterRegion, "cluster-region", env.WithDefaultString("CLUSTER_REGION", "us-east"), "The region the kubernetes cluster is deployed in.")
 	fs.StringVar(&o.ClusterEndpoint, "cluster-endpoint", env.WithDefaultString("CLUSTER_ENDPOINT", ""), "The external kubernetes cluster endpoint for new nodes to connect with. If not specified, will discover the cluster endpoint using DescribeCluster API.")
 }
 

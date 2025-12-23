@@ -18,38 +18,32 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
-	"strings"
 	"time"
 
-	coreapis "sigs.k8s.io/karpenter/pkg/apis"
-
-	"github.com/linode/linodego"
-
 	"github.com/awslabs/operatorpkg/status"
+	"github.com/linode/linodego"
+	"github.com/samber/lo"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	coreapis "sigs.k8s.io/karpenter/pkg/apis"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
 	"sigs.k8s.io/karpenter/pkg/utils/resources"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
-	"github.com/linode/karpenter-provider-linode/pkg/utils"
-
-	"github.com/samber/lo"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	cloudproviderevents "github.com/linode/karpenter-provider-linode/pkg/cloudprovider/events"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
-
-	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
 var _ cloudprovider.CloudProvider = (*CloudProvider)(nil)
@@ -99,11 +93,15 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	if nodeClassReady != nil && nodeClassReady.ObservedGeneration != nodeClass.Generation {
 		return nil, cloudprovider.NewNodeClassNotReadyError(fmt.Errorf("nodeclass status has not been reconciled against the latest spec"))
 	}
+	tags, err := utils.GetTags(nodeClass, nodeClaim, options.FromContext(ctx).ClusterID)
+	if err != nil {
+		return nil, cloudprovider.NewNodeClassNotReadyError(err)
+	}
 	instanceTypes, err := c.instanceTypeProvider.List(ctx, nodeClass)
 	if err != nil {
 		return nil, cloudprovider.NewCreateError(fmt.Errorf("resolving instance types, %w", err), "InstanceTypeResolutionFailed", "Error resolving instance types")
 	}
-	instance, err := c.instanceProvider.Create(ctx, nodeClass, nodeClaim, nil, instanceTypes)
+	instance, err := c.instanceProvider.Create(ctx, nodeClass, nodeClaim, tags, instanceTypes)
 	if err != nil {
 		return nil, fmt.Errorf("creating instance, %w", err)
 	}
@@ -395,14 +393,7 @@ func (c *CloudProvider) resolveInstanceTypeFromInstance(ctx context.Context, ins
 }
 
 func (c *CloudProvider) resolveNodePoolFromInstance(ctx context.Context, instance *instance.Instance) (*karpv1.NodePool, error) {
-	tags := make(map[string]string, len(instance.Tags))
-	for _, tag := range instance.Tags {
-		parts := strings.Split(tag, "=")
-		if len(parts) != 2 {
-			continue
-		}
-		tags[parts[0]] = parts[1]
-	}
+	tags := utils.TagListToMap(instance.Tags)
 
 	if nodePoolName, ok := tags[karpv1.NodePoolLabelKey]; ok {
 		nodePool := &karpv1.NodePool{}

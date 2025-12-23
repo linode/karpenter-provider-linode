@@ -108,7 +108,6 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		LinodeInterfaces: constructLinodeInterfaceCreateOpts(nodeClass.Spec.LinodeInterfaces),
 		// NOTE: Disk encryption may not currently be available to all users.
 		DiskEncryption: nodeClass.Spec.DiskEncryption,
-		PlacementGroup: (*linodego.InstanceCreatePlacementGroupOptions)(nodeClass.Spec.PlacementGroup),
 		SwapSize:       nodeClass.Spec.SwapSize,
 	}
 

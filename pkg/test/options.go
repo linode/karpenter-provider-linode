@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/imdario/mergo"
+	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/samber/lo"
 
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
@@ -38,5 +39,6 @@ func Options(overrides ...OptionsFields) *options.Options {
 	return &options.Options{
 		ClusterID:       lo.FromPtrOr(opts.ClusterID, "123456789012"),
 		ClusterEndpoint: lo.FromPtrOr(opts.ClusterEndpoint, "https://test-cluster"),
+		ClusterRegion:   fake.DefaultRegion,
 	}
 }

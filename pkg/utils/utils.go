@@ -17,8 +17,8 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/samber/lo"
 	"maps"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -30,7 +30,7 @@ import (
 )
 
 var (
-	instanceIDRegex = regexp.MustCompile(`(?P<Provider>.*):///(?P<AZ>.*)/(?P<InstanceID>.*)`)
+	instanceIDRegex = regexp.MustCompile(`(?P<Provider>.*)://(?P<InstanceID>.*)`)
 )
 
 // ParseInstanceID parses the provider ID stored on the node to get the instance ID
@@ -64,26 +64,38 @@ func PrettySlice[T any](s []T, maxItems int) string {
 	return sb.String()
 }
 
-// WithDefaultFloat64 returns the float64 value of the supplied environment variable or, if not present,
-// the supplied default value. If the float64 conversion fails, returns the default
-func WithDefaultFloat64(key string, def float64) float64 {
-	val, ok := os.LookupEnv(key)
-	if !ok {
-		return def
-	}
-	f, err := strconv.ParseFloat(val, 64)
-	if err != nil {
-		return def
-	}
-	return f
-}
-
 func GetTags(nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, clusterName string) (map[string]string, error) {
-	return nil, nil
+	var invalidTags []string
+	if len(invalidTags) != 0 {
+		quotedTags := lo.Map(invalidTags, func(tag string, _ int) string {
+			return fmt.Sprintf("%q", tag)
+		})
+		return nil, serrors.Wrap(fmt.Errorf("tags failed validation requirements"), "tags", strings.Join(quotedTags, ", "))
+	}
+	staticTags := map[string]string{
+		fmt.Sprintf("kubernetes.io/cluster/%s", clusterName): "owned",
+		karpv1.NodePoolLabelKey:                              nodeClaim.Labels[karpv1.NodePoolLabelKey],
+		v1.LKEClusterNameTagKey:                              clusterName,
+		v1.LabelNodeClass:                                    nodeClass.Name,
+	}
+
+	return lo.Assign(TagListToMap(nodeClass.Spec.Tags), staticTags), nil
 }
 
 func GetNodeClassHash(nodeClass *v1.LinodeNodeClass) string {
 	return fmt.Sprintf("%s-%d", nodeClass.UID, nodeClass.Generation)
+}
+
+func TagListToMap(tags []string) map[string]string {
+	tagMap := make(map[string]string, len(tags))
+	for _, tag := range tags {
+		parts := strings.Split(tag, ":")
+		if len(parts) != 2 {
+			continue
+		}
+		tagMap[parts[0]] = parts[1]
+	}
+	return tagMap
 }
 
 // Filter holds the fields used for filtering results from the Linode API.
