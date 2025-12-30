@@ -124,7 +124,7 @@ func (p *DefaultProvider) List(ctx context.Context, nodeClass NodeClass) ([]*clo
 		instanceTypes = item.([]*cloudprovider.InstanceType)
 	} else {
 		instanceTypes = lo.FilterMapToSlice(p.instanceTypesInfo, func(name string, info linodego.LinodeType) (*cloudprovider.InstanceType, bool) {
-			it, err := p.get(nodeClass, name)
+			it, err := p.get(ctx, nodeClass, name)
 			if err != nil {
 				return nil, false
 			}
@@ -164,7 +164,7 @@ func (p *DefaultProvider) Get(ctx context.Context, nodeClass NodeClass, name str
 	}
 	if instanceType == nil {
 		var err error
-		instanceType, err = p.get(nodeClass, name)
+		instanceType, err = p.get(ctx, nodeClass, name)
 		if err != nil {
 			return nil, err
 		}
@@ -172,12 +172,12 @@ func (p *DefaultProvider) Get(ctx context.Context, nodeClass NodeClass, name str
 	return instanceType, nil
 }
 
-func (p *DefaultProvider) get(nodeClass NodeClass, name string) (*cloudprovider.InstanceType, error) {
+func (p *DefaultProvider) get(ctx context.Context, nodeClass NodeClass, name string) (*cloudprovider.InstanceType, error) {
 	info, ok := p.instanceTypesInfo[name]
 	if !ok {
 		return nil, fmt.Errorf("instance type %s not found in cache", name)
 	}
-	it := p.instanceTypesResolver.Resolve(info, nodeClass)
+	it := p.instanceTypesResolver.Resolve(ctx, info, nodeClass)
 	if it == nil {
 		return nil, fmt.Errorf("failed to generate instance type %s", name)
 	}

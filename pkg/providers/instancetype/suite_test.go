@@ -20,6 +20,7 @@ import (
 
 	"github.com/awslabs/operatorpkg/object"
 	"github.com/awslabs/operatorpkg/status"
+	"github.com/linode/linodego"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -37,6 +38,7 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
 	"github.com/linode/karpenter-provider-linode/pkg/test"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -153,5 +155,61 @@ var _ = Describe("InstanceTypeProvider", func() {
 		/* for _, pod := range pods {
 			ExpectScheduled(ctx, env.Client, pod)
 		} */
+	})
+	Context("Overhead", func() {
+		var info linodego.LinodeType
+		BeforeEach(func() {
+			ctx = options.ToContext(ctx, test.Options(test.OptionsFields{
+				ClusterID: lo.ToPtr("karpenter-cluster"),
+			}))
+
+			var ok bool
+			instanceInfo, err := linodeEnv.LinodeAPI.ListTypes(ctx, &linodego.ListOptions{})
+			Expect(err).To(BeNil())
+			info, ok = lo.Find(instanceInfo, func(i linodego.LinodeType) bool {
+				return i.ID == "g6-standard-4"
+			})
+			Expect(ok).To(BeTrue())
+		})
+		Context("System Reserved Resources", func() {
+			It("should use defaults when no kubelet is specified", func() {
+				nodeClass.Spec.Kubelet = &v1.KubeletConfiguration{}
+				it := instancetype.NewInstanceType(ctx,
+					info,
+					fake.DefaultRegion,
+					nodeClass.Spec.Kubelet.MaxPods,
+					nodeClass.Spec.Kubelet.PodsPerCore,
+					nodeClass.Spec.Kubelet.KubeReserved,
+					nodeClass.Spec.Kubelet.SystemReserved,
+					nodeClass.Spec.Kubelet.EvictionHard,
+					nodeClass.Spec.Kubelet.EvictionSoft,
+				)
+				Expect(it.Overhead.SystemReserved.Cpu().String()).To(Equal("0"))
+				Expect(it.Overhead.SystemReserved.Memory().String()).To(Equal("0"))
+				Expect(it.Overhead.SystemReserved.StorageEphemeral().String()).To(Equal("0"))
+			})
+			It("should override system reserved cpus when specified", func() {
+				nodeClass.Spec.Kubelet = &v1.KubeletConfiguration{
+					SystemReserved: map[string]string{
+						string(corev1.ResourceCPU):              "2",
+						string(corev1.ResourceMemory):           "20Gi",
+						string(corev1.ResourceEphemeralStorage): "10Gi",
+					},
+				}
+				it := instancetype.NewInstanceType(ctx,
+					info,
+					fake.DefaultRegion,
+					nodeClass.Spec.Kubelet.MaxPods,
+					nodeClass.Spec.Kubelet.PodsPerCore,
+					nodeClass.Spec.Kubelet.KubeReserved,
+					nodeClass.Spec.Kubelet.SystemReserved,
+					nodeClass.Spec.Kubelet.EvictionHard,
+					nodeClass.Spec.Kubelet.EvictionSoft,
+				)
+				Expect(it.Overhead.SystemReserved.Cpu().String()).To(Equal("2"))
+				Expect(it.Overhead.SystemReserved.Memory().String()).To(Equal("20Gi"))
+				Expect(it.Overhead.SystemReserved.StorageEphemeral().String()).To(Equal("10Gi"))
+			})
+		})
 	})
 })

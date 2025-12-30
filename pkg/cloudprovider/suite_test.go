@@ -189,6 +189,7 @@ var _ = Describe("CloudProvider", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(corecloudprovider.IsNodeClassNotReadyError(err)).To(BeTrue())
 	})
+	// FIXME
 	/* It("should return an ICE error when there are no instance types to launch", func() {
 		// Specify no instance types and expect to receive a capacity error
 		nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{

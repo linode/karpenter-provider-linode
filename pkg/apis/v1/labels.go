@@ -23,7 +23,7 @@ import (
 func init() {
 }
 
-// Well known labels and resources
+// Well-known labels and resources
 const (
 	CapacityTypeDedicated = "dedicated"
 	CapacityTypeStandard  = "standard"

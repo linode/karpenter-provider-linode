@@ -21,13 +21,14 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
-
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 )
 
 type OptionsFields struct {
-	ClusterID       *string
-	ClusterEndpoint *string
+	ClusterID               *string
+	ClusterEndpoint         *string
+	ClusterRegion           *string
+	VMMemoryOverheadPercent *float64
 }
 
 func Options(overrides ...OptionsFields) *options.Options {
@@ -38,8 +39,9 @@ func Options(overrides ...OptionsFields) *options.Options {
 		}
 	}
 	return &options.Options{
-		ClusterID:       lo.FromPtrOr(opts.ClusterID, "123456789012"),
-		ClusterEndpoint: lo.FromPtrOr(opts.ClusterEndpoint, "https://test-cluster"),
-		ClusterRegion:   fake.DefaultRegion,
+		ClusterID:               lo.FromPtrOr(opts.ClusterID, "123456789012"),
+		ClusterEndpoint:         lo.FromPtrOr(opts.ClusterEndpoint, "https://test-cluster"),
+		ClusterRegion:           lo.FromPtrOr(opts.ClusterRegion, fake.DefaultRegion),
+		VMMemoryOverheadPercent: lo.FromPtrOr(opts.VMMemoryOverheadPercent, 0.075),
 	}
 }

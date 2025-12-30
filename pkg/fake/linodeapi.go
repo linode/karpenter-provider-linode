@@ -56,6 +56,8 @@ var (
 	}
 )
 
+// LinodeAPIBehavior must be reset between tests otherwise tests will
+// pollute each other.
 type LinodeAPIBehavior struct {
 	ListTypesOutput                 AtomicPtr[[]linodego.LinodeType]
 	ListRegionsAvailabilityOutput   AtomicPtr[[]linodego.RegionAvailability]

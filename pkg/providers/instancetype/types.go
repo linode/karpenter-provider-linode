@@ -15,10 +15,13 @@ limitations under the License.
 package instancetype
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 
 	"github.com/linode/linodego"
 	"github.com/samber/lo"
@@ -39,7 +42,7 @@ type Resolver interface {
 	// CacheKey tells the InstanceType cache if something changes about the InstanceTypes or Offerings based on the NodeClass.
 	CacheKey(NodeClass) string
 	// Resolve generates an InstanceType based on raw LinodeType and NodeClass setting data
-	Resolve(info linodego.LinodeType, nodeClass NodeClass) *cloudprovider.InstanceType
+	Resolve(ctx context.Context, info linodego.LinodeType, nodeClass NodeClass) *cloudprovider.InstanceType
 }
 
 type DefaultResolver struct {
@@ -50,7 +53,7 @@ func (d DefaultResolver) CacheKey(nodeClass NodeClass) string {
 	return nodeClass.GetName()
 }
 
-func (d DefaultResolver) Resolve(info linodego.LinodeType, nodeClass NodeClass) *cloudprovider.InstanceType {
+func (d DefaultResolver) Resolve(ctx context.Context, info linodego.LinodeType, nodeClass NodeClass) *cloudprovider.InstanceType {
 	// !!! Important !!!
 	// Any changes to the values passed into the NewInstanceType method will require making updates to the cache key
 	// so that Karpenter is able to cache the set of InstanceTypes based on values that alter the set of instance types
@@ -60,6 +63,7 @@ func (d DefaultResolver) Resolve(info linodego.LinodeType, nodeClass NodeClass) 
 		kc = resolved
 	}
 	return NewInstanceType(
+		ctx,
 		info,
 		d.region,
 		kc.MaxPods,
@@ -78,6 +82,7 @@ func NewDefaultResolver(region string) *DefaultResolver {
 }
 
 func NewInstanceType(
+	ctx context.Context,
 	info linodego.LinodeType,
 	region string,
 	maxPods *int32,
@@ -90,12 +95,11 @@ func NewInstanceType(
 	it := &cloudprovider.InstanceType{
 		Name:         info.ID,
 		Requirements: computeRequirements(info, region),
-		Capacity:     computeCapacity(info),
-		// Overhead is required for the InstanceType to be valid, but Linode does not have any special overhead requirements
+		Capacity:     computeCapacity(ctx, info),
 		Overhead: &cloudprovider.InstanceTypeOverhead{
 			KubeReserved:      kubeReservedResources(cpu(info), pods(info, maxPods, podsPerCore), kubeReserved),
 			SystemReserved:    systemReservedResources(systemReserved),
-			EvictionThreshold: evictionThreshold(memory(info), evictionHard, evictionSoft),
+			EvictionThreshold: evictionThreshold(memory(ctx, info), evictionHard, evictionSoft),
 		},
 	}
 	return it
@@ -225,10 +229,10 @@ func computeRequirements(
 	return requirements
 }
 
-func computeCapacity(info linodego.LinodeType) corev1.ResourceList {
+func computeCapacity(ctx context.Context, info linodego.LinodeType) corev1.ResourceList {
 	resourceList := corev1.ResourceList{
 		corev1.ResourceCPU:    *cpu(info),
-		corev1.ResourceMemory: *memory(info),
+		corev1.ResourceMemory: *memory(ctx, info),
 	}
 	return resourceList
 }
@@ -237,6 +241,10 @@ func cpu(info linodego.LinodeType) *resource.Quantity {
 	return resources.Quantity(strconv.Itoa(info.VCPUs))
 }
 
-func memory(info linodego.LinodeType) *resource.Quantity {
-	return resources.Quantity(fmt.Sprintf("%dMi", info.Memory))
+func memory(ctx context.Context, info linodego.LinodeType) *resource.Quantity {
+	sizeInMib := info.Memory
+	mem := resources.Quantity(fmt.Sprintf("%dMi", sizeInMib))
+	// Account for VM overhead in calculation
+	mem.Sub(resource.MustParse(fmt.Sprintf("%dMi", int64(math.Ceil(float64(mem.Value())*options.FromContext(ctx).VMMemoryOverheadPercent/1024/1024)))))
+	return mem
 }

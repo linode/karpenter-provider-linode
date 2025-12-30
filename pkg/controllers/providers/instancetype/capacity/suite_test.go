@@ -17,6 +17,7 @@ package capacity_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/awslabs/operatorpkg/object"
@@ -31,6 +32,7 @@ import (
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 	"sigs.k8s.io/karpenter/pkg/test/v1alpha1"
+	"sigs.k8s.io/karpenter/pkg/utils/resources"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
@@ -68,7 +70,9 @@ func TestLinode(t *testing.T) {
 var _ = BeforeSuite(func() {
 	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(v1alpha1.CRDs...), coretest.WithFieldIndexers(coretest.NodeClaimProviderIDFieldIndexer(ctx)))
 	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
-	ctx = options.ToContext(ctx, test.Options(test.OptionsFields{}))
+	ctx = options.ToContext(ctx, test.Options(test.OptionsFields{
+		VMMemoryOverheadPercent: lo.ToPtr[float64](0.075),
+	}))
 	ctx, stop = context.WithCancel(ctx)
 	linodeEnv = test.NewEnvironment(ctx)
 	nodeClass = test.LinodeNodeClass()
@@ -86,10 +90,10 @@ var _ = AfterSuite(func() {
 
 var _ = BeforeEach(func() {
 	linodeEnv.Reset()
-	LinodeInstanceTypeInfo := fake.MakeInstances()
-	LinodeOfferings := fake.MakeInstanceOfferings(LinodeInstanceTypeInfo)
-	linodeEnv.LinodeAPI.ListTypesOutput.Set(&LinodeInstanceTypeInfo)
-	linodeEnv.LinodeAPI.ListRegionsAvailabilityOutput.Set(&LinodeOfferings)
+	linodeInstanceTypeInfo := fake.MakeInstances()
+	linodeOfferings := fake.MakeInstanceOfferings(linodeInstanceTypeInfo)
+	linodeEnv.LinodeAPI.ListTypesOutput.Set(&linodeInstanceTypeInfo)
+	linodeEnv.LinodeAPI.ListRegionsAvailabilityOutput.Set(&linodeOfferings)
 	Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypes(ctx)).To(Succeed())
 	Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeOfferings(ctx)).To(Succeed())
 	standardImage = v1.LinodeImage{
@@ -142,7 +146,7 @@ var _ = Describe("CapacityCache", func() {
 				},
 			},
 			Capacity: corev1.ResourceList{
-				corev1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dMi", 4096)), // TODO figure out overhead. AWS has 3840Mi
+				corev1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dMi", 3788)),
 			},
 			ProviderID: fake.ProviderID(fake.InstanceID()),
 		})
@@ -177,6 +181,26 @@ var _ = Describe("CapacityCache", func() {
 		})
 		Expect(ok).To(BeTrue())
 		Expect(i.Capacity.Memory().Value()).To(Equal(node.Status.Capacity.Memory().Value()), "Expected capacity to match discovered node capacity")
+	})
+
+	It("should use VM_MEMORY_OVERHEAD_PERCENT calculation after Image update", func() {
+		ExpectObjectReconciled(ctx, env.Client, controller, node)
+
+		// Update NodeClass Image and list instance-types. Cached values from prior Images should no longer be used.
+		nodeClass.Status.LinodeImages[0].ID = "image-new-test-id"
+		ExpectApplied(ctx, env.Client, nodeClaim)
+		ExpectObjectReconciled(ctx, env.Client, controller, node)
+		instanceTypesNoCache, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+		Expect(err).To(BeNil())
+		i, ok := lo.Find(instanceTypesNoCache, func(i *karpcloudprovider.InstanceType) bool {
+			return i.Name == "g6-standard-4"
+		})
+		Expect(ok).To(BeTrue())
+
+		// Calculate memory capacity based on VM_MEMORY_OVERHEAD_PERCENT and output from ListTypes
+		mem := resources.Quantity(fmt.Sprintf("%dMi", 8192)) // Reported memory from fake.MakeInstances()
+		mem.Sub(resource.MustParse(fmt.Sprintf("%dMi", int64(math.Ceil(float64(mem.Value())*options.FromContext(ctx).VMMemoryOverheadPercent/1024/1024)))))
+		Expect(i.Capacity.Memory().Value()).To(Equal(mem.Value()), "Expected capacity to match VMMemoryOverheadPercent calculation")
 	})
 
 	It("should properly update discovered capacity when matching Image is not the first in the list", func() {

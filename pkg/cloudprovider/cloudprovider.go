@@ -108,7 +108,7 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	instanceType, _ := lo.Find(instanceTypes, func(i *cloudprovider.InstanceType) bool {
 		return i.Name == instance.Type
 	})
-	nc := c.instanceToNodeClaim(instance, instanceType)
+	nc := c.instanceToNodeClaim(instance, instanceType, nodeClass)
 	nc.Annotations = lo.Assign(nc.Annotations, map[string]string{
 		v1.AnnotationLinodeNodeClassHash:        nodeClass.Hash(),
 		v1.AnnotationLinodeNodeClassHashVersion: v1.LinodeNodeClassHashVersion,
@@ -127,7 +127,11 @@ func (c *CloudProvider) List(ctx context.Context) ([]*karpv1.NodeClaim, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolving instance type, %w", err)
 		}
-		nodeClaims = append(nodeClaims, c.instanceToNodeClaim(it, instanceType))
+		nc, err := c.resolveNodeClassFromInstance(ctx, it)
+		if client.IgnoreNotFound(err) != nil {
+			return nil, fmt.Errorf("resolving nodeclass, %w", err)
+		}
+		nodeClaims = append(nodeClaims, c.instanceToNodeClaim(it, instanceType, nc))
 	}
 	return nodeClaims, nil
 }
@@ -146,7 +150,11 @@ func (c *CloudProvider) Get(ctx context.Context, providerID string) (*karpv1.Nod
 	if err != nil {
 		return nil, fmt.Errorf("resolving instance type, %w", err)
 	}
-	return c.instanceToNodeClaim(instance, instanceType), nil
+	nc, err := c.resolveNodeClassFromInstance(ctx, instance)
+	if client.IgnoreNotFound(err) != nil {
+		return nil, fmt.Errorf("resolving nodeclass, %w", err)
+	}
+	return c.instanceToNodeClaim(instance, instanceType, nc), nil
 }
 
 // GetInstanceTypes returns all available InstanceTypes
@@ -309,16 +317,9 @@ func (c *CloudProvider) resolveNodeClassFromNodePool(ctx context.Context, nodePo
 	return nodeClass, nil
 }
 
-/* func (c *CloudProvider) resolveNodeClassFromInstance(ctx context.Context, instance *instance.Instance) (*v1.LinodeNodeClass, error) {
-	tags := make(map[string]string, len(instance.Tags))
-	for _, tag := range instance.Tags {
-		parts := strings.Split(tag, "=")
-		if len(parts) != 2 {
-			continue
-		}
-		tags[parts[0]] = parts[1]
-	}
-	name, ok := tags[v1.NodeClassTagKey]
+func (c *CloudProvider) resolveNodeClassFromInstance(ctx context.Context, instance *instance.Instance) (*v1.LinodeNodeClass, error) {
+	tags := utils.TagListToMap(instance.Tags)
+	name, ok := tags[v1.LabelNodeClass]
 	if !ok {
 		return nil, errors.NewNotFound(schema.GroupResource{Group: apis.Group, Resource: "linodenodeclasses"}, "")
 	}
@@ -332,9 +333,9 @@ func (c *CloudProvider) resolveNodeClassFromNodePool(ctx context.Context, nodePo
 		return nil, newTerminatingNodeClassError(nc.Name)
 	}
 	return nc, nil
-} */
+}
 
-func (c *CloudProvider) instanceToNodeClaim(i *instance.Instance, instanceType *cloudprovider.InstanceType) *karpv1.NodeClaim {
+func (c *CloudProvider) instanceToNodeClaim(i *instance.Instance, instanceType *cloudprovider.InstanceType, _ *v1.LinodeNodeClass) *karpv1.NodeClaim {
 	nodeClaim := &karpv1.NodeClaim{}
 	labels := map[string]string{}
 	annotations := map[string]string{}
