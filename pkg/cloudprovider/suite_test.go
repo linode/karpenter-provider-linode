@@ -127,7 +127,7 @@ var _ = Describe("CloudProvider", func() {
 								NodeSelectorRequirement: corev1.NodeSelectorRequirement{
 									Key:      karpv1.CapacityTypeLabelKey,
 									Operator: corev1.NodeSelectorOpIn,
-									Values:   []string{v1.CapacityTypeStandard},
+									Values:   []string{karpv1.CapacityTypeOnDemand},
 								}},
 						},
 					},
@@ -149,7 +149,7 @@ var _ = Describe("CloudProvider", func() {
 						NodeSelectorRequirement: corev1.NodeSelectorRequirement{
 							Key:      karpv1.CapacityTypeLabelKey,
 							Operator: corev1.NodeSelectorOpIn,
-							Values:   []string{v1.CapacityTypeStandard},
+							Values:   []string{karpv1.CapacityTypeOnDemand},
 						},
 					},
 				},

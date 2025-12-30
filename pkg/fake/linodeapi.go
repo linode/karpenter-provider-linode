@@ -16,6 +16,7 @@ package fake
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -31,6 +32,7 @@ var (
 			Label:    "Linode 4GB",
 			Memory:   4096,
 			VCPUs:    2,
+			GPUs:     0,
 			Disk:     81920,
 			Transfer: 1000,
 			Price:    &linodego.LinodePrice{Monthly: 20.0, Hourly: 0.03},
@@ -40,6 +42,7 @@ var (
 			Label:    "Linode 8GB",
 			Memory:   8192,
 			VCPUs:    4,
+			GPUs:     0,
 			Disk:     163840,
 			Transfer: 2000,
 			Price:    &linodego.LinodePrice{Monthly: 40.0, Hourly: 0.06},
@@ -49,6 +52,7 @@ var (
 			Label:    "Linode Dedicated 8GB",
 			Memory:   8192,
 			VCPUs:    4,
+			GPUs:     0,
 			Disk:     163840,
 			Transfer: 2000,
 			Price:    &linodego.LinodePrice{Monthly: 60.0, Hourly: 0.09},
@@ -79,14 +83,13 @@ type LinodeClient struct {
 
 func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.LinodeType, error) {
 	linodeType, err := l.GetTypeBehavior.Invoke(&typeID, func(typeID *string) (**linodego.LinodeType, error) {
-		// TODO: return the other fields as well when support is added to map types to resources
-		return ptr.To(&linodego.LinodeType{
-			ID: *typeID,
-			Price: &linodego.LinodePrice{
-				Monthly: 20.0,
-				Hourly:  0.03,
-			},
-		}), nil
+		// Find the type in defaultLinodeTypeList
+		for _, t := range defaultLinodeTypeList {
+			if t.ID == *typeID {
+				return ptr.To(&t), nil
+			}
+		}
+		return nil, fmt.Errorf("no linode type found with id %s", *typeID)
 	})
 	if linodeType == nil {
 		return nil, err
@@ -99,7 +102,7 @@ func (l *LinodeClient) ListRegionsAvailability(_ context.Context, _ *linodego.Li
 		defer l.NextError.Reset()
 		return nil, l.NextError.Get()
 	}
-	if !l.ListTypesOutput.IsNil() {
+	if !l.ListRegionsAvailabilityOutput.IsNil() {
 		return *l.ListRegionsAvailabilityOutput.Clone(), nil
 	}
 	return MakeInstanceOfferings(defaultLinodeTypeList), nil

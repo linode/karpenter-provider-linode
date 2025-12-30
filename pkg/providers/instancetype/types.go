@@ -21,17 +21,17 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
-
 	"github.com/linode/linodego"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
 	"sigs.k8s.io/karpenter/pkg/utils/resources"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 )
 
 const (
@@ -217,15 +217,19 @@ func computeRequirements(
 		// Well Known Upstream
 		scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, info.ID),
 		scheduling.NewRequirement(corev1.LabelTopologyRegion, corev1.NodeSelectorOpIn, region),
+		// Well Known to Karpenter
+		// We only support on-demand capacity types for now
+		scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, karpv1.CapacityTypeOnDemand),
 		// Well Known to Linode
 		scheduling.NewRequirement(v1.LabelInstanceCPU, corev1.NodeSelectorOpIn, fmt.Sprint(info.VCPUs)),
-		scheduling.NewRequirement(v1.LabelInstanceGPUCount, corev1.NodeSelectorOpDoesNotExist),
 		scheduling.NewRequirement(v1.LabelInstanceMemory, corev1.NodeSelectorOpIn, fmt.Sprint(info.Memory)),
-		scheduling.NewRequirement(v1.LabelInstanceNetworkBandwidth, corev1.NodeSelectorOpDoesNotExist),
+		scheduling.NewRequirement(v1.LabelInstanceNetworkBandwidth, corev1.NodeSelectorOpIn, fmt.Sprint(info.Transfer)),
 	)
-	// Network bandwidth, etc
-	// TODO: automatically set this value based on Linode type, need to generate a mapping of Linode types to specs
-
+	if info.GPUs > 0 {
+		requirements.Add(
+			scheduling.NewRequirement(v1.LabelInstanceGPUCount, corev1.NodeSelectorOpIn, fmt.Sprint(info.GPUs)),
+		)
+	}
 	return requirements
 }
 

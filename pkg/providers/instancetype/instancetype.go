@@ -66,16 +66,6 @@ type DefaultProvider struct {
 	cm                      *pretty.ChangeMonitor
 
 	offeringProvider *offering.DefaultProvider
-
-	muPrices       sync.RWMutex
-	instancePrices map[string]regional
-}
-
-// regionalPricing is used to capture the per-region price for instances as well
-// as the default price when the provisioningController first comes up
-type regional struct {
-	defaultPrice float64 // Used until we get the pricing data
-	prices       map[string]float64
 }
 
 func NewDefaultProvider(
@@ -85,7 +75,7 @@ func NewDefaultProvider(
 	offeringCache *cache.Cache,
 	discoveredCapacityCache *cache.Cache,
 	unavailableOfferingsCache *linodecache.UnavailableOfferings,
-	// Note: I don't think we actually need a pricing provider like AWS for Linode it's right in the instance type info
+	// TODO: add pricing provider here
 ) *DefaultProvider {
 	return &DefaultProvider{
 		client:                  client,
@@ -207,9 +197,7 @@ func (p *DefaultProvider) UpdateInstanceTypes(ctx context.Context) error {
 	// We lock here so that multiple callers to getInstanceTypeOfferings do not result in cache misses and multiple
 	// calls to Linode API when we could have just made one call.
 	p.muInstanceTypesInfo.Lock()
-	p.muPrices.Lock()
 	defer p.muInstanceTypesInfo.Unlock()
-	defer p.muPrices.Unlock()
 
 	instanceTypes, err := p.client.ListTypes(ctx, &linodego.ListOptions{}) // TODO: pagination / filter by region (do we expect to support multiple regions?)
 	if err != nil {
@@ -226,40 +214,7 @@ func (p *DefaultProvider) UpdateInstanceTypes(ctx context.Context) error {
 		return i.ID, i
 	})
 
-	totalOfferings := 0
-	prices := map[string]regional{}
-	for _, it := range instanceTypes {
-		if it.Price != nil {
-			prices[it.ID] = combineRegionalPricing(prices[it.ID], newRegionalPricing(float64(it.Price.Hourly))) //FIXME
-		}
-	}
-	if p.cm.HasChanged("instance-prices", p.instancePrices) {
-		log.FromContext(ctx).WithValues(
-			"instance-type-count", len(p.instancePrices),
-			"offering-count", totalOfferings).V(1).Info("updated instance pricing with instance types and offerings")
-	}
 	return nil
-}
-
-func combineRegionalPricing(pricingData ...regional) regional {
-	r := newRegionalPricing(0)
-	for _, elem := range pricingData {
-		if elem.defaultPrice != 0 {
-			r.defaultPrice = elem.defaultPrice
-		}
-		for region, price := range elem.prices {
-			r.prices[region] = price
-		}
-	}
-	return r
-}
-
-func newRegionalPricing(defaultPrice float64) regional {
-	r := regional{
-		prices: map[string]float64{},
-	}
-	r.defaultPrice = defaultPrice
-	return r
 }
 
 func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error {

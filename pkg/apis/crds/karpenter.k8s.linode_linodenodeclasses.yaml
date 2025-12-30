@@ -724,8 +724,6 @@ spec:
               vpcID:
                 description: vpcID is the ID of an existing VPC in Linode.
                 type: integer
-            required:
-            - type
             type: object
           status:
             description: LinodeNodeClassStatus contains the resolved state of the

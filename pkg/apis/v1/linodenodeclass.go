@@ -30,7 +30,7 @@ import (
 type LinodeNodeClassSpec struct {
 	// type is the Linode instance type to create.
 	// +kubebuilder:validation:MinLength=1
-	// +required
+	// +optional
 	Type string `json:"type,omitempty"`
 
 	// rootPass is the root password for the instance.

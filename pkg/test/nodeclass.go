@@ -30,9 +30,6 @@ func LinodeNodeClass(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {
 			panic(fmt.Sprintf("Failed to merge settings: %s", err))
 		}
 	}
-	if options.Spec.Type == "" {
-		options.Spec.Type = "g6-standard-2"
-	}
 	return &v1.LinodeNodeClass{
 		ObjectMeta: test.ObjectMeta(options.ObjectMeta),
 		Spec:       options.Spec,
