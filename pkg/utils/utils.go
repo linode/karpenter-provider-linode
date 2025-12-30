@@ -17,11 +17,12 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/samber/lo"
 	"maps"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/samber/lo"
 
 	"github.com/awslabs/operatorpkg/serrors"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"

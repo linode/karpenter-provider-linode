@@ -15,6 +15,8 @@ limitations under the License.
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/awslabs/operatorpkg/status"
 )
 
@@ -29,6 +31,9 @@ type LinodeImage struct {
 	// Label of the Image
 	// +optional
 	Label string `json:"label,omitempty"`
+	// Requirements used to select the Image
+	// +optional
+	Requirements []corev1.NodeSelectorRequirement `json:"requirements,omitempty"`
 
 	// TODO: Add more fields as necessary
 }

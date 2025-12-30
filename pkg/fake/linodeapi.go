@@ -35,29 +35,30 @@ var (
 			Transfer: 1000,
 			Price:    &linodego.LinodePrice{Monthly: 20.0, Hourly: 0.03},
 		},
-	}
-	defaultRegionAvailabilityList = []linodego.RegionAvailability{
 		{
-			Region:    DefaultRegion,
-			Plan:      "g6-standard-2",
-			Available: true,
+			ID:       "g6-standard-4",
+			Label:    "Linode 8GB",
+			Memory:   8192,
+			VCPUs:    4,
+			Disk:     163840,
+			Transfer: 2000,
+			Price:    &linodego.LinodePrice{Monthly: 40.0, Hourly: 0.06},
 		},
 		{
-			Region:    DefaultRegion,
-			Plan:      "g6-standard-4",
-			Available: true,
-		},
-		{
-			Region:    DefaultRegion,
-			Plan:      "g6-dedicated-4",
-			Available: false,
+			ID:       "g6-dedicated-4",
+			Label:    "Linode Dedicated 8GB",
+			Memory:   8192,
+			VCPUs:    4,
+			Disk:     163840,
+			Transfer: 2000,
+			Price:    &linodego.LinodePrice{Monthly: 60.0, Hourly: 0.09},
 		},
 	}
 )
 
 type LinodeAPIBehavior struct {
-	LinodeTypeList                  AtomicPtr[[]linodego.LinodeType]
-	RegionAvailabilityList          AtomicPtr[[]linodego.RegionAvailability]
+	ListTypesOutput                 AtomicPtr[[]linodego.LinodeType]
+	ListRegionsAvailabilityOutput   AtomicPtr[[]linodego.RegionAvailability]
 	GetTypeBehavior                 MockedFunction[string, *linodego.LinodeType]
 	ListRegionsAvailabilityBehavior MockedFunction[linodego.ListOptions, []linodego.RegionAvailability]
 	CreateInstanceBehavior          MockedFunction[linodego.InstanceCreateOptions, *linodego.Instance]
@@ -96,10 +97,10 @@ func (l *LinodeClient) ListRegionsAvailability(_ context.Context, _ *linodego.Li
 		defer l.NextError.Reset()
 		return nil, l.NextError.Get()
 	}
-	if !l.LinodeTypeList.IsNil() {
-		return *l.RegionAvailabilityList.Clone(), nil
+	if !l.ListTypesOutput.IsNil() {
+		return *l.ListRegionsAvailabilityOutput.Clone(), nil
 	}
-	return defaultRegionAvailabilityList, nil
+	return MakeInstanceOfferings(defaultLinodeTypeList), nil
 }
 
 func (l *LinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.Instance, error) {
@@ -125,7 +126,7 @@ func NewLinodeClient() *LinodeClient {
 }
 
 func (l *LinodeClient) Reset() {
-	l.LinodeTypeList.Reset()
+	l.ListTypesOutput.Reset()
 	l.DeleteInstanceBehavior.Reset()
 	l.ListInstancesBehavior.Reset()
 	l.Instances.Range(func(k, v any) bool {
@@ -190,8 +191,8 @@ func (l *LinodeClient) ListTypes(_ context.Context, _ *linodego.ListOptions) ([]
 		defer l.NextError.Reset()
 		return nil, l.NextError.Get()
 	}
-	if !l.LinodeTypeList.IsNil() {
-		return *l.LinodeTypeList.Clone(), nil
+	if !l.ListTypesOutput.IsNil() {
+		return *l.ListTypesOutput.Clone(), nil
 	}
-	return defaultLinodeTypeList, nil
+	return MakeInstances(), nil
 }

@@ -20,13 +20,6 @@ import (
 	"time"
 
 	"github.com/awslabs/operatorpkg/object"
-	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
-	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
-	"github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclass"
-	"github.com/linode/karpenter-provider-linode/pkg/fake"
-	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
-	"github.com/linode/karpenter-provider-linode/pkg/test"
 	"github.com/samber/lo"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -35,6 +28,14 @@ import (
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 	"sigs.k8s.io/karpenter/pkg/test/v1alpha1"
+
+	"github.com/linode/karpenter-provider-linode/pkg/apis"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
+	"github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclass"
+	"github.com/linode/karpenter-provider-linode/pkg/fake"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
+	"github.com/linode/karpenter-provider-linode/pkg/test"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

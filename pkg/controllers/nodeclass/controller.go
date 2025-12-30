@@ -40,8 +40,9 @@ import (
 	nodeclaimutils "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
 	"sigs.k8s.io/karpenter/pkg/utils/result"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 )
 
 type Controller struct {

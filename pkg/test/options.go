@@ -18,8 +18,9 @@ import (
 	"fmt"
 
 	"github.com/imdario/mergo"
-	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/samber/lo"
+
+	"github.com/linode/karpenter-provider-linode/pkg/fake"
 
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 )

@@ -23,6 +23,7 @@ import (
 type LinodeAPI interface {
 	ListTypes(ctx context.Context, opts *linodego.ListOptions) ([]linodego.LinodeType, error)
 	GetType(ctx context.Context, typeID string) (*linodego.LinodeType, error)
+	// ListRegionsAvailability returns availability of plan types AND the prices for each, so we shouldn't need a PricingAPI interface
 	ListRegionsAvailability(ctx context.Context, opts *linodego.ListOptions) ([]linodego.RegionAvailability, error)
 	GetInstance(ctx context.Context, linodeID int) (*linodego.Instance, error)
 	DeleteInstance(ctx context.Context, linodeID int) error
