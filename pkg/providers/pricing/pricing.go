@@ -14,20 +14,13 @@ limitations under the License.
 
 package pricing
 
-/* import (
+import (
 	"context"
-	"fmt"
 	"net/http"
 	"sync"
 
 	"github.com/linode/linodego"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/karpenter/pkg/utils/pretty"
-
-	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 )
-
-var initialPrices = InitialPricesLinode
 
 type Provider interface {
 	LivenessProbe(*http.Request) error
@@ -45,55 +38,18 @@ type Provider interface {
 // fails, the previous pricing information is retained and used which may be the static initial pricing data if pricing
 // updates never succeed.
 type DefaultProvider struct {
-	client sdk.LinodeAPI
-	region string
-	cm     *pretty.ChangeMonitor
+	// client sdk.LinodeAPI
+	// region string
+	// cm     *pretty.ChangeMonitor
 
-	muInstance     sync.RWMutex
-	instancePrices map[string]regional
-}
-
-// regionalPricing is used to capture the per-region price for instances as well
-// as the default price when the provisioningController first comes up
-type regional struct {
-	defaultPrice float64 // Used until we get the pricing data
-	prices       map[string]float64
+	muInstance sync.RWMutex
+	// instancePrices map[string]float64
 }
 
 // nolint: gocyclo
-func (p *DefaultProvider) UpdatePricing(ctx context.Context) error {
-	prices := map[string]regional{}
+func (p *DefaultProvider) UpdatePricing(_ context.Context) error {
+	// TODO: ????
 
-	p.muInstance.Lock()
-	defer p.muInstance.Unlock()
-
-	p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{})
-	paginator := ec2.NewDescribeSpotPriceHistoryPaginator(p.ec2, input)
-	for paginator.HasMorePages() {
-		output, err := paginator.NextPage(ctx)
-		if err != nil {
-			return fmt.Errorf("retrieving spot pricing data, %w", err)
-		}
-		for it, z := range p.spotPage(ctx, output) {
-			prices[it] = combineZonalPricing(prices[it], z)
-		}
-	}
-	if len(prices) == 0 {
-		return fmt.Errorf("no spot pricing found")
-	}
-	totalOfferings := 0
-	for it, zoneData := range prices {
-		// Maintain previously retrieved pricing data
-		p.spotPrices[it] = combineZonalPricing(p.spotPrices[it], zoneData)
-		totalOfferings += len(zoneData.prices)
-	}
-
-	p.spotPricingUpdated = true
-	if p.cm.HasChanged("spot-prices", p.spotPrices) {
-		log.FromContext(ctx).WithValues(
-			"instance-type-count", len(p.spotPrices),
-			"offering-count", totalOfferings).V(1).Info("updated spot pricing with instance types and offerings")
-	}
 	return nil
 }
 
@@ -106,12 +62,5 @@ func (p *DefaultProvider) LivenessProbe(_ *http.Request) error {
 }
 
 func (p *DefaultProvider) Reset() {
-	// see if we've got region-specific pricing data
-	staticPricing, ok := initialPrices[p.region]
-	if !ok {
-		// and if not, fall back to us-east
-		staticPricing = initialPrices["us-east"]
-	}
-
-	p.instancePrices = staticPricing
-} */
+	// TODO: ????
+}
