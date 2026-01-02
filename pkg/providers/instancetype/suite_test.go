@@ -104,6 +104,22 @@ var _ = Describe("InstanceTypeProvider", func() {
 			Spec: karpv1.NodePoolSpec{
 				Template: karpv1.NodeClaimTemplate{
 					Spec: karpv1.NodeClaimTemplateSpec{
+						Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
+							{
+								NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+									Key:      karpv1.CapacityTypeLabelKey,
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{karpv1.CapacityTypeOnDemand},
+								},
+							},
+							{
+								NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+									Key:      corev1.LabelTopologyRegion,
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{fake.DefaultRegion},
+								},
+							},
+						},
 						NodeClassRef: &karpv1.NodeClassReference{
 							Group: object.GVK(nodeClass).Group,
 							Kind:  object.GVK(nodeClass).Kind,
@@ -121,11 +137,9 @@ var _ = Describe("InstanceTypeProvider", func() {
 		ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 
 		nodeSelector := map[string]string{
-			//FIXME
-			/*,
 			// Well known
-			karpv1.NodePoolLabelKey: nodePool.Name,
-			/corev1.LabelTopologyRegion:     fake.DefaultRegion,
+			karpv1.NodePoolLabelKey:        nodePool.Name,
+			corev1.LabelTopologyRegion:     fake.DefaultRegion,
 			corev1.LabelInstanceTypeStable: "g6-standard-2",
 			corev1.LabelOSStable:           "linux",
 			corev1.LabelArchStable:         "amd64",
@@ -134,11 +148,11 @@ var _ = Describe("InstanceTypeProvider", func() {
 			v1.LabelInstanceCPU:              "2",
 			v1.LabelInstanceMemory:           "4096",
 			v1.LabelInstanceNetworkBandwidth: "1000",
-			v1.LabelInstanceGPUCount:         "0", */
+			v1.LabelInstanceGPUCount:         "0",
 		}
 
 		// Ensure that we're exercising all well-known labels
-		//Expect(lo.Keys(nodeSelector)).To(ContainElements(append(v1.LinodeWellKnownLabels.UnsortedList(), corev1.LabelInstanceTypeStable)))
+		Expect(lo.Keys(nodeSelector)).To(ContainElements(append(v1.LinodeWellKnownLabels.UnsortedList(), corev1.LabelInstanceTypeStable)))
 
 		var pods []*corev1.Pod
 		for key, value := range nodeSelector {

@@ -95,7 +95,7 @@ func NewInstanceType(
 	it := &cloudprovider.InstanceType{
 		Name:         info.ID,
 		Requirements: computeRequirements(info, region),
-		Capacity:     computeCapacity(ctx, info),
+		Capacity:     computeCapacity(ctx, info, maxPods, podsPerCore),
 		Overhead: &cloudprovider.InstanceTypeOverhead{
 			KubeReserved:      kubeReservedResources(cpu(info), pods(info, maxPods, podsPerCore), kubeReserved),
 			SystemReserved:    systemReservedResources(systemReserved),
@@ -103,20 +103,6 @@ func NewInstanceType(
 		},
 	}
 	return it
-}
-
-func pods(info linodego.LinodeType, maxPods, podsPerCore *int32) *resource.Quantity {
-	var count int64
-	switch {
-	case maxPods != nil:
-		count = int64(lo.FromPtr(maxPods))
-	default:
-		count = 110
-	}
-	if lo.FromPtr(podsPerCore) > 0 {
-		count = lo.Min([]int64{int64(lo.FromPtr(podsPerCore)) * int64(info.VCPUs), count})
-	}
-	return resources.Quantity(fmt.Sprint(count))
 }
 
 func systemReservedResources(systemReserved map[string]string) corev1.ResourceList {
@@ -217,6 +203,9 @@ func computeRequirements(
 		// Well Known Upstream
 		scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, info.ID),
 		scheduling.NewRequirement(corev1.LabelTopologyRegion, corev1.NodeSelectorOpIn, region),
+		// Arch and OS are currently fixed for Linode instances
+		scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
+		scheduling.NewRequirement(corev1.LabelOSStable, corev1.NodeSelectorOpIn, "linux"),
 		// Well Known to Karpenter
 		// We only support on-demand capacity types for now
 		scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, karpv1.CapacityTypeOnDemand),
@@ -233,10 +222,11 @@ func computeRequirements(
 	return requirements
 }
 
-func computeCapacity(ctx context.Context, info linodego.LinodeType) corev1.ResourceList {
+func computeCapacity(ctx context.Context, info linodego.LinodeType, maxPods, podsPerCore *int32) corev1.ResourceList {
 	resourceList := corev1.ResourceList{
 		corev1.ResourceCPU:    *cpu(info),
 		corev1.ResourceMemory: *memory(ctx, info),
+		corev1.ResourcePods:   *pods(info, maxPods, podsPerCore),
 	}
 	return resourceList
 }
@@ -251,4 +241,18 @@ func memory(ctx context.Context, info linodego.LinodeType) *resource.Quantity {
 	// Account for VM overhead in calculation
 	mem.Sub(resource.MustParse(fmt.Sprintf("%dMi", int64(math.Ceil(float64(mem.Value())*options.FromContext(ctx).VMMemoryOverheadPercent/1024/1024)))))
 	return mem
+}
+
+func pods(info linodego.LinodeType, maxPods, podsPerCore *int32) *resource.Quantity {
+	var count int64
+	switch {
+	case maxPods != nil:
+		count = int64(lo.FromPtr(maxPods))
+	default:
+		count = 110
+	}
+	if lo.FromPtr(podsPerCore) > 0 {
+		count = lo.Min([]int64{int64(lo.FromPtr(podsPerCore)) * int64(info.VCPUs), count})
+	}
+	return resources.Quantity(fmt.Sprint(count))
 }

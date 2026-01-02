@@ -34,6 +34,9 @@ type UnavailableOfferings struct {
 	offeringCacheSeqNumMu sync.RWMutex
 	offeringCacheSeqNum   map[string]uint64
 
+	capacityTypeCache       *cache.Cache
+	capacityTypeCacheSeqNum atomic.Uint64
+
 	regionCache       *cache.Cache
 	regionCacheSeqNum atomic.Uint64
 }
@@ -44,16 +47,20 @@ func NewUnavailableOfferings() *UnavailableOfferings {
 		offeringCacheSeqNumMu: sync.RWMutex{},
 		offeringCacheSeqNum:   map[string]uint64{},
 
-		regionCache: cache.New(UnavailableOfferingsTTL, UnavailableOfferingsCleanupInterval),
+		capacityTypeCache: cache.New(UnavailableOfferingsTTL, UnavailableOfferingsCleanupInterval),
+		regionCache:       cache.New(UnavailableOfferingsTTL, UnavailableOfferingsCleanupInterval),
 	}
 	uo.offeringCache.OnEvicted(func(k string, _ interface{}) {
 		elems := strings.Split(k, ":")
-		if len(elems) != 2 {
-			panic("unavailable offerings cache key is not of expected format <instance-type>:<region>")
+		if len(elems) != 3 {
+			panic("unavailable offerings cache key is not of expected format <capacity-type>:<instance-type>:<region>")
 		}
 		uo.offeringCacheSeqNumMu.Lock()
-		uo.offeringCacheSeqNum[elems[0]]++
+		uo.offeringCacheSeqNum[elems[1]]++
 		uo.offeringCacheSeqNumMu.Unlock()
+	})
+	uo.capacityTypeCache.OnEvicted(func(k string, _ any) {
+		uo.capacityTypeCacheSeqNum.Add(1)
 	})
 	uo.regionCache.OnEvicted(func(k string, _ interface{}) {
 		uo.regionCacheSeqNum.Add(1)
@@ -71,24 +78,31 @@ func (u *UnavailableOfferings) SeqNum(instanceType string) uint64 {
 }
 
 // IsUnavailable returns true if the offering appears in the cache
-func (u *UnavailableOfferings) IsUnavailable(instanceType, region string) bool {
-	_, offeringFound := u.offeringCache.Get(u.key(instanceType, region))
+func (u *UnavailableOfferings) IsUnavailable(instanceType, region, capacityType string) bool {
+	_, offeringFound := u.offeringCache.Get(u.key(instanceType, region, capacityType))
+	_, capacityTypeFound := u.capacityTypeCache.Get(capacityType)
 	_, regionFound := u.regionCache.Get(region)
-	return offeringFound || regionFound
+	return offeringFound || capacityTypeFound || regionFound
 }
 
 // MarkUnavailable communicates recently observed temporary capacity shortages in the provided offerings
-func (u *UnavailableOfferings) MarkUnavailable(ctx context.Context, unavailableReason string, instanceType string, region string) {
+func (u *UnavailableOfferings) MarkUnavailable(ctx context.Context, unavailableReason string, instanceType string, region, capacityType string) {
 	// even if the key is already in the cache, we still need to call Set to extend the cached entry's TTL
 	log.FromContext(ctx).WithValues(
 		"reason", unavailableReason,
 		"instance-type", instanceType,
 		"region", region,
+		"capacity-type", capacityType,
 		"ttl", UnavailableOfferingsTTL).V(1).Info("removing offering from offerings")
-	u.offeringCache.SetDefault(u.key(instanceType, region), struct{}{})
+	u.offeringCache.SetDefault(u.key(instanceType, region, capacityType), struct{}{})
 	u.offeringCacheSeqNumMu.Lock()
 	u.offeringCacheSeqNum[instanceType]++
 	u.offeringCacheSeqNumMu.Unlock()
+}
+
+func (u *UnavailableOfferings) MarkCapacityTypeUnavailable(capacityType string) {
+	u.capacityTypeCache.SetDefault(capacityType, struct{}{})
+	u.capacityTypeCacheSeqNum.Add(1)
 }
 
 func (u *UnavailableOfferings) MarkRegionUnavailable(region string) {
@@ -96,16 +110,17 @@ func (u *UnavailableOfferings) MarkRegionUnavailable(region string) {
 	u.regionCacheSeqNum.Add(1)
 }
 
-func (u *UnavailableOfferings) Delete(instanceType string, region string) {
-	u.offeringCache.Delete(u.key(instanceType, region))
+func (u *UnavailableOfferings) Delete(instanceType string, region, capacityType string) {
+	u.offeringCache.Delete(u.key(instanceType, region, capacityType))
 }
 
 func (u *UnavailableOfferings) Flush() {
 	u.offeringCache.Flush()
+	u.capacityTypeCache.Flush()
 	u.regionCache.Flush()
 }
 
 // key returns the cache key for all offerings in the cache
-func (u *UnavailableOfferings) key(instanceType string, region string) string {
-	return fmt.Sprintf("%s:%s", instanceType, region)
+func (u *UnavailableOfferings) key(instanceType string, region, capacityType string) string {
+	return fmt.Sprintf("%s:%s:%s", capacityType, instanceType, region)
 }

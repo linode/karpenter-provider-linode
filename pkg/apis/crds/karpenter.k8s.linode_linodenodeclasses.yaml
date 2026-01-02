@@ -791,8 +791,8 @@ spec:
                   LinodeImage contains the current LinodeImage values that are available to the
                   cluster under the LinodeImage selectors.
                 items:
-                  description: LinodeImage contains resolved AMI selector values utilized
-                    for node launch
+                  description: LinodeImage contains resolved LinodeImage selector
+                    values utilized for node launch
                   properties:
                     deprecated:
                       description: Deprecation status of the Image

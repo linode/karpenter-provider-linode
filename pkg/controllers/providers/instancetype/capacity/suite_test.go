@@ -204,7 +204,7 @@ var _ = Describe("CapacityCache", func() {
 	})
 
 	It("should properly update discovered capacity when matching Image is not the first in the list", func() {
-		// Update nodeClass AMIs for this test
+		// Update nodeClass LinodeImages for this test
 		nodeClass.Status.LinodeImages = []v1.LinodeImage{standardImage}
 		ExpectApplied(ctx, env.Client, nodeClass)
 

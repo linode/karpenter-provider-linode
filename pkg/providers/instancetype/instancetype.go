@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"sync"
 
-	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
-
 	"github.com/linode/linodego"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/patrickmn/go-cache"
@@ -35,6 +33,7 @@ import (
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
+	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype/offering"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )

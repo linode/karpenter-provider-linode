@@ -20,7 +20,7 @@ import (
 	"github.com/awslabs/operatorpkg/status"
 )
 
-// LinodeImage contains resolved AMI selector values utilized for node launch
+// LinodeImage contains resolved LinodeImage selector values utilized for node launch
 type LinodeImage struct {
 	// ID of the Image
 	// +required

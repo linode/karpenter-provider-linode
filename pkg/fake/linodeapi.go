@@ -17,11 +17,15 @@ package fake
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
+	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+
 	"github.com/linode/linodego"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/karpenter/pkg/utils/atomic"
 )
 
 var (
@@ -60,6 +64,12 @@ var (
 	}
 )
 
+type CapacityPool struct {
+	CapacityType string
+	InstanceType string
+	Region       string
+}
+
 // LinodeAPIBehavior must be reset between tests otherwise tests will
 // pollute each other.
 type LinodeAPIBehavior struct {
@@ -75,6 +85,7 @@ type LinodeAPIBehavior struct {
 	ListTypesBehavior               MockedFunction[linodego.ListOptions, []linodego.LinodeType]
 	NextError                       AtomicError
 	Instances                       sync.Map
+	InsufficientCapacityPools       atomic.Slice[CapacityPool]
 }
 
 type LinodeClient struct {
@@ -110,15 +121,12 @@ func (l *LinodeClient) ListRegionsAvailability(_ context.Context, _ *linodego.Li
 
 func (l *LinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.Instance, error) {
 	instance, err := l.GetInstanceBehavior.Invoke(&linodeID, func(linodeID *int) (**linodego.Instance, error) {
-		return ptr.To(&linodego.Instance{
-			ID:      *linodeID,
-			Image:   "linode/ubuntu22.04",
-			Label:   "example-instance",
-			Type:    "g6-standard-2",
-			Region:  DefaultRegion,
-			Created: ptr.To(time.Now().Add(-1 * time.Hour)),
-			Status:  linodego.InstanceRunning,
-		}), nil
+		raw, ok := l.Instances.Load(linodeID)
+		if !ok {
+			return nil, fmt.Errorf("instance does not exist with id %d", linodeID)
+		}
+		instance := raw.(linodego.Instance)
+		return ptr.To(&instance), nil
 	})
 	if instance == nil {
 		return nil, err
@@ -132,16 +140,43 @@ func NewLinodeClient() *LinodeClient {
 
 func (l *LinodeClient) Reset() {
 	l.ListTypesOutput.Reset()
+	l.ListRegionsAvailabilityOutput.Reset()
+	l.GetTypeBehavior.Reset()
+	l.ListRegionsAvailabilityBehavior.Reset()
+	l.CreateInstanceBehavior.Reset()
+	l.GetInstanceBehavior.Reset()
 	l.DeleteInstanceBehavior.Reset()
 	l.ListInstancesBehavior.Reset()
+	l.CreateTagsBehavior.Reset()
+	l.ListTypesBehavior.Reset()
+	l.NextError.Reset()
 	l.Instances.Range(func(k, v any) bool {
 		l.Instances.Delete(k)
 		return true
 	})
+	l.InsufficientCapacityPools.Reset()
 }
 
 func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceCreateOptions) (*linodego.Instance, error) {
 	instance, err := l.CreateInstanceBehavior.Invoke(&opts, func(opts *linodego.InstanceCreateOptions) (**linodego.Instance, error) {
+		var icedPools []CapacityPool
+		skipInstance := false
+		l.InsufficientCapacityPools.Range(func(pool CapacityPool) bool {
+			if pool.InstanceType == opts.Type &&
+				pool.Region == opts.Region &&
+				pool.CapacityType == karpv1.CapacityTypeOnDemand {
+				icedPools = append(icedPools, pool)
+				skipInstance = true
+				return false
+			}
+			return true
+		})
+		if skipInstance {
+			return nil, linodego.Error{
+				Code:    http.StatusBadRequest,
+				Message: fmt.Sprintf("Insufficient capacity for instance type %s in region %s", opts.Type, opts.Region),
+			}
+		}
 		return ptr.To(&linodego.Instance{
 			ID:                  len(opts.Label) + 1, // just a simple way to generate an ID
 			Image:               opts.Image,

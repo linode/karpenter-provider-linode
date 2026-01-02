@@ -18,17 +18,19 @@ import (
 	"context"
 	"testing"
 
-	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/karpenter/pkg/events"
-
 	"github.com/awslabs/operatorpkg/object"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
+	"sigs.k8s.io/karpenter/pkg/events"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 	testv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
+
+	"github.com/linode/karpenter-provider-linode/pkg/fake"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
@@ -113,6 +115,30 @@ var _ = Describe("InstanceProvider", func() {
 		})
 		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypes(ctx)).To(Succeed())
 		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeOfferings(ctx)).To(Succeed())
+	})
+	It("should return an ICE error when all attempted instance types return an ICE error", func() {
+		dedicated8GB := "g6-dedicated-4"
+		standard8GB := "g6-standard-4"
+		nodeClass.Spec.Type = dedicated8GB
+		ExpectApplied(ctx, env.Client, nodeClaim, nodePool, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+		// Mark dedicated8GB as insufficient capacity
+		linodeEnv.LinodeAPI.InsufficientCapacityPools.Set([]fake.CapacityPool{
+			{CapacityType: karpv1.CapacityTypeOnDemand, InstanceType: dedicated8GB, Region: fake.DefaultRegion},
+		})
+		instanceTypes, err := cloudProvider.GetInstanceTypes(ctx, nodePool)
+		Expect(err).ToNot(HaveOccurred())
+
+		// Filter down to a single instance type
+		instanceTypes = lo.Filter(instanceTypes, func(i *corecloudprovider.InstanceType, _ int) bool { return i.Name == dedicated8GB })
+
+		// Since all the capacity pool for dedicated is ICEd, this should return an ICE error
+		instance, err := linodeEnv.InstanceProvider.Create(ctx, nodeClass, nodeClaim, nil, instanceTypes)
+		Expect(err).To(HaveOccurred())
+		Expect(instance).To(BeNil())
+
+		Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(dedicated8GB, fake.DefaultRegion, karpv1.CapacityTypeOnDemand)).To(BeTrue())
+		Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(standard8GB, fake.DefaultRegion, karpv1.CapacityTypeOnDemand)).To(BeFalse())
 	})
 	It("should create a dedicated instance", func() {
 		nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{

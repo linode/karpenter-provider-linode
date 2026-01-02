@@ -93,7 +93,6 @@ func (p *DefaultProvider) createOfferings(
 	allRegions sets.Set[string],
 ) cloudprovider.Offerings {
 	var offerings []*cloudprovider.Offering
-	itRegions := sets.New(it.Requirements.Get(corev1.LabelTopologyRegion).Values()...)
 	// If the sequence number has changed for the unavailable offerings, we know that we can't use the previously cached value
 	lastSeqNum, ok := p.lastUnavailableOfferingsSeqNum.Load(it.Name)
 	if !ok {
@@ -105,7 +104,6 @@ func (p *DefaultProvider) createOfferings(
 	} else {
 		var cachedOfferings []*cloudprovider.Offering
 		for region := range allRegions {
-			isUnavailable := p.unavailableOfferings.IsUnavailable(it.Name, region)
 			linodeType, err := p.getLinodeType(ctx, it.Name)
 			if err != nil {
 				continue
@@ -122,7 +120,7 @@ func (p *DefaultProvider) createOfferings(
 					scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, karpv1.CapacityTypeOnDemand),
 				),
 				Price:     price,
-				Available: !isUnavailable && itRegions.Has(region),
+				Available: !p.unavailableOfferings.IsUnavailable(it.Name, region, karpv1.CapacityTypeOnDemand),
 			}
 			cachedOfferings = append(cachedOfferings, offering)
 		}

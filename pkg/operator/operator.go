@@ -39,9 +39,10 @@ func init() {
 // Operator is injected into the Linode CloudProvider's factories
 type Operator struct {
 	*operator.Operator
-	InstanceTypesProvider *instancetype.DefaultProvider
-	InstanceProvider      instance.Provider
-	LinodeClient          linodego.Client
+	UnavailableOfferingsCache *linodecache.UnavailableOfferings
+	InstanceTypesProvider     *instancetype.DefaultProvider
+	InstanceProvider          instance.Provider
+	LinodeClient              linodego.Client
 }
 
 func NewOperator(ctx context.Context, operator *operator.Operator) (context.Context, *Operator) {
@@ -69,13 +70,16 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		options.FromContext(ctx).ClusterRegion,
 		operator.EventRecorder,
 		&linodeClient,
+		unavailableOfferingsCache,
 		cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
 	)
 
 	return ctx, &Operator{
-		Operator:              operator,
-		InstanceTypesProvider: instanceTypeProvider,
-		InstanceProvider:      instanceProvider,
+		Operator:                  operator,
+		UnavailableOfferingsCache: unavailableOfferingsCache,
+		InstanceTypesProvider:     instanceTypeProvider,
+		InstanceProvider:          instanceProvider,
+		LinodeClient:              linodeClient,
 	}
 }
 

@@ -92,6 +92,7 @@ func NewEnvironment(ctx context.Context) *Environment {
 		fake.DefaultRegion,
 		eventRecorder,
 		linodeClient,
+		unavailableOfferingsCache,
 		instanceCache,
 	)
 
@@ -102,10 +103,11 @@ func NewEnvironment(ctx context.Context) *Environment {
 
 		LinodeAPI: linodeClient,
 
-		LinodeCache:       linodeCache,
-		InstanceTypeCache: instanceTypeCache,
-		InstanceCache:     instanceCache,
-		OfferingCache:     offeringCache,
+		LinodeCache:               linodeCache,
+		InstanceTypeCache:         instanceTypeCache,
+		InstanceCache:             instanceCache,
+		OfferingCache:             offeringCache,
+		UnavailableOfferingsCache: unavailableOfferingsCache,
 
 		InstanceTypesProvider: instanceTypesProvider,
 		InstanceProvider:      instanceProvider,
@@ -114,10 +116,16 @@ func NewEnvironment(ctx context.Context) *Environment {
 
 func (env *Environment) Reset() {
 	env.Clock.SetTime(time.Time{})
+
 	env.LinodeAPI.Reset()
 
 	env.LinodeCache.Flush()
 	env.InstanceCache.Flush()
+	env.UnavailableOfferingsCache.Flush()
+	env.OfferingCache.Flush()
+
+	env.InstanceTypesProvider.Reset()
+
 	mfs, err := crmetrics.Registry.Gather()
 	if err != nil {
 		for _, mf := range mfs {
