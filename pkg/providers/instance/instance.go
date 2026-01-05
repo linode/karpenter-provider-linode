@@ -89,6 +89,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	if len(instanceTypes) == 0 {
 		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no available instance types after filtering"))
 	}
+	cheapestType := p.cheapestInstanceType(instanceTypes)
 	capacityType := getCapacityType(nodeClaim, instanceTypes)
 	// Merge tags from NodeClaim and LinodeNodeClass
 	tagList := nodeClass.Spec.Tags
@@ -106,12 +107,9 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		uniqueTags = append(uniqueTags, tag)
 	}
 
-	// TODO: determine instance type based on price
-	instanceType := instanceTypes[0]
-
 	createOpts := linodego.InstanceCreateOptions{
 		Region:              p.region,
-		Type:                instanceType.Name,
+		Type:                cheapestType.Name,
 		RootPass:            nodeClass.Spec.RootPass,
 		AuthorizedKeys:      nodeClass.Spec.AuthorizedKeys,
 		AuthorizedUsers:     nodeClass.Spec.AuthorizedUsers,
@@ -138,7 +136,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 
 	instance, err := p.client.CreateInstance(ctx, createOpts)
 	// Update the offerings cache based on the error returned from the CreateInstance call.
-	p.updateUnavailableOfferingsCache(ctx, err, capacityType, nodeClaim, instanceType)
+	p.updateUnavailableOfferingsCache(ctx, err, capacityType, nodeClaim, cheapestType)
 	if err != nil {
 		return nil, cloudprovider.NewCreateError(err, "InstanceCreationFailed", "Failed to create Linode instance")
 	}
@@ -418,4 +416,14 @@ func (p *DefaultProvider) filterInstanceTypes(ctx context.Context, instanceTypes
 		log.FromContext(ctx).WithValues("filter", filterName, "instance-types", utils.PrettySlice(lo.Map(its, func(i *cloudprovider.InstanceType, _ int) string { return i.Name }), 5)).V(1).Info("filtered out instance types from launch")
 	}
 	return instanceTypes, nil
+}
+
+func (p *DefaultProvider) cheapestInstanceType(instanceTypes []*cloudprovider.InstanceType) *cloudprovider.InstanceType {
+	cheapestType := instanceTypes[0]
+	for _, it := range instanceTypes {
+		if it.Offerings.Cheapest().Price < cheapestType.Offerings.Cheapest().Price {
+			cheapestType = it
+		}
+	}
+	return cheapestType
 }
