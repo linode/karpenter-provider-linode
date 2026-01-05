@@ -93,11 +93,7 @@ var _ = AfterEach(func() {
 
 var _ = Describe("NodeClass Termination", func() {
 	BeforeEach(func() {
-		nodeClass = test.LinodeNodeClass(v1.LinodeNodeClass{
-			Spec: v1.LinodeNodeClassSpec{
-				Type: "g6-standard-2",
-			},
-		})
+		nodeClass = test.LinodeNodeClass()
 	})
 	It("should not delete the LinodeNodeClass until all associated NodeClaims are terminated", func() {
 		var nodeClaims []*karpv1.NodeClaim

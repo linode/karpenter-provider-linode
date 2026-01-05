@@ -86,6 +86,9 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	if err != nil {
 		return nil, err
 	}
+	if len(instanceTypes) == 0 {
+		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no available instance types after filtering"))
+	}
 	capacityType := getCapacityType(nodeClaim, instanceTypes)
 	// Merge tags from NodeClaim and LinodeNodeClass
 	tagList := nodeClass.Spec.Tags
@@ -103,9 +106,12 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		uniqueTags = append(uniqueTags, tag)
 	}
 
+	// TODO: determine instance type based on price
+	instanceType := instanceTypes[0]
+
 	createOpts := linodego.InstanceCreateOptions{
 		Region:              p.region,
-		Type:                nodeClass.Spec.Type,
+		Type:                instanceType.Name,
 		RootPass:            nodeClass.Spec.RootPass,
 		AuthorizedKeys:      nodeClass.Spec.AuthorizedKeys,
 		AuthorizedUsers:     nodeClass.Spec.AuthorizedUsers,
@@ -131,9 +137,6 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	}
 
 	instance, err := p.client.CreateInstance(ctx, createOpts)
-	instanceType, _ := lo.Find(instanceTypes, func(i *cloudprovider.InstanceType) bool {
-		return i.Name == nodeClass.Spec.Type
-	})
 	// Update the offerings cache based on the error returned from the CreateInstance call.
 	p.updateUnavailableOfferingsCache(ctx, err, capacityType, nodeClaim, instanceType)
 	if err != nil {

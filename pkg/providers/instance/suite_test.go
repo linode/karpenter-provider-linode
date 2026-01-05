@@ -119,7 +119,6 @@ var _ = Describe("InstanceProvider", func() {
 	It("should return an ICE error when all attempted instance types return an ICE error", func() {
 		dedicated8GB := "g6-dedicated-4"
 		standard8GB := "g6-standard-4"
-		nodeClass.Spec.Type = dedicated8GB
 		ExpectApplied(ctx, env.Client, nodeClaim, nodePool, nodeClass)
 		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 		// Mark dedicated8GB as insufficient capacity

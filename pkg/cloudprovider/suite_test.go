@@ -110,7 +110,6 @@ var _ = Describe("CloudProvider", func() {
 		nodeClass = test.LinodeNodeClass(
 			v1.LinodeNodeClass{
 				Spec: v1.LinodeNodeClassSpec{
-					Type:  "g6-standard-2",
 					Image: "linode/ubuntu22.04",
 				},
 				Status: v1.LinodeNodeClassStatus{},

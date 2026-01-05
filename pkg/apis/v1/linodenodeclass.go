@@ -28,11 +28,6 @@ import (
 // LinodeNodeClassSpec is the top level specification for the Linode Karpenter Provider.
 // This will contain configuration necessary to launch instances in Linode.
 type LinodeNodeClassSpec struct {
-	// type is the Linode instance type to create.
-	// +kubebuilder:validation:MinLength=1
-	// +optional
-	Type string `json:"type,omitempty"`
-
 	// rootPass is the root password for the instance.
 	// +optional
 	RootPass string `json:"rootPass,omitempty"`

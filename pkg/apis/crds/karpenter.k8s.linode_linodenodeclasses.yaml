@@ -717,10 +717,6 @@ spec:
                   type: string
                 type: array
                 x-kubernetes-list-type: set
-              type:
-                description: type is the Linode instance type to create.
-                minLength: 1
-                type: string
               vpcID:
                 description: vpcID is the ID of an existing VPC in Linode.
                 type: integer
