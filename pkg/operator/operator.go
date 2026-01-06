@@ -17,9 +17,10 @@ package operator
 import (
 	"context"
 	"fmt"
-	"github.com/samber/lo"
 	"net"
 	"net/http"
+
+	"github.com/samber/lo"
 
 	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
