@@ -30,4 +30,12 @@ type LinodeAPI interface {
 	ListInstances(ctx context.Context, opts *linodego.ListOptions) ([]linodego.Instance, error)
 	CreateTag(ctx context.Context, opts linodego.TagCreateOptions) (*linodego.Tag, error)
 	CreateInstance(ctx context.Context, opts linodego.InstanceCreateOptions) (*linodego.Instance, error)
+
+	// NodePool methods for LKE cluster management
+	CreateLKENodePool(ctx context.Context, clusterID int, opts linodego.LKENodePoolCreateOptions) (*linodego.LKENodePool, error)
+	ListLKENodePools(ctx context.Context, clusterID int, opts *linodego.ListOptions) ([]linodego.LKENodePool, error)
+	GetLKENodePool(ctx context.Context, clusterID, poolID int) (*linodego.LKENodePool, error)
+	UpdateLKENodePool(ctx context.Context, clusterID, poolID int, opts linodego.LKENodePoolUpdateOptions) (*linodego.LKENodePool, error)
+	DeleteLKENodePool(ctx context.Context, clusterID, poolID int) error
+	GetLKENodePoolNode(ctx context.Context, clusterID int, nodeID string) (*linodego.LKENodePoolLinode, error)
 }
