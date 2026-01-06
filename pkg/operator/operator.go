@@ -17,6 +17,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	"github.com/samber/lo"
 	"net"
 	"net/http"
 
@@ -68,6 +69,8 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	)
 	// Ensure we're able to hydrate instance types before starting any reliant controllers.
 	// Instance type updates are hydrated asynchronously after this by controllers.
+	lo.Must0(instanceTypeProvider.UpdateInstanceTypes(ctx))
+	lo.Must0(instanceTypeProvider.UpdateInstanceTypeOfferings(ctx))
 	instanceProvider := instance.NewDefaultProvider(
 		options.FromContext(ctx).ClusterRegion,
 		operator.EventRecorder,
