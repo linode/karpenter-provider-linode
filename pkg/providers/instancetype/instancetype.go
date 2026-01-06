@@ -38,6 +38,8 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
+const maxPageSize = 500 // Linode API max page size
+
 type NodeClass interface {
 	client.Object
 	KubeletConfiguration() *v1.KubeletConfiguration
@@ -74,7 +76,7 @@ func NewDefaultProvider(
 	offeringCache *cache.Cache,
 	discoveredCapacityCache *cache.Cache,
 	unavailableOfferingsCache *linodecache.UnavailableOfferings,
-	// TODO: add pricing provider here
+// TODO: add pricing provider here
 ) *DefaultProvider {
 	return &DefaultProvider{
 		client:                  client,
@@ -237,7 +239,7 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 
 	regionAvail, err := p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{
 		Filter:   filter,
-		PageSize: 1000, //TODO: pagination
+		PageSize: maxPageSize, //TODO: pagination
 	})
 	if err != nil {
 		return fmt.Errorf("listing region availability %w", err)
