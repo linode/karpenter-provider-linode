@@ -63,4 +63,6 @@ var (
 	LabelInstanceGPUCount                = apis.Group + "/instance-gpu-count"
 	LabelInstanceMemory                  = apis.Group + "/instance-memory"
 	LKEClusterNameTagKey                 = "lke-cluster-name"
+	NodePoolTagKey                       = karpv1.NodePoolLabelKey
+	NodeClassTagKey                      = LabelNodeClass
 )

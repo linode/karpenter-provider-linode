@@ -53,10 +53,13 @@ func main() {
 			op.InstanceTypeStore,
 		)...).
 		WithControllers(ctx, controllers.NewControllers(
+			ctx,
 			options.FromContext(ctx).ClusterRegion,
 			op.Manager,
+			op.LinodeClient,
 			op.GetClient(),
 			op.EventRecorder,
+			op.ValidationCache,
 			cloudProvider,
 			op.InstanceProvider,
 			op.InstanceTypesProvider,

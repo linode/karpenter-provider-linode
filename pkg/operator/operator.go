@@ -40,9 +40,10 @@ func init() {
 type Operator struct {
 	*operator.Operator
 	UnavailableOfferingsCache *linodecache.UnavailableOfferings
+	ValidationCache           *cache.Cache
 	InstanceTypesProvider     *instancetype.DefaultProvider
 	InstanceProvider          instance.Provider
-	LinodeClient              linodego.Client
+	LinodeClient              *linodego.Client
 }
 
 func NewOperator(ctx context.Context, operator *operator.Operator) (context.Context, *Operator) {
@@ -55,6 +56,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	} else {
 		log.FromContext(ctx).WithValues("kube-dns-ip", kubeDNSIP).V(1).Info("discovered kube dns")
 	}
+	validationCache := cache.New(linodecache.ValidationTTL, linodecache.DefaultCleanupInterval)
 
 	instanceTypeProvider := instancetype.NewDefaultProvider(
 		&linodeClient,
@@ -77,9 +79,10 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	return ctx, &Operator{
 		Operator:                  operator,
 		UnavailableOfferingsCache: unavailableOfferingsCache,
+		ValidationCache:           validationCache,
 		InstanceTypesProvider:     instanceTypeProvider,
 		InstanceProvider:          instanceProvider,
-		LinodeClient:              linodeClient,
+		LinodeClient:              &linodeClient,
 	}
 }
 

@@ -82,8 +82,13 @@ var _ = BeforeEach(func() {
 	Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeOfferings(ctx)).To(Succeed())
 	controller = nodeclass.NewController(
 		env.Client,
+		cloudProvider,
 		events.NewRecorder(&record.FakeRecorder{}),
 		fake.DefaultRegion,
+		linodeEnv.InstanceTypesProvider,
+		linodeEnv.LinodeAPI,
+		linodeEnv.ValidationCache,
+		options.FromContext(ctx).DisableDryRun,
 	)
 })
 
