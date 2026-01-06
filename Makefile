@@ -10,6 +10,8 @@ WITH_GOFLAGS = GOFLAGS="$(GOFLAGS)"
 # CR for local builds of Karpenter
 KARPENTER_NAMESPACE ?= kube-system
 KARPENTER_VERSION ?= $(shell git tag --sort=committerdate | tail -1 | cut -d"v" -f2)
+KO_DOCKER_REPO ?= docker.io/linode/karpenter-provider-linode
+KOCACHE ?= ~/.ko
 
 # Common Directories
 MOD_DIRS = $(shell find . -path "./website" -prune -o -name go.mod -type f -print | xargs dirname)
