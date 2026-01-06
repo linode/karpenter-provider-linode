@@ -239,7 +239,8 @@ func memory(ctx context.Context, info linodego.LinodeType) *resource.Quantity {
 	sizeInMib := info.Memory
 	mem := resources.Quantity(fmt.Sprintf("%dMi", sizeInMib))
 	// Account for VM overhead in calculation
-	mem.Sub(resource.MustParse(fmt.Sprintf("%dMi", int64(math.Ceil(float64(mem.Value())*options.FromContext(ctx).VMMemoryOverheadPercent/1024/1024)))))
+	overheadInMiB := int64(math.Ceil(float64(mem.Value()) * options.FromContext(ctx).VMMemoryOverheadPercent / 1024 / 1024))
+	mem.Sub(resource.MustParse(fmt.Sprintf("%dMi", overheadInMiB)))
 	return mem
 }
 

@@ -87,10 +87,10 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	if err != nil {
 		return nil, err
 	}
-	if len(instanceTypes) == 0 {
-		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no available instance types after filtering"))
+	cheapestType, err := p.cheapestInstanceType(instanceTypes)
+	if err != nil {
+		return nil, err
 	}
-	cheapestType := p.cheapestInstanceType(instanceTypes)
 	capacityType := getCapacityType(nodeClaim, instanceTypes)
 	// Merge tags from NodeClaim and LinodeNodeClass
 	tagList := nodeClass.Spec.Tags
@@ -419,12 +419,15 @@ func (p *DefaultProvider) filterInstanceTypes(ctx context.Context, instanceTypes
 	return instanceTypes, nil
 }
 
-func (p *DefaultProvider) cheapestInstanceType(instanceTypes []*cloudprovider.InstanceType) *cloudprovider.InstanceType {
+func (p *DefaultProvider) cheapestInstanceType(instanceTypes []*cloudprovider.InstanceType) (*cloudprovider.InstanceType, error) {
+	if len(instanceTypes) == 0 {
+		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no available instance types after filtering"))
+	}
 	cheapestType := instanceTypes[0]
 	for _, it := range instanceTypes {
 		if it.Offerings.Cheapest().Price < cheapestType.Offerings.Cheapest().Price {
 			cheapestType = it
 		}
 	}
-	return cheapestType
+	return cheapestType, nil
 }
