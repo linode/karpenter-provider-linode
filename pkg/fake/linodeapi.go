@@ -100,7 +100,10 @@ func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.Lino
 				return ptr.To(&t), nil
 			}
 		}
-		return nil, fmt.Errorf("no linode type found with id %s", *typeID)
+		return nil, &linodego.Error{
+			Code:    http.StatusNotFound,
+			Message: fmt.Sprintf("no linode type found with id %s", *typeID),
+		}
 	})
 	if linodeType == nil {
 		return nil, err
@@ -123,7 +126,10 @@ func (l *LinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.I
 	instance, err := l.GetInstanceBehavior.Invoke(&linodeID, func(linodeID *int) (**linodego.Instance, error) {
 		raw, ok := l.Instances.Load(linodeID)
 		if !ok {
-			return nil, fmt.Errorf("instance does not exist with id %d", linodeID)
+			return nil, &linodego.Error{
+				Code:    http.StatusNotFound,
+				Message: fmt.Sprintf("instance does not exist with id %d", linodeID),
+			}
 		}
 		instance := raw.(linodego.Instance)
 		return ptr.To(&instance), nil
@@ -172,7 +178,7 @@ func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceC
 			return true
 		})
 		if skipInstance {
-			return nil, linodego.Error{
+			return nil, &linodego.Error{
 				Code:    http.StatusBadRequest,
 				Message: fmt.Sprintf("Insufficient capacity for instance type %s in region %s", opts.Type, opts.Region),
 			}

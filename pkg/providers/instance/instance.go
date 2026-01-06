@@ -17,6 +17,7 @@ package instance
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strconv"
 
 	"github.com/awslabs/operatorpkg/option"
@@ -151,18 +152,18 @@ func (p *DefaultProvider) updateUnavailableOfferingsCache(
 	_ *karpv1.NodeClaim,
 	instanceType *cloudprovider.InstanceType,
 ) {
-	// TODO: fix this
-	/* if linodego.ErrHasStatus(err, http.StatusBadRequest) {
+	switch {
+	case linodego.ErrHasStatus(err, http.StatusBadRequest):
 		p.unavailableOfferings.MarkUnavailable(ctx, err.Error(), instanceType.Name, p.region, capacityType)
-	} else if linodego.ErrHasStatus(err,
+	case linodego.ErrHasStatus(err,
 		http.StatusBadGateway,
 		http.StatusGatewayTimeout,
 		http.StatusInternalServerError,
-		http.StatusServiceUnavailable) {
+		http.StatusServiceUnavailable):
 		p.unavailableOfferings.MarkRegionUnavailable(p.region)
-	} */
-	if err != nil {
-		p.unavailableOfferings.MarkUnavailable(ctx, err.Error(), instanceType.Name, p.region, capacityType)
+	case err != nil:
+		// log an unexpected error but do not mark anything unavailable
+		log.FromContext(ctx).Error(err, "unexpected error during instance creation")
 	}
 }
 
