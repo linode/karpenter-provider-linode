@@ -35,10 +35,7 @@ import (
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype/offering"
-	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
-
-const maxPageSize = 500 // Linode API max page size
 
 type NodeClass interface {
 	client.Object
@@ -229,18 +226,16 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 	// Get offerings from Linode API
 	instanceTypeOfferings := map[string]sets.Set[string]{}
 
-	listFilter := utils.Filter{
-		AdditionalFilters: map[string]string{}, // TODO: filter by region (do we expect to support multiple regions?)
+	// // TODO: filter by region for ListOptions (do we expect to support multiple regions?)
+	/* listFilter := utils.Filter{
+		AdditionalFilters: map[string]string{},
 	}
 	filter, err := listFilter.String()
 	if err != nil {
 		return err
-	}
+	} */
 
-	regionAvail, err := p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{
-		Filter:   filter,
-		PageSize: maxPageSize, //TODO: pagination
-	})
+	regionAvail, err := p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing region availability %w", err)
 	}
