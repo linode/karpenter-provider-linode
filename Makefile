@@ -155,7 +155,7 @@ update-karpenter: ## Update kubernetes-sigs/karpenter to latest
 
 helm-install: ## install karpenter onto an existing cluster (requires k8s context to be set)
 	helm upgrade --install --namespace karpenter --create-namespace karpenter-crd charts/karpenter-crd
-	helm upgrade --install --namespace karpenter --create-namespace karpenter charts/karpenter --set controller.image.repository=$(KO_DOCKER_REPO)
+	helm upgrade --install --namespace karpenter --create-namespace karpenter charts/karpenter --set controller.image.repository=$(KO_DOCKER_REPO) --set settings.clusterID=${CLUSTER_NAME}
 
 .PHONY: help presubmit ci-test ci-non-test run test deflake e2etests e2etests-deflake benchmark coverage verify vulncheck image apply install delete docgen codegen tidy download update-karpenter
 
