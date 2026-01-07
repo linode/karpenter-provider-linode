@@ -361,6 +361,7 @@ func (l *LinodeClient) CreateLKENodePool(_ context.Context, clusterID int, opts 
 			})
 		}
 		l.PoolInstances.Store(fmt.Sprintf("%d", poolID), nodes)
+		newPool.Linodes = nodes
 
 		return ptr.To(newPool), nil
 	})
