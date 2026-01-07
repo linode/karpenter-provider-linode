@@ -482,8 +482,12 @@ func (l *LinodeClient) UpdateLKENodePool(_ context.Context, clusterID, poolID in
 			}
 		}
 
-		// Update fields if provided
-		// Note: LKENodePoolUpdateOptions has different fields than create options
+		// Update fields if provided.
+		// LKENodePoolUpdateOptions in the real API exposes a subset of fields compared
+		// to the create options (for example, you can typically change count/size but
+		// not immutable properties like region or type). In this fake implementation
+		// we intentionally only model updates to Count (scaling up/down) and ignore
+		// any other fields that might be present on the real update options.
 		// Handle count changes (scaling up/down)
 		if params.Opts.Count != pool.Count {
 			// Get current instances
