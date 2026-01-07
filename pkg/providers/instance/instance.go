@@ -21,21 +21,20 @@ import (
 	"strconv"
 
 	"github.com/awslabs/operatorpkg/option"
-	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
-	"github.com/samber/lo"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
-	"sigs.k8s.io/karpenter/pkg/scheduling"
+
+	"github.com/linode/linodego"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
-	instancefilter "github.com/linode/karpenter-provider-linode/pkg/providers/instance/filter"
+	providerhelpers "github.com/linode/karpenter-provider-linode/pkg/providers/helpers"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
@@ -83,11 +82,11 @@ func NewDefaultProvider(
 }
 
 func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*Instance, error) {
-	instanceTypes, err := p.filterInstanceTypes(ctx, instanceTypes, nodeClaim)
+	instanceTypes, err := providerhelpers.FilterInstanceTypes(ctx, instanceTypes, nodeClaim)
 	if err != nil {
 		return nil, err
 	}
-	cheapestType, err := p.cheapestInstanceType(instanceTypes)
+	cheapestType, err := providerhelpers.CheapestInstanceType(instanceTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -396,38 +395,4 @@ func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[st
 	}
 
 	return nil
-}
-
-func (p *DefaultProvider) filterInstanceTypes(ctx context.Context, instanceTypes []*cloudprovider.InstanceType, nodeClaim *karpv1.NodeClaim) ([]*cloudprovider.InstanceType, error) {
-	rejectedInstanceTypes := map[string][]*cloudprovider.InstanceType{}
-	reqs := scheduling.NewNodeSelectorRequirementsWithMinValues(nodeClaim.Spec.Requirements...)
-	for _, filter := range []instancefilter.Filter{
-		instancefilter.CompatibleAvailableFilter(reqs, nodeClaim.Spec.Resources.Requests),
-	} {
-		remaining, rejected := filter.FilterReject(instanceTypes)
-		if len(remaining) == 0 {
-			return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("all requested instance types were unavailable during launch"))
-		}
-		if len(rejected) != 0 && filter.Name() != "compatible-available-filter" {
-			rejectedInstanceTypes[filter.Name()] = rejected
-		}
-		instanceTypes = remaining
-	}
-	for filterName, its := range rejectedInstanceTypes {
-		log.FromContext(ctx).WithValues("filter", filterName, "instance-types", utils.PrettySlice(lo.Map(its, func(i *cloudprovider.InstanceType, _ int) string { return i.Name }), 5)).V(1).Info("filtered out instance types from launch")
-	}
-	return instanceTypes, nil
-}
-
-func (p *DefaultProvider) cheapestInstanceType(instanceTypes []*cloudprovider.InstanceType) (*cloudprovider.InstanceType, error) {
-	if len(instanceTypes) == 0 {
-		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no available instance types after filtering"))
-	}
-	cheapestType := instanceTypes[0]
-	for _, it := range instanceTypes {
-		if it.Offerings.Cheapest().Price < cheapestType.Offerings.Cheapest().Price {
-			cheapestType = it
-		}
-	}
-	return cheapestType, nil
 }
