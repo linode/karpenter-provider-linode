@@ -25,6 +25,8 @@ import (
 func (o *Options) Validate() error {
 	return multierr.Combine(
 		o.validateEndpoint(),
+		o.validateVMMemoryOverheadPercent(),
+		o.validateRequiredFields(),
 	)
 }
 
@@ -41,9 +43,16 @@ func (o *Options) validateEndpoint() error {
 	return nil
 }
 
-/* func (o *Options) validateRequiredFields() error {
+func (o *Options) validateVMMemoryOverheadPercent() error {
+	if o.VMMemoryOverheadPercent < 0 {
+		return fmt.Errorf("vm-memory-overhead-percent cannot be negative")
+	}
+	return nil
+}
+
+func (o *Options) validateRequiredFields() error {
 	if o.ClusterID == "" {
 		return fmt.Errorf("missing field, cluster-id")
 	}
 	return nil
-} */
+}

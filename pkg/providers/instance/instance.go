@@ -17,22 +17,31 @@ package instance
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strconv"
-
-	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 
 	"github.com/awslabs/operatorpkg/option"
 	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
+	"github.com/samber/lo"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
+	"sigs.k8s.io/karpenter/pkg/scheduling"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
+	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
+	instancefilter "github.com/linode/karpenter-provider-linode/pkg/providers/instance/filter"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
+
+var SkipCache = func(opts *options) {
+	opts.SkipCache = true
+}
 
 type Provider interface {
 	Create(context.Context, *v1.LinodeNodeClass, *karpv1.NodeClaim, map[string]string, []*cloudprovider.InstanceType) (*Instance, error)
@@ -48,33 +57,41 @@ type options struct {
 
 type Options = option.Function[options]
 
-var SkipCache = func(opts *options) {
-	opts.SkipCache = true
-}
-
 type DefaultProvider struct {
-	region        string
-	recorder      events.Recorder
-	client        sdk.LinodeAPI
-	instanceCache *cache.Cache
+	region               string
+	recorder             events.Recorder
+	client               sdk.LinodeAPI
+	unavailableOfferings *linodecache.UnavailableOfferings
+	instanceCache        *cache.Cache
 }
 
 func NewDefaultProvider(
 	region string,
 	recorder events.Recorder,
 	client sdk.LinodeAPI,
+	unavailableOfferings *linodecache.UnavailableOfferings,
 	instanceCache *cache.Cache,
 ) *DefaultProvider {
 
 	return &DefaultProvider{
-		region:        region,
-		recorder:      recorder,
-		client:        client,
-		instanceCache: instanceCache,
+		region:               region,
+		recorder:             recorder,
+		client:               client,
+		unavailableOfferings: unavailableOfferings,
+		instanceCache:        instanceCache,
 	}
 }
 
 func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*Instance, error) {
+	instanceTypes, err := p.filterInstanceTypes(ctx, instanceTypes, nodeClaim)
+	if err != nil {
+		return nil, err
+	}
+	cheapestType, err := p.cheapestInstanceType(instanceTypes)
+	if err != nil {
+		return nil, err
+	}
+	capacityType := getCapacityType(nodeClaim, instanceTypes)
 	// Merge tags from NodeClaim and LinodeNodeClass
 	tagList := nodeClass.Spec.Tags
 	for k, v := range tags {
@@ -93,7 +110,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 
 	createOpts := linodego.InstanceCreateOptions{
 		Region:              p.region,
-		Type:                nodeClass.Spec.Type,
+		Type:                cheapestType.Name,
 		RootPass:            nodeClass.Spec.RootPass,
 		AuthorizedKeys:      nodeClass.Spec.AuthorizedKeys,
 		AuthorizedUsers:     nodeClass.Spec.AuthorizedUsers,
@@ -119,11 +136,41 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	}
 
 	instance, err := p.client.CreateInstance(ctx, createOpts)
+	// Update the offerings cache based on the error returned from the CreateInstance call.
+	p.updateUnavailableOfferingsCache(ctx, err, capacityType, nodeClaim, cheapestType)
 	if err != nil {
-		return nil, err
+		return nil, cloudprovider.NewCreateError(err, "InstanceCreationFailed", "Failed to create Linode instance")
 	}
 
 	return NewInstance(ctx, *instance), nil
+}
+
+func (p *DefaultProvider) updateUnavailableOfferingsCache(
+	ctx context.Context,
+	err error,
+	capacityType string,
+	_ *karpv1.NodeClaim,
+	instanceType *cloudprovider.InstanceType,
+) {
+	switch {
+	case linodego.ErrHasStatus(err, http.StatusBadRequest):
+		p.unavailableOfferings.MarkUnavailable(ctx, err.Error(), instanceType.Name, p.region, capacityType)
+	case linodego.ErrHasStatus(err,
+		http.StatusBadGateway,
+		http.StatusGatewayTimeout,
+		http.StatusInternalServerError,
+		http.StatusServiceUnavailable):
+		p.unavailableOfferings.MarkRegionUnavailable(p.region)
+	case err != nil:
+		// log an unexpected error but do not mark anything unavailable
+		log.FromContext(ctx).Error(err, "unexpected error during instance creation")
+	}
+}
+
+// getCapacityType selects the capacity type based on the flexibility of the NodeClaim and the available offerings.
+// Only on-demand is currently supported for Linode, so this will always return "on-demand".
+func getCapacityType(_ *karpv1.NodeClaim, _ []*cloudprovider.InstanceType) string {
+	return karpv1.CapacityTypeOnDemand
 }
 
 // Unfortunately, this is necessary since DeepCopy can't be generated for linodego.LinodeInterfaceCreateOptions
@@ -349,4 +396,38 @@ func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[st
 	}
 
 	return nil
+}
+
+func (p *DefaultProvider) filterInstanceTypes(ctx context.Context, instanceTypes []*cloudprovider.InstanceType, nodeClaim *karpv1.NodeClaim) ([]*cloudprovider.InstanceType, error) {
+	rejectedInstanceTypes := map[string][]*cloudprovider.InstanceType{}
+	reqs := scheduling.NewNodeSelectorRequirementsWithMinValues(nodeClaim.Spec.Requirements...)
+	for _, filter := range []instancefilter.Filter{
+		instancefilter.CompatibleAvailableFilter(reqs, nodeClaim.Spec.Resources.Requests),
+	} {
+		remaining, rejected := filter.FilterReject(instanceTypes)
+		if len(remaining) == 0 {
+			return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("all requested instance types were unavailable during launch"))
+		}
+		if len(rejected) != 0 && filter.Name() != "compatible-available-filter" {
+			rejectedInstanceTypes[filter.Name()] = rejected
+		}
+		instanceTypes = remaining
+	}
+	for filterName, its := range rejectedInstanceTypes {
+		log.FromContext(ctx).WithValues("filter", filterName, "instance-types", utils.PrettySlice(lo.Map(its, func(i *cloudprovider.InstanceType, _ int) string { return i.Name }), 5)).V(1).Info("filtered out instance types from launch")
+	}
+	return instanceTypes, nil
+}
+
+func (p *DefaultProvider) cheapestInstanceType(instanceTypes []*cloudprovider.InstanceType) (*cloudprovider.InstanceType, error) {
+	if len(instanceTypes) == 0 {
+		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no available instance types after filtering"))
+	}
+	cheapestType := instanceTypes[0]
+	for _, it := range instanceTypes {
+		if it.Offerings.Cheapest().Price < cheapestType.Offerings.Cheapest().Price {
+			cheapestType = it
+		}
+	}
+	return cheapestType, nil
 }

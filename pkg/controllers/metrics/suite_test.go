@@ -16,6 +16,8 @@ package metrics_test
 
 import (
 	"context"
+	"testing"
+
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
@@ -23,7 +25,6 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/test"
-	"testing"
 
 	"github.com/awslabs/operatorpkg/object"
 	"k8s.io/apimachinery/pkg/util/sets"

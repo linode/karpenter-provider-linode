@@ -15,10 +15,47 @@ limitations under the License.
 package filter
 
 import (
+	"github.com/samber/lo"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+	"sigs.k8s.io/karpenter/pkg/scheduling"
+	"sigs.k8s.io/karpenter/pkg/utils/resources"
 )
 
 type Filter interface {
 	FilterReject(instanceTypes []*cloudprovider.InstanceType) (kept []*cloudprovider.InstanceType, rejected []*cloudprovider.InstanceType)
 	Name() string
+}
+
+// CompatibleAvailableFilter removes instance types which do not have any compatible, available offerings. Other filters
+// should not be used without first using this filter.
+func CompatibleAvailableFilter(requirements scheduling.Requirements, requests corev1.ResourceList) Filter {
+	return compatibleAvailableFilter{
+		requirements: requirements,
+		requests:     requests,
+	}
+}
+
+type compatibleAvailableFilter struct {
+	requirements scheduling.Requirements
+	requests     corev1.ResourceList
+}
+
+func (f compatibleAvailableFilter) FilterReject(instanceTypes []*cloudprovider.InstanceType) ([]*cloudprovider.InstanceType, []*cloudprovider.InstanceType) {
+	return lo.FilterReject(instanceTypes, func(i *cloudprovider.InstanceType, _ int) bool {
+		if !f.requirements.IsCompatible(i.Requirements, scheduling.AllowUndefinedWellKnownLabels) {
+			return false
+		}
+		if !resources.Fits(f.requests, i.Allocatable()) {
+			return false
+		}
+		if len(i.Offerings.Compatible(f.requirements).Available()) == 0 {
+			return false
+		}
+		return true
+	})
+}
+
+func (compatibleAvailableFilter) Name() string {
+	return "compatible-available-filter"
 }

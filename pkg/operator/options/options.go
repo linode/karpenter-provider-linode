@@ -23,6 +23,8 @@ import (
 
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	"sigs.k8s.io/karpenter/pkg/utils/env"
+
+	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
 func init() {
@@ -32,15 +34,19 @@ func init() {
 type optionsKey struct{}
 
 type Options struct {
-	ClusterID       string
-	ClusterRegion   string
-	ClusterEndpoint string
+	ClusterID               string
+	ClusterRegion           string
+	ClusterEndpoint         string
+	VMMemoryOverheadPercent float64
+	DisableDryRun           bool
 }
 
 func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
-	fs.StringVar(&o.ClusterID, "cluster-id", env.WithDefaultString("CLUSTER_ID", "0"), "[REQUIRED] The kubernetes cluster ID for resource discovery.")
+	fs.StringVar(&o.ClusterID, "cluster-id", env.WithDefaultString("CLUSTER_ID", ""), "[REQUIRED] The kubernetes cluster ID for resource discovery.")
 	fs.StringVar(&o.ClusterRegion, "cluster-region", env.WithDefaultString("CLUSTER_REGION", "us-east"), "The region the kubernetes cluster is deployed in.")
 	fs.StringVar(&o.ClusterEndpoint, "cluster-endpoint", env.WithDefaultString("CLUSTER_ENDPOINT", ""), "The external kubernetes cluster endpoint for new nodes to connect with. If not specified, will discover the cluster endpoint using DescribeCluster API.")
+	fs.Float64Var(&o.VMMemoryOverheadPercent, "vm-memory-overhead-percent", utils.WithDefaultFloat64("VM_MEMORY_OVERHEAD_PERCENT", 0.075), "The VM memory overhead as a percent that will be subtracted from the total memory for all instance types when cached information is unavailable.")
+	fs.BoolVarWithEnv(&o.DisableDryRun, "disable-dry-run", "DISABLE_DRY_RUN", false, "If true, then disable dry run validation for LinodeNodeClasses.")
 }
 
 func (o *Options) Parse(fs *coreoptions.FlagSet, args ...string) error {

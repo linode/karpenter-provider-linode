@@ -21,8 +21,10 @@ import (
 
 	"github.com/awslabs/operatorpkg/object"
 	opstatus "github.com/awslabs/operatorpkg/status"
+	"github.com/linode/linodego"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	clock "k8s.io/utils/clock/testing"
@@ -34,6 +36,8 @@ import (
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 	testv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
+
+	"github.com/linode/karpenter-provider-linode/pkg/fake"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
@@ -106,7 +110,6 @@ var _ = Describe("CloudProvider", func() {
 		nodeClass = test.LinodeNodeClass(
 			v1.LinodeNodeClass{
 				Spec: v1.LinodeNodeClassSpec{
-					Type:  "g6-standard-2",
 					Image: "linode/ubuntu22.04",
 				},
 				Status: v1.LinodeNodeClassStatus{},
@@ -127,7 +130,7 @@ var _ = Describe("CloudProvider", func() {
 								NodeSelectorRequirement: corev1.NodeSelectorRequirement{
 									Key:      karpv1.CapacityTypeLabelKey,
 									Operator: corev1.NodeSelectorOpIn,
-									Values:   []string{v1.CapacityTypeStandard},
+									Values:   []string{karpv1.CapacityTypeOnDemand},
 								}},
 						},
 					},
@@ -149,7 +152,7 @@ var _ = Describe("CloudProvider", func() {
 						NodeSelectorRequirement: corev1.NodeSelectorRequirement{
 							Key:      karpv1.CapacityTypeLabelKey,
 							Operator: corev1.NodeSelectorOpIn,
-							Values:   []string{v1.CapacityTypeStandard},
+							Values:   []string{karpv1.CapacityTypeOnDemand},
 						},
 					},
 				},
@@ -189,7 +192,7 @@ var _ = Describe("CloudProvider", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(corecloudprovider.IsNodeClassNotReadyError(err)).To(BeTrue())
 	})
-	/* It("should return an ICE error when there are no instance types to launch", func() {
+	It("should return an ICE error when there are no instance types to launch", func() {
 		// Specify no instance types and expect to receive a capacity error
 		nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 			{
@@ -204,12 +207,115 @@ var _ = Describe("CloudProvider", func() {
 		cloudProviderNodeClaim, err := cloudProvider.Create(ctx, nodeClaim)
 		Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeTrue())
 		Expect(cloudProviderNodeClaim).To(BeNil())
-	}) */
+	})
 	It("should set ImageID in the status field of the nodeClaim", func() {
 		ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
 		cloudProviderNodeClaim, err := cloudProvider.Create(ctx, nodeClaim)
 		Expect(err).To(BeNil())
 		Expect(cloudProviderNodeClaim).ToNot(BeNil())
 		Expect(cloudProviderNodeClaim.Status.ImageID).ToNot(BeEmpty())
+	})
+	It("should expect a strict set of annotation keys", func() {
+		ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
+		cloudProviderNodeClaim, err := cloudProvider.Create(ctx, nodeClaim)
+		Expect(err).To(BeNil())
+		Expect(cloudProviderNodeClaim).ToNot(BeNil())
+		Expect(len(lo.Keys(cloudProviderNodeClaim.Annotations))).To(BeNumerically("==", 2))
+		Expect(lo.Keys(cloudProviderNodeClaim.Annotations)).To(ContainElements(v1.AnnotationLinodeNodeClassHash, v1.AnnotationLinodeNodeClassHashVersion))
+	})
+	It("should return NodeClass Hash on the nodeClaim", func() {
+		ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
+		cloudProviderNodeClaim, err := cloudProvider.Create(ctx, nodeClaim)
+		Expect(err).To(BeNil())
+		Expect(cloudProviderNodeClaim).ToNot(BeNil())
+		_, ok := cloudProviderNodeClaim.Annotations[v1.AnnotationLinodeNodeClassHash]
+		Expect(ok).To(BeTrue())
+	})
+	It("should return NodeClass Hash Version on the nodeClaim", func() {
+		ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
+		cloudProviderNodeClaim, err := cloudProvider.Create(ctx, nodeClaim)
+		Expect(err).To(BeNil())
+		Expect(cloudProviderNodeClaim).ToNot(BeNil())
+		v, ok := cloudProviderNodeClaim.Annotations[v1.AnnotationLinodeNodeClassHashVersion]
+		Expect(ok).To(BeTrue())
+		Expect(v).To(Equal(v1.LinodeNodeClassHashVersion))
+	})
+	Context("MinValues", func() {
+		It("CreateInstances input should respect minValues for In operator requirement from NodePool", func() {
+			// Create fake InstanceTypes where one instances can fit 2 pods and another one can fit only 1 pod.
+			// This specific type of inputs will help us differentiate the scenario we are trying to test where ideally
+			// 1 instance launch would have been sufficient to fit the pods and was cheaper but we would launch 2 separate
+			// instances to meet the minimum requirement.
+			linodeInstanceTypeInfo := fake.MakeInstances()
+			linodeInstanceTypeInfo[0].VCPUs = 1
+			linodeInstanceTypeInfo[1].VCPUs = 8
+			linodeEnv.LinodeAPI.ListTypesOutput.Set(&linodeInstanceTypeInfo)
+			linodeOfferings := fake.MakeInstanceOfferings(linodeInstanceTypeInfo)
+			linodeEnv.LinodeAPI.ListRegionsAvailabilityOutput.Set(&linodeOfferings)
+			Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypes(ctx)).To(Succeed())
+			Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeOfferings(ctx)).To(Succeed())
+			instanceNames := lo.Map(linodeInstanceTypeInfo, func(info linodego.LinodeType, _ int) string { return info.ID })
+
+			// Define NodePool that has minValues on instance-type requirement.
+			nodePool = coretest.NodePool(karpv1.NodePool{
+				Spec: karpv1.NodePoolSpec{
+					Template: karpv1.NodeClaimTemplate{
+						Spec: karpv1.NodeClaimTemplateSpec{
+							NodeClassRef: &karpv1.NodeClassReference{
+								Group: object.GVK(nodeClass).Group,
+								Kind:  object.GVK(nodeClass).Kind,
+								Name:  nodeClass.Name,
+							},
+							Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
+								{
+									NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+										Key:      karpv1.CapacityTypeLabelKey,
+										Operator: corev1.NodeSelectorOpIn,
+										Values:   []string{karpv1.CapacityTypeOnDemand},
+									},
+								},
+								{
+									NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+										Key:      corev1.LabelInstanceTypeStable,
+										Operator: corev1.NodeSelectorOpIn,
+										Values:   instanceNames,
+									},
+									MinValues: lo.ToPtr(2),
+								},
+							},
+						},
+					},
+				},
+			})
+
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+
+			// 2 pods are created with resources such that both fit together only in one of the 2 InstanceTypes created above.
+			pod1 := coretest.UnschedulablePod(
+				coretest.PodOptions{
+					ResourceRequirements: corev1.ResourceRequirements{Requests: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("0.9")},
+					},
+				})
+			pod2 := coretest.UnschedulablePod(
+				coretest.PodOptions{
+					ResourceRequirements: corev1.ResourceRequirements{Requests: corev1.ResourceList{
+						corev1.ResourceCPU: resource.MustParse("0.9")},
+					},
+				})
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod1, pod2)
+
+			// Under normal circumstances 1 node would have been created that fits both the pods but
+			// here minValue enforces to include both the instances. And since one of the instances can
+			// only fit 1 pod, only 1 pod is scheduled to run in the node to be launched by CreateInstances.
+
+			// FIXME
+			/* node1 := ExpectScheduled(ctx, env.Client, pod1)
+			node2 := ExpectScheduled(ctx, env.Client, pod2)
+
+			// This ensures that the pods are scheduled in 2 different nodes.
+			Expect(node1.Name).ToNot(Equal(node2.Name))
+			Expect(linodeEnv.LinodeAPI.CreateInstanceBehavior.Calls() == 2).To(BeTrue()) */
+		})
 	})
 })

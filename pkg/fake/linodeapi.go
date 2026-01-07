@@ -16,11 +16,16 @@ package fake
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
+	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+
 	"github.com/linode/linodego"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/karpenter/pkg/utils/atomic"
 )
 
 var (
@@ -31,33 +36,45 @@ var (
 			Label:    "Linode 4GB",
 			Memory:   4096,
 			VCPUs:    2,
+			GPUs:     0,
 			Disk:     81920,
 			Transfer: 1000,
 			Price:    &linodego.LinodePrice{Monthly: 20.0, Hourly: 0.03},
 		},
-	}
-	defaultRegionAvailabilityList = []linodego.RegionAvailability{
 		{
-			Region:    DefaultRegion,
-			Plan:      "g6-standard-2",
-			Available: true,
+			ID:       "g6-standard-4",
+			Label:    "Linode 8GB",
+			Memory:   8192,
+			VCPUs:    4,
+			GPUs:     0,
+			Disk:     163840,
+			Transfer: 2000,
+			Price:    &linodego.LinodePrice{Monthly: 40.0, Hourly: 0.06},
 		},
 		{
-			Region:    DefaultRegion,
-			Plan:      "g6-standard-4",
-			Available: true,
-		},
-		{
-			Region:    DefaultRegion,
-			Plan:      "g6-dedicated-4",
-			Available: false,
+			ID:       "g6-dedicated-4",
+			Label:    "Linode Dedicated 8GB",
+			Memory:   8192,
+			VCPUs:    4,
+			GPUs:     0,
+			Disk:     163840,
+			Transfer: 2000,
+			Price:    &linodego.LinodePrice{Monthly: 60.0, Hourly: 0.09},
 		},
 	}
 )
 
+type CapacityPool struct {
+	CapacityType string
+	InstanceType string
+	Region       string
+}
+
+// LinodeAPIBehavior must be reset between tests otherwise tests will
+// pollute each other.
 type LinodeAPIBehavior struct {
-	LinodeTypeList                  AtomicPtr[[]linodego.LinodeType]
-	RegionAvailabilityList          AtomicPtr[[]linodego.RegionAvailability]
+	ListTypesOutput                 AtomicPtr[[]linodego.LinodeType]
+	ListRegionsAvailabilityOutput   AtomicPtr[[]linodego.RegionAvailability]
 	GetTypeBehavior                 MockedFunction[string, *linodego.LinodeType]
 	ListRegionsAvailabilityBehavior MockedFunction[linodego.ListOptions, []linodego.RegionAvailability]
 	CreateInstanceBehavior          MockedFunction[linodego.InstanceCreateOptions, *linodego.Instance]
@@ -68,6 +85,7 @@ type LinodeAPIBehavior struct {
 	ListTypesBehavior               MockedFunction[linodego.ListOptions, []linodego.LinodeType]
 	NextError                       AtomicError
 	Instances                       sync.Map
+	InsufficientCapacityPools       atomic.Slice[CapacityPool]
 }
 
 type LinodeClient struct {
@@ -76,14 +94,16 @@ type LinodeClient struct {
 
 func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.LinodeType, error) {
 	linodeType, err := l.GetTypeBehavior.Invoke(&typeID, func(typeID *string) (**linodego.LinodeType, error) {
-		// TODO: return the other fields as well when support is added to map types to resources
-		return ptr.To(&linodego.LinodeType{
-			ID: *typeID,
-			Price: &linodego.LinodePrice{
-				Monthly: 20.0,
-				Hourly:  0.03,
-			},
-		}), nil
+		// Find the type in defaultLinodeTypeList
+		for _, t := range defaultLinodeTypeList {
+			if t.ID == *typeID {
+				return ptr.To(&t), nil
+			}
+		}
+		return nil, &linodego.Error{
+			Code:    http.StatusNotFound,
+			Message: fmt.Sprintf("no linode type found with id %s", *typeID),
+		}
 	})
 	if linodeType == nil {
 		return nil, err
@@ -96,23 +116,23 @@ func (l *LinodeClient) ListRegionsAvailability(_ context.Context, _ *linodego.Li
 		defer l.NextError.Reset()
 		return nil, l.NextError.Get()
 	}
-	if !l.LinodeTypeList.IsNil() {
-		return *l.RegionAvailabilityList.Clone(), nil
+	if !l.ListRegionsAvailabilityOutput.IsNil() {
+		return *l.ListRegionsAvailabilityOutput.Clone(), nil
 	}
-	return defaultRegionAvailabilityList, nil
+	return MakeInstanceOfferings(defaultLinodeTypeList), nil
 }
 
 func (l *LinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.Instance, error) {
 	instance, err := l.GetInstanceBehavior.Invoke(&linodeID, func(linodeID *int) (**linodego.Instance, error) {
-		return ptr.To(&linodego.Instance{
-			ID:      *linodeID,
-			Image:   "linode/ubuntu22.04",
-			Label:   "example-instance",
-			Type:    "g6-standard-2",
-			Region:  DefaultRegion,
-			Created: ptr.To(time.Now().Add(-1 * time.Hour)),
-			Status:  linodego.InstanceRunning,
-		}), nil
+		raw, ok := l.Instances.Load(linodeID)
+		if !ok {
+			return nil, &linodego.Error{
+				Code:    http.StatusNotFound,
+				Message: fmt.Sprintf("instance does not exist with id %d", linodeID),
+			}
+		}
+		instance := raw.(linodego.Instance)
+		return ptr.To(&instance), nil
 	})
 	if instance == nil {
 		return nil, err
@@ -125,17 +145,44 @@ func NewLinodeClient() *LinodeClient {
 }
 
 func (l *LinodeClient) Reset() {
-	l.LinodeTypeList.Reset()
+	l.ListTypesOutput.Reset()
+	l.ListRegionsAvailabilityOutput.Reset()
+	l.GetTypeBehavior.Reset()
+	l.ListRegionsAvailabilityBehavior.Reset()
+	l.CreateInstanceBehavior.Reset()
+	l.GetInstanceBehavior.Reset()
 	l.DeleteInstanceBehavior.Reset()
 	l.ListInstancesBehavior.Reset()
+	l.CreateTagsBehavior.Reset()
+	l.ListTypesBehavior.Reset()
+	l.NextError.Reset()
 	l.Instances.Range(func(k, v any) bool {
 		l.Instances.Delete(k)
 		return true
 	})
+	l.InsufficientCapacityPools.Reset()
 }
 
 func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceCreateOptions) (*linodego.Instance, error) {
 	instance, err := l.CreateInstanceBehavior.Invoke(&opts, func(opts *linodego.InstanceCreateOptions) (**linodego.Instance, error) {
+		var icedPools []CapacityPool
+		skipInstance := false
+		l.InsufficientCapacityPools.Range(func(pool CapacityPool) bool {
+			if pool.InstanceType == opts.Type &&
+				pool.Region == opts.Region &&
+				pool.CapacityType == karpv1.CapacityTypeOnDemand {
+				icedPools = append(icedPools, pool)
+				skipInstance = true
+				return false
+			}
+			return true
+		})
+		if skipInstance {
+			return nil, &linodego.Error{
+				Code:    http.StatusBadRequest,
+				Message: fmt.Sprintf("Insufficient capacity for instance type %s in region %s", opts.Type, opts.Region),
+			}
+		}
 		return ptr.To(&linodego.Instance{
 			ID:                  len(opts.Label) + 1, // just a simple way to generate an ID
 			Image:               opts.Image,
@@ -190,8 +237,8 @@ func (l *LinodeClient) ListTypes(_ context.Context, _ *linodego.ListOptions) ([]
 		defer l.NextError.Reset()
 		return nil, l.NextError.Get()
 	}
-	if !l.LinodeTypeList.IsNil() {
-		return *l.LinodeTypeList.Clone(), nil
+	if !l.ListTypesOutput.IsNil() {
+		return *l.ListTypesOutput.Clone(), nil
 	}
-	return defaultLinodeTypeList, nil
+	return MakeInstances(), nil
 }

@@ -15,10 +15,16 @@ limitations under the License.
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/awslabs/operatorpkg/status"
 )
 
-// LinodeImage contains resolved AMI selector values utilized for node launch
+const (
+	ConditionTypeValidationSucceeded = "ValidationSucceeded"
+)
+
+// LinodeImage contains resolved LinodeImage selector values utilized for node launch
 type LinodeImage struct {
 	// ID of the Image
 	// +required
@@ -29,6 +35,9 @@ type LinodeImage struct {
 	// Label of the Image
 	// +optional
 	Label string `json:"label,omitempty"`
+	// Requirements used to select the Image
+	// +optional
+	Requirements []corev1.NodeSelectorRequirement `json:"requirements,omitempty"`
 
 	// TODO: Add more fields as necessary
 }

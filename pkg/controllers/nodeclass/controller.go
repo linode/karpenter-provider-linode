@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/awslabs/operatorpkg/reasonable"
+	"github.com/patrickmn/go-cache"
 	"github.com/samber/lo"
 	"go.uber.org/multierr"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -29,38 +30,58 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
 	"sigs.k8s.io/karpenter/pkg/operator/injection"
 	nodeclaimutils "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
 	"sigs.k8s.io/karpenter/pkg/utils/result"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
 )
 
 type Controller struct {
 	kubeClient  client.Client
 	recorder    events.Recorder
 	region      string
+	validation  *Validation
 	reconcilers []reconcile.TypedReconciler[*v1.LinodeNodeClass]
 }
 
 func NewController(
 	kubeClient client.Client,
+	cloudProvider cloudprovider.CloudProvider,
 	recorder events.Recorder,
 	region string,
+	instanceTypeProvider instancetype.Provider,
+	linodeClient sdk.LinodeAPI,
+	validationCache *cache.Cache,
+	disableDryRun bool,
 ) *Controller {
+	validation := NewValidationReconciler(
+		kubeClient,
+		cloudProvider,
+		linodeClient,
+		instanceTypeProvider,
+		validationCache,
+		disableDryRun,
+	)
 	return &Controller{
-		kubeClient:  kubeClient,
-		recorder:    recorder,
-		region:      region,
-		reconcilers: []reconcile.TypedReconciler[*v1.LinodeNodeClass]{},
+		kubeClient: kubeClient,
+		recorder:   recorder,
+		region:     region,
+		validation: validation,
+		reconcilers: []reconcile.TypedReconciler[*v1.LinodeNodeClass]{
+			validation,
+		},
 	}
 }
 
@@ -139,6 +160,7 @@ func (c *Controller) finalize(ctx context.Context, nodeClass *v1.LinodeNodeClass
 			return reconcile.Result{}, client.IgnoreNotFound(fmt.Errorf("removing termination finalizer, %w", err))
 		}
 	}
+	c.validation.clearCacheEntries(nodeClass)
 	return reconcile.Result{}, nil
 }
 

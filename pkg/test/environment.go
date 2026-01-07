@@ -51,6 +51,7 @@ type Environment struct {
 	InstanceCache             *cache.Cache
 	OfferingCache             *cache.Cache
 	UnavailableOfferingsCache *linodecache.UnavailableOfferings
+	ValidationCache           *cache.Cache
 
 	// Providers
 	InstanceTypesProvider *instancetype.DefaultProvider
@@ -72,6 +73,7 @@ func NewEnvironment(ctx context.Context) *Environment {
 	discoveredCapacityCache := cache.New(linodecache.DiscoveredCapacityCacheTTL, linodecache.DefaultCleanupInterval)
 	offeringCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
 	unavailableOfferingsCache := linodecache.NewUnavailableOfferings()
+	validationCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
 	eventRecorder := coretest.NewEventRecorder()
 
 	// Providers
@@ -92,6 +94,7 @@ func NewEnvironment(ctx context.Context) *Environment {
 		fake.DefaultRegion,
 		eventRecorder,
 		linodeClient,
+		unavailableOfferingsCache,
 		instanceCache,
 	)
 
@@ -102,10 +105,12 @@ func NewEnvironment(ctx context.Context) *Environment {
 
 		LinodeAPI: linodeClient,
 
-		LinodeCache:       linodeCache,
-		InstanceTypeCache: instanceTypeCache,
-		InstanceCache:     instanceCache,
-		OfferingCache:     offeringCache,
+		LinodeCache:               linodeCache,
+		InstanceTypeCache:         instanceTypeCache,
+		InstanceCache:             instanceCache,
+		OfferingCache:             offeringCache,
+		UnavailableOfferingsCache: unavailableOfferingsCache,
+		ValidationCache:           validationCache,
 
 		InstanceTypesProvider: instanceTypesProvider,
 		InstanceProvider:      instanceProvider,
@@ -114,10 +119,17 @@ func NewEnvironment(ctx context.Context) *Environment {
 
 func (env *Environment) Reset() {
 	env.Clock.SetTime(time.Time{})
+
 	env.LinodeAPI.Reset()
 
 	env.LinodeCache.Flush()
 	env.InstanceCache.Flush()
+	env.UnavailableOfferingsCache.Flush()
+	env.OfferingCache.Flush()
+	env.ValidationCache.Flush()
+
+	env.InstanceTypesProvider.Reset()
+
 	mfs, err := crmetrics.Registry.Gather()
 	if err != nil {
 		for _, mf := range mfs {

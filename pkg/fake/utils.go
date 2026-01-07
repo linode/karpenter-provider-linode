@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/Pallinder/go-randomdata"
+	"github.com/linode/linodego"
 )
 
 func InstanceID() string {
@@ -34,4 +35,20 @@ func ProviderID(id string) string {
 
 func PrivateDNSName() string {
 	return fmt.Sprintf("ip-192-168-%d-%d.%s.compute.internal", randomdata.Number(0, 256), randomdata.Number(0, 256), DefaultRegion)
+}
+
+func MakeInstances() []linodego.LinodeType {
+	return defaultLinodeTypeList
+}
+
+func MakeInstanceOfferings(types []linodego.LinodeType) []linodego.RegionAvailability {
+	var res []linodego.RegionAvailability
+	for _, t := range types {
+		res = append(res, linodego.RegionAvailability{
+			Region:    DefaultRegion,
+			Plan:      t.ID,
+			Available: true,
+		})
+	}
+	return res
 }

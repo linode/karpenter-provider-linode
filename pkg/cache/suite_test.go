@@ -18,11 +18,13 @@ import (
 	"context"
 	"testing"
 
+	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+
+	"github.com/linode/karpenter-provider-linode/pkg/cache"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "sigs.k8s.io/karpenter/pkg/utils/testing"
-
-	"github.com/linode/karpenter-provider-linode/pkg/cache"
 )
 
 var ctx context.Context
@@ -42,37 +44,37 @@ var _ = Describe("Cache", func() {
 	Context("Unavailable Offering Cache", func() {
 		It("should mark offerings as unavailable when calling MarkUnavailable", func() {
 			// offerings should initially not be marked as unavailable
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-2", "test-zone-1a")).To(BeFalse())
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1b")).To(BeFalse())
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-2", "test-zone-1a", karpv1.CapacityTypeOnDemand)).To(BeFalse())
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1b", karpv1.CapacityTypeOnDemand)).To(BeFalse())
 
 			// g6-standard-2 should return that it's unavailable when we mark it
-			unavailableOfferingCache.MarkUnavailable(ctx, "test", "g6-standard-2", "test-zone-1a")
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-2", "test-zone-1a")).To(BeTrue())
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1b")).To(BeFalse())
+			unavailableOfferingCache.MarkUnavailable(ctx, "test", "g6-standard-2", "test-zone-1a", karpv1.CapacityTypeOnDemand)
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-2", "test-zone-1a", karpv1.CapacityTypeOnDemand)).To(BeTrue())
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1b", karpv1.CapacityTypeOnDemand)).To(BeFalse())
 
 			// g6-standard-4 shouldn't return that it's unavailable when marking an unrelated instance type
-			unavailableOfferingCache.MarkUnavailable(ctx, "test", "g6-standard-2", "test-zone-1b")
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-2", "test-zone-1a")).To(BeTrue())
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1b")).To(BeFalse())
+			unavailableOfferingCache.MarkUnavailable(ctx, "test", "g6-standard-2", "test-zone-1b", karpv1.CapacityTypeOnDemand)
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-2", "test-zone-1a", karpv1.CapacityTypeOnDemand)).To(BeTrue())
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1b", karpv1.CapacityTypeOnDemand)).To(BeFalse())
 
 			// g6-standard-4 should return that it's unavailable when we mark it
-			unavailableOfferingCache.MarkUnavailable(ctx, "test", "g6-standard-4", "test-zone-1b")
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-2", "test-zone-1a")).To(BeTrue())
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1b")).To(BeTrue())
+			unavailableOfferingCache.MarkUnavailable(ctx, "test", "g6-standard-4", "test-zone-1b", karpv1.CapacityTypeOnDemand)
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-2", "test-zone-1a", karpv1.CapacityTypeOnDemand)).To(BeTrue())
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1b", karpv1.CapacityTypeOnDemand)).To(BeTrue())
 		})
 		It("should mark offerings as unavailable when calling MarkRegionUnavailable", func() {
 			// offerings should initially not be marked as unavailable
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-2", "test-zone-1a")).To(BeFalse())
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1a")).To(BeFalse())
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1a")).To(BeFalse())
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1b")).To(BeFalse())
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-2", "test-zone-1a", karpv1.CapacityTypeOnDemand)).To(BeFalse())
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1a", karpv1.CapacityTypeOnDemand)).To(BeFalse())
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1a", karpv1.CapacityTypeOnDemand)).To(BeFalse())
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1b", karpv1.CapacityTypeOnDemand)).To(BeFalse())
 
 			// mark all test-zone-1a offerings as unavailable
 			unavailableOfferingCache.MarkRegionUnavailable("test-zone-1a")
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-2", "test-zone-1a")).To(BeTrue())
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1a")).To(BeTrue())
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1a")).To(BeTrue())
-			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1b")).To(BeFalse())
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-2", "test-zone-1a", karpv1.CapacityTypeOnDemand)).To(BeTrue())
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1a", karpv1.CapacityTypeOnDemand)).To(BeTrue())
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1a", karpv1.CapacityTypeOnDemand)).To(BeTrue())
+			Expect(unavailableOfferingCache.IsUnavailable("g6-standard-4", "test-zone-1b", karpv1.CapacityTypeOnDemand)).To(BeFalse())
 		})
 		It("should increase sequence number when unavailability changes", func() {
 			// sequence numbers should initially be 0
@@ -80,12 +82,12 @@ var _ = Describe("Cache", func() {
 			Expect(unavailableOfferingCache.SeqNum("g6-standard-4")).To(BeNumerically("==", 0))
 
 			// marking g6-standard-2 as unavailable should increase the sequence number for that instance type but not others
-			unavailableOfferingCache.MarkUnavailable(ctx, "test", "g6-standard-2", "test-zone-1a")
+			unavailableOfferingCache.MarkUnavailable(ctx, "test", "g6-standard-2", "test-zone-1a", karpv1.CapacityTypeOnDemand)
 			Expect(unavailableOfferingCache.SeqNum("g6-standard-2")).To(BeNumerically("==", 1))
 			Expect(unavailableOfferingCache.SeqNum("g6-standard-4")).To(BeNumerically("==", 0))
 
 			// marking g6-standard-4 as unavailable should increase the sequence number for that instance type but not others
-			unavailableOfferingCache.MarkUnavailable(ctx, "test", "g6-standard-4", "test-zone-1a")
+			unavailableOfferingCache.MarkUnavailable(ctx, "test", "g6-standard-4", "test-zone-1a", karpv1.CapacityTypeOnDemand)
 			Expect(unavailableOfferingCache.SeqNum("g6-standard-2")).To(BeNumerically("==", 1))
 			Expect(unavailableOfferingCache.SeqNum("g6-standard-4")).To(BeNumerically("==", 1))
 
@@ -100,7 +102,7 @@ var _ = Describe("Cache", func() {
 			Expect(unavailableOfferingCache.SeqNum("g6-standard-4")).To(BeNumerically("==", 3))
 
 			// deleting g6-standard-4 from the cache should increase the sequence number for that instance type but not others
-			unavailableOfferingCache.Delete("g6-standard-4", "test-zone-1a")
+			unavailableOfferingCache.Delete("g6-standard-4", "test-zone-1a", karpv1.CapacityTypeOnDemand)
 			Expect(unavailableOfferingCache.SeqNum("g6-standard-2")).To(BeNumerically("==", 3))
 			Expect(unavailableOfferingCache.SeqNum("g6-standard-4")).To(BeNumerically("==", 4))
 		})

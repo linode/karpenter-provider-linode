@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"sync"
 
-	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
-
 	"github.com/linode/linodego"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/patrickmn/go-cache"
@@ -35,8 +33,8 @@ import (
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
+	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype/offering"
-	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
 type NodeClass interface {
@@ -75,7 +73,7 @@ func NewDefaultProvider(
 	offeringCache *cache.Cache,
 	discoveredCapacityCache *cache.Cache,
 	unavailableOfferingsCache *linodecache.UnavailableOfferings,
-// Note: I don't think we actually need a pricing provider like AWS for Linode it's right in the instance type info
+// TODO: add pricing provider here
 ) *DefaultProvider {
 	return &DefaultProvider{
 		client:                  client,
@@ -114,7 +112,7 @@ func (p *DefaultProvider) List(ctx context.Context, nodeClass NodeClass) ([]*clo
 		instanceTypes = item.([]*cloudprovider.InstanceType)
 	} else {
 		instanceTypes = lo.FilterMapToSlice(p.instanceTypesInfo, func(name string, info linodego.LinodeType) (*cloudprovider.InstanceType, bool) {
-			it, err := p.get(nodeClass, name)
+			it, err := p.get(ctx, nodeClass, name)
 			if err != nil {
 				return nil, false
 			}
@@ -154,7 +152,7 @@ func (p *DefaultProvider) Get(ctx context.Context, nodeClass NodeClass, name str
 	}
 	if instanceType == nil {
 		var err error
-		instanceType, err = p.get(nodeClass, name)
+		instanceType, err = p.get(ctx, nodeClass, name)
 		if err != nil {
 			return nil, err
 		}
@@ -162,12 +160,12 @@ func (p *DefaultProvider) Get(ctx context.Context, nodeClass NodeClass, name str
 	return instanceType, nil
 }
 
-func (p *DefaultProvider) get(nodeClass NodeClass, name string) (*cloudprovider.InstanceType, error) {
+func (p *DefaultProvider) get(ctx context.Context, nodeClass NodeClass, name string) (*cloudprovider.InstanceType, error) {
 	info, ok := p.instanceTypesInfo[name]
 	if !ok {
 		return nil, fmt.Errorf("instance type %s not found in cache", name)
 	}
-	it := p.instanceTypesResolver.Resolve(info, nodeClass)
+	it := p.instanceTypesResolver.Resolve(ctx, info, nodeClass)
 	if it == nil {
 		return nil, fmt.Errorf("failed to generate instance type %s", name)
 	}
@@ -199,7 +197,7 @@ func (p *DefaultProvider) UpdateInstanceTypes(ctx context.Context) error {
 	p.muInstanceTypesInfo.Lock()
 	defer p.muInstanceTypesInfo.Unlock()
 
-	instanceTypes, err := p.client.ListTypes(ctx, &linodego.ListOptions{})
+	instanceTypes, err := p.client.ListTypes(ctx, &linodego.ListOptions{}) // TODO: pagination / filter by region (do we expect to support multiple regions?)
 	if err != nil {
 		return fmt.Errorf("listing linode instance types, %w", err)
 	}
@@ -213,6 +211,7 @@ func (p *DefaultProvider) UpdateInstanceTypes(ctx context.Context) error {
 	p.instanceTypesInfo = lo.SliceToMap(instanceTypes, func(i linodego.LinodeType) (string, linodego.LinodeType) {
 		return i.ID, i
 	})
+
 	return nil
 }
 
@@ -227,18 +226,16 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 	// Get offerings from Linode API
 	instanceTypeOfferings := map[string]sets.Set[string]{}
 
-	listFilter := utils.Filter{
-		AdditionalFilters: map[string]string{}, // TODO: filter by region (do we expect to support multiple regions?)
+	// // TODO: filter by region for ListOptions (do we expect to support multiple regions?)
+	/* listFilter := utils.Filter{
+		AdditionalFilters: map[string]string{},
 	}
 	filter, err := listFilter.String()
 	if err != nil {
 		return err
-	}
+	} */
 
-	regionAvail, err := p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{
-		Filter:   filter,
-		PageSize: 1000,
-	})
+	regionAvail, err := p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing region availability %w", err)
 	}
@@ -270,6 +267,22 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 		log.FromContext(ctx).WithValues("Regions", allRegions.UnsortedList()).V(1).Info("discovered Regions")
 	}
 	p.allRegions = allRegions
+	return nil
+}
+
+func (p *DefaultProvider) UpdateInstanceTypeCapacityFromNode(ctx context.Context, node *corev1.Node, nodeClass NodeClass) error {
+	instanceTypeName := node.Labels[corev1.LabelInstanceTypeStable]
+
+	key := discoveredCapacityCacheKey(instanceTypeName, nodeClass)
+	actualCapacity := node.Status.Capacity.Memory()
+	if cachedCapacity, ok := p.discoveredCapacityCache.Get(key); !ok || actualCapacity.Cmp(cachedCapacity.(resource.Quantity)) < 1 {
+		// Update the capacity in the cache if it is less than or equal to the current cached capacity. We update when it's equal to refresh the TTL.
+		p.discoveredCapacityCache.SetDefault(key, *actualCapacity)
+		// Only log if we haven't discovered the capacity for the instance type yet or the discovered capacity is **less** than the cached capacity
+		if !ok || actualCapacity.Cmp(cachedCapacity.(resource.Quantity)) < 0 {
+			log.FromContext(ctx).WithValues("memory-capacity", actualCapacity, "instance-type", instanceTypeName).V(1).Info("updating discovered capacity cache")
+		}
+	}
 	return nil
 }
 

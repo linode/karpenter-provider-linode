@@ -17,11 +17,13 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/samber/lo"
 	"maps"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/samber/lo"
 
 	"github.com/awslabs/operatorpkg/serrors"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -62,6 +64,20 @@ func PrettySlice[T any](s []T, maxItems int) string {
 		fmt.Fprint(&sb, elem)
 	}
 	return sb.String()
+}
+
+// WithDefaultFloat64 returns the float64 value of the supplied environment variable or, if not present,
+// the supplied default value. If the float64 conversion fails, returns the default
+func WithDefaultFloat64(key string, def float64) float64 {
+	val, ok := os.LookupEnv(key)
+	if !ok {
+		return def
+	}
+	f, err := strconv.ParseFloat(val, 64)
+	if err != nil {
+		return def
+	}
+	return f
 }
 
 func GetTags(nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, clusterName string) (map[string]string, error) {

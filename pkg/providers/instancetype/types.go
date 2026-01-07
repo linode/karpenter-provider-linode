@@ -15,6 +15,7 @@ limitations under the License.
 package instancetype
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
@@ -24,11 +25,13 @@ import (
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
 	"sigs.k8s.io/karpenter/pkg/utils/resources"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 )
 
 const (
@@ -39,7 +42,7 @@ type Resolver interface {
 	// CacheKey tells the InstanceType cache if something changes about the InstanceTypes or Offerings based on the NodeClass.
 	CacheKey(NodeClass) string
 	// Resolve generates an InstanceType based on raw LinodeType and NodeClass setting data
-	Resolve(info linodego.LinodeType, nodeClass NodeClass) *cloudprovider.InstanceType
+	Resolve(ctx context.Context, info linodego.LinodeType, nodeClass NodeClass) *cloudprovider.InstanceType
 }
 
 type DefaultResolver struct {
@@ -50,7 +53,7 @@ func (d DefaultResolver) CacheKey(nodeClass NodeClass) string {
 	return nodeClass.GetName()
 }
 
-func (d DefaultResolver) Resolve(info linodego.LinodeType, nodeClass NodeClass) *cloudprovider.InstanceType {
+func (d DefaultResolver) Resolve(ctx context.Context, info linodego.LinodeType, nodeClass NodeClass) *cloudprovider.InstanceType {
 	// !!! Important !!!
 	// Any changes to the values passed into the NewInstanceType method will require making updates to the cache key
 	// so that Karpenter is able to cache the set of InstanceTypes based on values that alter the set of instance types
@@ -60,6 +63,7 @@ func (d DefaultResolver) Resolve(info linodego.LinodeType, nodeClass NodeClass) 
 		kc = resolved
 	}
 	return NewInstanceType(
+		ctx,
 		info,
 		d.region,
 		kc.MaxPods,
@@ -78,6 +82,7 @@ func NewDefaultResolver(region string) *DefaultResolver {
 }
 
 func NewInstanceType(
+	ctx context.Context,
 	info linodego.LinodeType,
 	region string,
 	maxPods *int32,
@@ -90,29 +95,14 @@ func NewInstanceType(
 	it := &cloudprovider.InstanceType{
 		Name:         info.ID,
 		Requirements: computeRequirements(info, region),
-		Capacity:     computeCapacity(info),
-		// Overhead is required for the InstanceType to be valid, but Linode does not have any special overhead requirements
+		Capacity:     computeCapacity(ctx, info, maxPods, podsPerCore),
 		Overhead: &cloudprovider.InstanceTypeOverhead{
 			KubeReserved:      kubeReservedResources(cpu(info), pods(info, maxPods, podsPerCore), kubeReserved),
 			SystemReserved:    systemReservedResources(systemReserved),
-			EvictionThreshold: evictionThreshold(memory(info), evictionHard, evictionSoft),
+			EvictionThreshold: evictionThreshold(memory(ctx, info), evictionHard, evictionSoft),
 		},
 	}
 	return it
-}
-
-func pods(info linodego.LinodeType, maxPods, podsPerCore *int32) *resource.Quantity {
-	var count int64
-	switch {
-	case maxPods != nil:
-		count = int64(lo.FromPtr(maxPods))
-	default:
-		count = 110
-	}
-	if lo.FromPtr(podsPerCore) > 0 {
-		count = lo.Min([]int64{int64(lo.FromPtr(podsPerCore)) * int64(info.VCPUs), count})
-	}
-	return resources.Quantity(fmt.Sprint(count))
 }
 
 func systemReservedResources(systemReserved map[string]string) corev1.ResourceList {
@@ -213,22 +203,30 @@ func computeRequirements(
 		// Well Known Upstream
 		scheduling.NewRequirement(corev1.LabelInstanceTypeStable, corev1.NodeSelectorOpIn, info.ID),
 		scheduling.NewRequirement(corev1.LabelTopologyRegion, corev1.NodeSelectorOpIn, region),
+		// Arch and OS are currently fixed for Linode instances
+		scheduling.NewRequirement(corev1.LabelArchStable, corev1.NodeSelectorOpIn, "amd64"),
+		scheduling.NewRequirement(corev1.LabelOSStable, corev1.NodeSelectorOpIn, "linux"),
+		// Well Known to Karpenter
+		// We only support on-demand capacity types for now
+		scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, karpv1.CapacityTypeOnDemand),
 		// Well Known to Linode
 		scheduling.NewRequirement(v1.LabelInstanceCPU, corev1.NodeSelectorOpIn, fmt.Sprint(info.VCPUs)),
-		scheduling.NewRequirement(v1.LabelInstanceGPUCount, corev1.NodeSelectorOpDoesNotExist),
 		scheduling.NewRequirement(v1.LabelInstanceMemory, corev1.NodeSelectorOpIn, fmt.Sprint(info.Memory)),
-		scheduling.NewRequirement(v1.LabelInstanceNetworkBandwidth, corev1.NodeSelectorOpDoesNotExist),
+		scheduling.NewRequirement(v1.LabelInstanceNetworkBandwidth, corev1.NodeSelectorOpIn, fmt.Sprint(info.Transfer)),
 	)
-	// Network bandwidth, etc
-	// TODO: automatically set this value based on Linode type, need to generate a mapping of Linode types to specs
-
+	if info.GPUs > 0 {
+		requirements.Add(
+			scheduling.NewRequirement(v1.LabelInstanceGPUCount, corev1.NodeSelectorOpIn, fmt.Sprint(info.GPUs)),
+		)
+	}
 	return requirements
 }
 
-func computeCapacity(info linodego.LinodeType) corev1.ResourceList {
+func computeCapacity(ctx context.Context, info linodego.LinodeType, maxPods, podsPerCore *int32) corev1.ResourceList {
 	resourceList := corev1.ResourceList{
 		corev1.ResourceCPU:    *cpu(info),
-		corev1.ResourceMemory: *memory(info),
+		corev1.ResourceMemory: *memory(ctx, info),
+		corev1.ResourcePods:   *pods(info, maxPods, podsPerCore),
 	}
 	return resourceList
 }
@@ -237,6 +235,25 @@ func cpu(info linodego.LinodeType) *resource.Quantity {
 	return resources.Quantity(strconv.Itoa(info.VCPUs))
 }
 
-func memory(info linodego.LinodeType) *resource.Quantity {
-	return resources.Quantity(fmt.Sprintf("%dMi", info.Memory))
+func memory(ctx context.Context, info linodego.LinodeType) *resource.Quantity {
+	sizeInMib := info.Memory
+	mem := resources.Quantity(fmt.Sprintf("%dMi", sizeInMib))
+	// Account for VM overhead in calculation
+	overheadInMiB := int64(math.Ceil(float64(mem.Value()) * options.FromContext(ctx).VMMemoryOverheadPercent / 1024 / 1024))
+	mem.Sub(resource.MustParse(fmt.Sprintf("%dMi", overheadInMiB)))
+	return mem
+}
+
+func pods(info linodego.LinodeType, maxPods, podsPerCore *int32) *resource.Quantity {
+	var count int64
+	switch {
+	case maxPods != nil:
+		count = int64(lo.FromPtr(maxPods))
+	default:
+		count = 110
+	}
+	if lo.FromPtr(podsPerCore) > 0 {
+		count = lo.Min([]int64{int64(lo.FromPtr(podsPerCore)) * int64(info.VCPUs), count})
+	}
+	return resources.Quantity(fmt.Sprint(count))
 }
