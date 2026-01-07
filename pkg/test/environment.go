@@ -30,10 +30,14 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/nodepool"
 )
+
+var clusterID int
 
 func init() {
 	coretest.SetDefaultNodeClassType(&v1.LinodeNodeClass{})
+	clusterID = 1 // doesn't matter if we hard code this
 }
 
 type Environment struct {
@@ -50,6 +54,7 @@ type Environment struct {
 	InstanceTypeCache         *cache.Cache
 	InstanceCache             *cache.Cache
 	OfferingCache             *cache.Cache
+	NodePoolCache             *cache.Cache
 	UnavailableOfferingsCache *linodecache.UnavailableOfferings
 	ValidationCache           *cache.Cache
 
@@ -57,6 +62,7 @@ type Environment struct {
 	InstanceTypesProvider *instancetype.DefaultProvider
 	InstanceProvider      *instance.DefaultProvider
 	InstanceTypesResolver *instancetype.DefaultResolver
+	NodePoolProvider      *nodepool.DefaultProvider
 }
 
 func NewEnvironment(ctx context.Context) *Environment {
@@ -70,6 +76,7 @@ func NewEnvironment(ctx context.Context) *Environment {
 	linodeCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
 	instanceTypeCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
 	instanceCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
+	nodePoolCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
 	discoveredCapacityCache := cache.New(linodecache.DiscoveredCapacityCacheTTL, linodecache.DefaultCleanupInterval)
 	offeringCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
 	unavailableOfferingsCache := linodecache.NewUnavailableOfferings()
@@ -98,6 +105,15 @@ func NewEnvironment(ctx context.Context) *Environment {
 		instanceCache,
 	)
 
+	nodePoolProvider := nodepool.NewDefaultProvider(
+		clusterID,
+		fake.DefaultRegion,
+		eventRecorder,
+		linodeClient,
+		unavailableOfferingsCache,
+		nodePoolCache,
+	)
+
 	return &Environment{
 		Clock:             clock,
 		EventRecorder:     eventRecorder,
@@ -108,12 +124,14 @@ func NewEnvironment(ctx context.Context) *Environment {
 		LinodeCache:               linodeCache,
 		InstanceTypeCache:         instanceTypeCache,
 		InstanceCache:             instanceCache,
+		NodePoolCache:             nodePoolCache,
 		OfferingCache:             offeringCache,
 		UnavailableOfferingsCache: unavailableOfferingsCache,
 		ValidationCache:           validationCache,
 
 		InstanceTypesProvider: instanceTypesProvider,
 		InstanceProvider:      instanceProvider,
+		NodePoolProvider:      nodePoolProvider,
 	}
 }
 
@@ -124,6 +142,7 @@ func (env *Environment) Reset() {
 
 	env.LinodeCache.Flush()
 	env.InstanceCache.Flush()
+	env.NodePoolCache.Flush()
 	env.UnavailableOfferingsCache.Flush()
 	env.OfferingCache.Flush()
 	env.ValidationCache.Flush()
