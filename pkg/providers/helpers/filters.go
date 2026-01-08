@@ -55,11 +55,11 @@ func CheapestInstanceType(instanceTypes []*cloudprovider.InstanceType) (*cloudpr
 	if len(instanceTypes) == 0 {
 		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no available instance types after filtering"))
 	}
-	cheapest := instanceTypes[0]
+	cheapestType := instanceTypes[0]
 	for _, it := range instanceTypes {
-		if it.Offerings.Cheapest().Price < cheapest.Offerings.Cheapest().Price {
-			cheapest = it
+		if it.Offerings.Cheapest().Price < cheapestType.Offerings.Cheapest().Price {
+			cheapestType = it
 		}
 	}
-	return cheapest, nil
+	return cheapestType, nil
 }

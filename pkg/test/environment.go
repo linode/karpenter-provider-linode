@@ -106,7 +106,7 @@ func NewEnvironment(ctx context.Context) *Environment {
 	)
 
 	nodePoolProvider := nodepool.NewDefaultProvider(
-		clusterID,
+		testClusterID,
 		fake.DefaultRegion,
 		eventRecorder,
 		linodeClient,
