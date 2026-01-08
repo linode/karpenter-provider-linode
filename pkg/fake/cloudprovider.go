@@ -28,8 +28,9 @@ import (
 )
 
 const (
-	DefaultRegion  = "us-east"
-	DefaultAccount = "123456789"
+	DefaultRegion    = "us-east"
+	DefaultAccount   = "123456789"
+	DefaultClusterID = 1
 )
 
 var _ corecloudprovider.CloudProvider = (*CloudProvider)(nil)

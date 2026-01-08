@@ -20,8 +20,8 @@ import (
 	"github.com/linode/linodego"
 )
 
-// NodePoolInstance represents a single Linode node within an LKE NodePool.
-type NodePoolInstance struct {
+// LKENodePool represents a single Linode node within an LKE NodePool.
+type LKENodePool struct {
 	PoolID     int
 	InstanceID int // From LKENodePoolLinode.InstanceID
 	NodeID     string
@@ -34,8 +34,8 @@ type NodePoolInstance struct {
 	Created    *time.Time
 }
 
-func NewNodePoolInstance(pool *linodego.LKENodePool, node linodego.LKENodePoolLinode, region string) *NodePoolInstance {
-	return &NodePoolInstance{
+func NewLKENodePool(pool *linodego.LKENodePool, node linodego.LKENodePoolLinode, region string) *LKENodePool {
+	return &LKENodePool{
 		PoolID:     pool.ID,
 		InstanceID: node.InstanceID,
 		NodeID:     node.ID,

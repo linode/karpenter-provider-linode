@@ -17,14 +17,12 @@ package nodepool
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strconv"
 
 	"github.com/awslabs/operatorpkg/option"
 	"github.com/patrickmn/go-cache"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
@@ -35,7 +33,6 @@ import (
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
-	providerhelpers "github.com/linode/karpenter-provider-linode/pkg/providers/helpers"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
@@ -68,12 +65,12 @@ func NewDefaultProvider(
 }
 
 // Create provisions a new LKE node pool with a single node and returns the first node as NodePoolInstance.
-func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*NodePoolInstance, error) {
-	instanceTypes, err := providerhelpers.FilterInstanceTypes(ctx, instanceTypes, nodeClaim)
+func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*LKENodePool, error) {
+	instanceTypes, err := utils.FilterInstanceTypes(ctx, instanceTypes, nodeClaim)
 	if err != nil {
 		return nil, err
 	}
-	cheapestType, err := providerhelpers.CheapestInstanceType(instanceTypes)
+	cheapestType, err := utils.CheapestInstanceType(instanceTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +78,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	capacityType := karpv1.CapacityTypeOnDemand // we only support on-demand for now
 
 	// Merge tags from NodeClass + NodeClaim tags map into the Linode tag format key:value.
-	tagList := dedupeTags(append([]string{}, append(nodeClass.Spec.Tags, mapToTagList(tags)...)...))
+	tagList := utils.DedupeTags(append([]string{}, append(nodeClass.Spec.Tags, utils.MapToTagList(tags)...)...))
 	labels := linodego.LKENodePoolLabels{}
 	for k, v := range nodeClass.Spec.Labels {
 		labels[k] = v
@@ -100,7 +97,14 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	}
 
 	pool, err := p.client.CreateLKENodePool(ctx, p.clusterID, createOpts)
-	p.updateUnavailableOfferingsCache(ctx, err, capacityType, cheapestType)
+	utils.UpdateUnavailableOfferingsCache(
+		ctx,
+		err,
+		capacityType,
+		p.region,
+		cheapestType,
+		p.unavailableOfferings,
+	)
 	if err != nil {
 		return nil, cloudprovider.NewCreateError(err, "NodePoolCreationFailed", "Failed to create LKE node pool")
 	}
@@ -110,28 +114,20 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		return nil, fmt.Errorf("created node pool %d but no linodes returned", pool.ID)
 	}
 	node := pool.Linodes[0]
-	instance := NewNodePoolInstance(pool, node, p.region)
+	instance := NewLKENodePool(pool, node, p.region)
 	p.cacheNode(instance)
 	return instance, nil
 }
 
-func (p *DefaultProvider) Get(ctx context.Context, providerID string, opts ...Options) (*NodePoolInstance, error) {
+func (p *DefaultProvider) Get(ctx context.Context, providerID string, opts ...Options) (*LKENodePool, error) {
 	options := option.Resolve(opts...)
-	instanceID, err := utils.ParseInstanceID(providerID)
-	if err != nil {
-		return nil, fmt.Errorf("getting instance ID, %w", err)
-	}
-	intID, err := strconv.Atoi(instanceID)
-	if err != nil {
-		return nil, fmt.Errorf("parsing instance ID, %w", err)
-	}
 	if !options.SkipCache {
 		if cached, found := p.nodeCache.Get(providerID); found {
-			return cached.(*NodePoolInstance), nil
+			return cached.(*LKENodePool), nil
 		}
 	}
 
-	poolID, err := p.lookupPoolByInstance(ctx, providerID, intID)
+	poolID, err := p.lookupPoolByInstance(ctx, providerID)
 	if err != nil {
 		return nil, err
 	}
@@ -143,21 +139,21 @@ func (p *DefaultProvider) Get(ctx context.Context, providerID string, opts ...Op
 	if node == nil {
 		return nil, fmt.Errorf("node with providerID %s not found in pool %d", providerID, poolID)
 	}
-	inst := NewNodePoolInstance(pool, *node, p.region)
+	inst := NewLKENodePool(pool, *node, p.region)
 	p.cacheNode(inst)
 	return inst, nil
 }
 
-func (p *DefaultProvider) List(ctx context.Context) ([]*NodePoolInstance, error) {
+func (p *DefaultProvider) List(ctx context.Context) ([]*LKENodePool, error) {
 	pools, err := p.listLKEPools(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var instances []*NodePoolInstance
+	var instances []*LKENodePool
 	for i := range pools {
 		pool := pools[i]
 		for _, node := range pool.Linodes {
-			inst := NewNodePoolInstance(&pool, node, p.region)
+			inst := NewLKENodePool(&pool, node, p.region)
 			instances = append(instances, inst)
 			p.cacheNode(inst)
 		}
@@ -166,15 +162,7 @@ func (p *DefaultProvider) List(ctx context.Context) ([]*NodePoolInstance, error)
 }
 
 func (p *DefaultProvider) Delete(ctx context.Context, providerID string) error {
-	instanceIDStr, err := utils.ParseInstanceID(providerID)
-	if err != nil {
-		return fmt.Errorf("getting instance ID, %w", err)
-	}
-	instanceID, err := strconv.Atoi(instanceIDStr)
-	if err != nil {
-		return fmt.Errorf("parsing instance ID, %w", err)
-	}
-	poolID, err := p.lookupPoolByInstance(ctx, providerID, instanceID)
+	poolID, err := p.lookupPoolByInstance(ctx, providerID)
 	if err != nil {
 		return err
 	}
@@ -190,24 +178,9 @@ func (p *DefaultProvider) UpdateTags(ctx context.Context, poolID int, tags map[s
 	if err != nil {
 		return err
 	}
-	merged := dedupeTags(append([]string{}, append(pool.Tags, mapToTagList(tags)...)...))
+	merged := utils.DedupeTags(append([]string{}, append(pool.Tags, utils.MapToTagList(tags)...)...))
 	_, err = p.client.UpdateLKENodePool(ctx, p.clusterID, poolID, linodego.LKENodePoolUpdateOptions{Tags: &merged})
 	return err
-}
-
-func dedupeTags(tags []string) []string {
-	set := map[string]struct{}{}
-	var out []string
-	for _, t := range tags {
-		if t == "" {
-			continue
-		}
-		set[t] = struct{}{}
-	}
-	for t := range set {
-		out = append(out, t)
-	}
-	return out
 }
 
 func convertToLkeTaints(taints []corev1.Taint) []linodego.LKENodePoolTaint {
@@ -222,14 +195,22 @@ func convertToLkeTaints(taints []corev1.Taint) []linodego.LKENodePoolTaint {
 	return res
 }
 
-func (p *DefaultProvider) cacheNode(n *NodePoolInstance) {
+func (p *DefaultProvider) cacheNode(n *LKENodePool) {
 	providerID := fmt.Sprintf("linode://%d", n.InstanceID)
 	p.nodeCache.SetDefault(providerID, n)
 }
 
-func (p *DefaultProvider) lookupPoolByInstance(ctx context.Context, providerID string, instanceID int) (int, error) {
+func (p *DefaultProvider) lookupPoolByInstance(ctx context.Context, providerID string) (int, error) {
 	if cached, found := p.nodeCache.Get(providerID); found {
-		return cached.(*NodePoolInstance).PoolID, nil
+		return cached.(*LKENodePool).PoolID, nil
+	}
+	instanceIDStr, err := utils.ParseInstanceID(providerID)
+	if err != nil {
+		return 0, fmt.Errorf("getting instance ID, %w", err)
+	}
+	instanceID, err := strconv.Atoi(instanceIDStr)
+	if err != nil {
+		return 0, fmt.Errorf("parsing instance ID, %w", err)
 	}
 	pools, err := p.listLKEPools(ctx)
 	if err != nil {
@@ -262,14 +243,6 @@ func findNodeInPool(pool *linodego.LKENodePool, providerID string) *linodego.LKE
 	return nil
 }
 
-func mapToTagList(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k, v := range m {
-		out = append(out, fmt.Sprintf("%s:%s", k, v))
-	}
-	return out
-}
-
 func (p *DefaultProvider) listLKEPools(ctx context.Context) ([]linodego.LKENodePool, error) {
 	listFilter := utils.Filter{
 		Tags: []string{
@@ -282,24 +255,4 @@ func (p *DefaultProvider) listLKEPools(ctx context.Context) ([]linodego.LKENodeP
 		return nil, err
 	}
 	return p.client.ListLKENodePools(ctx, p.clusterID, linodego.NewListOptions(1, filter))
-}
-
-func (p *DefaultProvider) updateUnavailableOfferingsCache(
-	ctx context.Context,
-	err error,
-	capacityType string,
-	instanceType *cloudprovider.InstanceType,
-) {
-	switch {
-	case linodego.ErrHasStatus(err, http.StatusBadRequest):
-		p.unavailableOfferings.MarkUnavailable(ctx, err.Error(), instanceType.Name, p.region, capacityType)
-	case linodego.ErrHasStatus(err,
-		http.StatusBadGateway,
-		http.StatusGatewayTimeout,
-		http.StatusInternalServerError,
-		http.StatusServiceUnavailable):
-		p.unavailableOfferings.MarkRegionUnavailable(p.region)
-	case err != nil:
-		log.FromContext(ctx).Error(err, "unexpected error during nodepool creation")
-	}
 }

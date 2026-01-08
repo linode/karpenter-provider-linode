@@ -54,6 +54,13 @@ var _ = Describe("TagListToMap", func() {
 	})
 })
 
+var _ = Describe("DedupeStrings", func() {
+	It("should remove duplicates and empty entries while preserving order", func() {
+		input := []string{"a", "b", "a", "", "c", "b"}
+		Expect(utils.DedupeTags(input)).To(Equal([]string{"a", "b", "c"}))
+	})
+})
+
 var _ = Describe("ParseInstanceID", func() {
 	It("should parse valid instance IDs", func() {
 		providerID := "linode://123456"
