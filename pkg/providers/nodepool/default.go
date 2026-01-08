@@ -55,7 +55,7 @@ func NewDefaultProvider(
 	recorder events.Recorder,
 	client sdk.LinodeAPI,
 	unavailableOfferings *linodecache.UnavailableOfferings,
-	nodeCache *cache.Cache,
+	nodePoolCache *cache.Cache,
 ) *DefaultProvider {
 	return &DefaultProvider{
 		clusterID:            clusterID,
@@ -63,7 +63,7 @@ func NewDefaultProvider(
 		recorder:             recorder,
 		client:               client,
 		unavailableOfferings: unavailableOfferings,
-		nodeCache:            nodeCache,
+		nodeCache:            nodePoolCache,
 	}
 }
 

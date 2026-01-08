@@ -33,11 +33,11 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/providers/nodepool"
 )
 
-var clusterID int
+var testClusterID int
 
 func init() {
 	coretest.SetDefaultNodeClassType(&v1.LinodeNodeClass{})
-	clusterID = 1 // doesn't matter if we hard code this
+	testClusterID = 1 // doesn't matter if we hard code this
 }
 
 type Environment struct {
@@ -106,7 +106,7 @@ func NewEnvironment(ctx context.Context) *Environment {
 	)
 
 	nodePoolProvider := nodepool.NewDefaultProvider(
-		clusterID,
+		testClusterID,
 		fake.DefaultRegion,
 		eventRecorder,
 		linodeClient,
