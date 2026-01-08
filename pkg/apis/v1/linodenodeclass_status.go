@@ -20,6 +20,10 @@ import (
 	"github.com/awslabs/operatorpkg/status"
 )
 
+const (
+	ConditionTypeValidationSucceeded = "ValidationSucceeded"
+)
+
 // LinodeImage contains resolved LinodeImage selector values utilized for node launch
 type LinodeImage struct {
 	// ID of the Image

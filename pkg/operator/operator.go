@@ -20,6 +20,8 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/samber/lo"
+
 	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,9 +42,10 @@ func init() {
 type Operator struct {
 	*operator.Operator
 	UnavailableOfferingsCache *linodecache.UnavailableOfferings
+	ValidationCache           *cache.Cache
 	InstanceTypesProvider     *instancetype.DefaultProvider
 	InstanceProvider          instance.Provider
-	LinodeClient              linodego.Client
+	LinodeClient              *linodego.Client
 }
 
 func NewOperator(ctx context.Context, operator *operator.Operator) (context.Context, *Operator) {
@@ -55,6 +58,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	} else {
 		log.FromContext(ctx).WithValues("kube-dns-ip", kubeDNSIP).V(1).Info("discovered kube dns")
 	}
+	validationCache := cache.New(linodecache.ValidationTTL, linodecache.DefaultCleanupInterval)
 
 	instanceTypeProvider := instancetype.NewDefaultProvider(
 		&linodeClient,
@@ -66,6 +70,8 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	)
 	// Ensure we're able to hydrate instance types before starting any reliant controllers.
 	// Instance type updates are hydrated asynchronously after this by controllers.
+	lo.Must0(instanceTypeProvider.UpdateInstanceTypes(ctx))
+	lo.Must0(instanceTypeProvider.UpdateInstanceTypeOfferings(ctx))
 	instanceProvider := instance.NewDefaultProvider(
 		options.FromContext(ctx).ClusterRegion,
 		operator.EventRecorder,
@@ -77,9 +83,10 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	return ctx, &Operator{
 		Operator:                  operator,
 		UnavailableOfferingsCache: unavailableOfferingsCache,
+		ValidationCache:           validationCache,
 		InstanceTypesProvider:     instanceTypeProvider,
 		InstanceProvider:          instanceProvider,
-		LinodeClient:              linodeClient,
+		LinodeClient:              &linodeClient,
 	}
 }
 

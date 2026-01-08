@@ -43,7 +43,10 @@ func NewController(instanceTypeProvider *instancetype.DefaultProvider) *Controll
 func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 	ctx = injection.WithControllerName(ctx, "providers.instancetype")
 
-	work := []func(ctx context.Context) error{}
+	work := []func(ctx context.Context) error{
+		c.instanceTypeProvider.UpdateInstanceTypes,
+		c.instanceTypeProvider.UpdateInstanceTypeOfferings,
+	}
 	errs := make([]error, len(work))
 	lop.ForEach(work, func(f func(ctx context.Context) error, i int) {
 		if err := f(ctx); err != nil {

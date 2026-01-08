@@ -56,6 +56,7 @@ type Environment struct {
 	OfferingCache             *cache.Cache
 	NodePoolCache             *cache.Cache
 	UnavailableOfferingsCache *linodecache.UnavailableOfferings
+	ValidationCache           *cache.Cache
 
 	// Providers
 	InstanceTypesProvider *instancetype.DefaultProvider
@@ -79,6 +80,7 @@ func NewEnvironment(ctx context.Context) *Environment {
 	discoveredCapacityCache := cache.New(linodecache.DiscoveredCapacityCacheTTL, linodecache.DefaultCleanupInterval)
 	offeringCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
 	unavailableOfferingsCache := linodecache.NewUnavailableOfferings()
+	validationCache := cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval)
 	eventRecorder := coretest.NewEventRecorder()
 
 	// Providers
@@ -125,6 +127,7 @@ func NewEnvironment(ctx context.Context) *Environment {
 		NodePoolCache:             nodePoolCache,
 		OfferingCache:             offeringCache,
 		UnavailableOfferingsCache: unavailableOfferingsCache,
+		ValidationCache:           validationCache,
 
 		InstanceTypesProvider: instanceTypesProvider,
 		InstanceProvider:      instanceProvider,
@@ -142,6 +145,7 @@ func (env *Environment) Reset() {
 	env.NodePoolCache.Flush()
 	env.UnavailableOfferingsCache.Flush()
 	env.OfferingCache.Flush()
+	env.ValidationCache.Flush()
 
 	env.InstanceTypesProvider.Reset()
 
