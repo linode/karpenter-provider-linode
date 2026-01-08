@@ -1,3 +1,7 @@
+apiToken: ""
+apiURL: "https://api.linode.com"
+apiVersion: "v4beta"
+
 # -- Overrides the chart's name.
 nameOverride: ""
 # -- Overrides the chart's computed fullname.
@@ -101,7 +105,9 @@ controller:
   env: []
   # - name:
   #   value:
-  envFrom: []
+  envFrom:
+    - secretRef:
+        name: karpl-credentials
   # -- Resources for the controller pod.
   resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
