@@ -20,22 +20,27 @@ import (
 	"github.com/linode/linodego"
 )
 
-// NodePoolInstance represents a single Linode node within an LKE NodePool.
-type NodePoolInstance struct {
-	PoolID     int
-	InstanceID int // From LKENodePoolLinode.InstanceID
+// LKENodePool represents a single Linode node within an LKE NodePool.
+type LKENodePool struct {
+	// From linodego.LKENodePool
+	PoolID int
+	Type   string // Plan type (e.g., "g6-standard-2")
+	Tags   []string
+	Labels map[string]string
+	Taints []linodego.LKENodePoolTaint
+
+	// From linodego.LKENodePoolLinode
+	InstanceID int
 	NodeID     string
-	Type       string // Plan type (e.g., "g6-standard-2")
-	Region     string
 	Status     linodego.LKELinodeStatus
-	Tags       []string                    // Linode tags applied at the pool level
-	Labels     map[string]string           // Kubernetes node labels from LKENodePool.Labels
-	Taints     []linodego.LKENodePoolTaint // Kubernetes taints from LKENodePool.Taints
-	Created    *time.Time
+
+	// Derived / supplemental
+	Region  string
+	Created *time.Time
 }
 
-func NewNodePoolInstance(pool *linodego.LKENodePool, node linodego.LKENodePoolLinode, region string) *NodePoolInstance {
-	return &NodePoolInstance{
+func NewLKENodePool(pool *linodego.LKENodePool, node linodego.LKENodePoolLinode, region string) *LKENodePool {
+	return &LKENodePool{
 		PoolID:     pool.ID,
 		InstanceID: node.InstanceID,
 		NodeID:     node.ID,

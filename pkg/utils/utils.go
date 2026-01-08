@@ -15,9 +15,11 @@ limitations under the License.
 package utils
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net/http"
 	"os"
 	"regexp"
 	"strconv"
@@ -26,9 +28,16 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/awslabs/operatorpkg/serrors"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+	"sigs.k8s.io/karpenter/pkg/scheduling"
+
+	"github.com/linode/linodego"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
+	instancefilter "github.com/linode/karpenter-provider-linode/pkg/providers/instance/filter"
 )
 
 var (
@@ -114,6 +123,30 @@ func TagListToMap(tags []string) map[string]string {
 	return tagMap
 }
 
+func MapToTagList(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k, v := range m {
+		out = append(out, fmt.Sprintf("%s:%s", k, v))
+	}
+	return out
+}
+
+func DedupeTags(tags []string) []string {
+	uniqueTagsSet := make(map[string]struct{}, len(tags))
+	uniqueTags := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if tag == "" {
+			continue
+		}
+		if _, exists := uniqueTagsSet[tag]; exists {
+			continue
+		}
+		uniqueTagsSet[tag] = struct{}{}
+		uniqueTags = append(uniqueTags, tag)
+	}
+	return uniqueTags
+}
+
 // Filter holds the fields used for filtering results from the Linode API.
 //
 // The fields within Filter are prioritized so that only the most-specific
@@ -152,4 +185,63 @@ func (f Filter) String() (string, error) {
 	}
 
 	return string(p), nil
+}
+
+// FilterInstanceTypes applies common filters to available instance types.
+func FilterInstanceTypes(ctx context.Context, instanceTypes []*cloudprovider.InstanceType, nodeClaim *karpv1.NodeClaim) ([]*cloudprovider.InstanceType, error) {
+	rejectedInstanceTypes := map[string][]*cloudprovider.InstanceType{}
+	reqs := scheduling.NewNodeSelectorRequirementsWithMinValues(nodeClaim.Spec.Requirements...)
+	for _, filter := range []instancefilter.Filter{
+		instancefilter.CompatibleAvailableFilter(reqs, nodeClaim.Spec.Resources.Requests),
+	} {
+		remaining, rejected := filter.FilterReject(instanceTypes)
+		if len(remaining) == 0 {
+			return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("all requested instance types were unavailable during launch"))
+		}
+		if len(rejected) != 0 && filter.Name() != "compatible-available-filter" {
+			rejectedInstanceTypes[filter.Name()] = rejected
+		}
+		instanceTypes = remaining
+	}
+	for filterName, its := range rejectedInstanceTypes {
+		log.FromContext(ctx).WithValues("filter", filterName, "instance-types", PrettySlice(lo.Map(its, func(i *cloudprovider.InstanceType, _ int) string { return i.Name }), 5)).V(1).Info("filtered out instance types from launch")
+	}
+	return instanceTypes, nil
+}
+
+// CheapestInstanceType returns the lowest-price instance type from the set.
+func CheapestInstanceType(instanceTypes []*cloudprovider.InstanceType) (*cloudprovider.InstanceType, error) {
+	if len(instanceTypes) == 0 {
+		return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("no available instance types after filtering"))
+	}
+	cheapestType := instanceTypes[0]
+	for _, it := range instanceTypes {
+		if it.Offerings.Cheapest().Price < cheapestType.Offerings.Cheapest().Price {
+			cheapestType = it
+		}
+	}
+	return cheapestType, nil
+}
+
+func UpdateUnavailableOfferingsCache(
+	ctx context.Context,
+	err error,
+	capacityType string,
+	region string,
+	instanceType *cloudprovider.InstanceType,
+	unavailableOfferings *linodecache.UnavailableOfferings,
+
+) {
+	switch {
+	case linodego.ErrHasStatus(err, http.StatusBadRequest):
+		unavailableOfferings.MarkUnavailable(ctx, err.Error(), instanceType.Name, region, capacityType)
+	case linodego.ErrHasStatus(err,
+		http.StatusBadGateway,
+		http.StatusGatewayTimeout,
+		http.StatusInternalServerError,
+		http.StatusServiceUnavailable):
+		unavailableOfferings.MarkRegionUnavailable(region)
+	case err != nil:
+		log.FromContext(ctx).Error(err, "unexpected error during instance creation")
+	}
 }

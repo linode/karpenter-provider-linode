@@ -27,9 +27,9 @@ import (
 // Provider defines the Linode LKE NodePool provider contract. This mirrors the
 // instance Provider interface but targets NodePool-backed provisioning.
 type Provider interface {
-	Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*NodePoolInstance, error)
-	Get(ctx context.Context, providerID string, opts ...Options) (*NodePoolInstance, error)
-	List(ctx context.Context) ([]*NodePoolInstance, error)
+	Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*LKENodePool, error)
+	Get(ctx context.Context, providerID string, opts ...Options) (*LKENodePool, error)
+	List(ctx context.Context) ([]*LKENodePool, error)
 	Delete(ctx context.Context, providerID string) error
 	UpdateTags(ctx context.Context, poolID int, tags map[string]string) error
 }
