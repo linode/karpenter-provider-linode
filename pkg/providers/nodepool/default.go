@@ -78,18 +78,17 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	capacityType := karpv1.CapacityTypeOnDemand // we only support on-demand for now
 
 	// Merge tags from NodeClass + NodeClaim tags map into the Linode tag format key:value.
-	tagList := utils.DedupeTags(append([]string{}, append(nodeClass.Spec.Tags, utils.MapToTagList(tags)...)...))
-	labels := linodego.LKENodePoolLabels{}
-	for k, v := range nodeClass.Spec.Labels {
-		labels[k] = v
-	}
+	tagList := append([]string{}, nodeClass.Spec.Tags...)
+	tagList = append(tagList, utils.MapToTagList(tags)...)
+	tagList = utils.DedupeTags(tagList)
+
 	taints := convertToLkeTaints(nodeClaim.Spec.Taints)
 
 	createOpts := linodego.LKENodePoolCreateOptions{
 		Count:  1, // we only create one node per nodepool
 		Type:   nodeType,
 		Tags:   tagList,
-		Labels: labels,
+		Labels: nodeClass.Spec.Labels,
 		Taints: taints,
 	}
 	if nodeClass.Spec.FirewallID != 0 {
