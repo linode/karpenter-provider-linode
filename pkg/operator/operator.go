@@ -18,18 +18,16 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/http"
 
-	"github.com/samber/lo"
-
-	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
+	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/karpenter/pkg/operator"
 
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
+	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
@@ -45,11 +43,11 @@ type Operator struct {
 	ValidationCache           *cache.Cache
 	InstanceTypesProvider     *instancetype.DefaultProvider
 	InstanceProvider          instance.Provider
-	LinodeClient              *linodego.Client
+	LinodeClient              sdk.LinodeAPI
 }
 
-func NewOperator(ctx context.Context, operator *operator.Operator) (context.Context, *Operator) {
-	linodeClient := linodego.NewClient(&http.Client{})
+func NewOperator(ctx context.Context, operator *operator.Operator, linodeClientConfig sdk.ClientConfig) (context.Context, *Operator) {
+	linodeClient := lo.Must(sdk.CreateLinodeClient(linodeClientConfig))
 	unavailableOfferingsCache := linodecache.NewUnavailableOfferings()
 	kubeDNSIP, err := KubeDNSIP(ctx, operator.KubernetesInterface)
 	if err != nil {
@@ -61,7 +59,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	validationCache := cache.New(linodecache.ValidationTTL, linodecache.DefaultCleanupInterval)
 
 	instanceTypeProvider := instancetype.NewDefaultProvider(
-		&linodeClient,
+		linodeClient,
 		instancetype.NewDefaultResolver(options.FromContext(ctx).ClusterRegion),
 		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
 		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
@@ -75,7 +73,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 	instanceProvider := instance.NewDefaultProvider(
 		options.FromContext(ctx).ClusterRegion,
 		operator.EventRecorder,
-		&linodeClient,
+		linodeClient,
 		unavailableOfferingsCache,
 		cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
 	)
@@ -86,7 +84,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator) (context.Cont
 		ValidationCache:           validationCache,
 		InstanceTypesProvider:     instanceTypeProvider,
 		InstanceProvider:          instanceProvider,
-		LinodeClient:              &linodeClient,
+		LinodeClient:              linodeClient,
 	}
 }
 

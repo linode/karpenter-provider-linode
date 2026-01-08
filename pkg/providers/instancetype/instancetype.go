@@ -73,7 +73,7 @@ func NewDefaultProvider(
 	offeringCache *cache.Cache,
 	discoveredCapacityCache *cache.Cache,
 	unavailableOfferingsCache *linodecache.UnavailableOfferings,
-// TODO: add pricing provider here
+	// TODO: add pricing provider here
 ) *DefaultProvider {
 	return &DefaultProvider{
 		client:                  client,
