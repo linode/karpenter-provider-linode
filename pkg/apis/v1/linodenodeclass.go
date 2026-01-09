@@ -65,6 +65,10 @@ type LinodeNodeClassSpec struct {
 	// +listType=set
 	Tags []string `json:"tags,omitempty"`
 
+	// labels is a map of Kubernetes node labels to apply to the Node.
+	// +optional
+	Labels linodego.LKENodePoolLabels `json:"labels,omitempty"`
+
 	// firewallID is the id of the cloud firewall to apply to the Linode Instance
 	// +optional
 	FirewallID int `json:"firewallID,omitempty"`
