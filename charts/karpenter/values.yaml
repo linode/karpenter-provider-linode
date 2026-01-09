@@ -1,6 +1,7 @@
 apiToken: ""
 apiURL: "https://api.linode.com"
 apiVersion: "v4beta"
+region: ""
 
 # -- Overrides the chart's name.
 nameOverride: ""
