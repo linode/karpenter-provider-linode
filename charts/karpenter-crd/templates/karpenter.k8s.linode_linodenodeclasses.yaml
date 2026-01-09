@@ -447,6 +447,12 @@ spec:
                     evictionSoft
                   rule: has(self.evictionSoftGracePeriod) ? self.evictionSoftGracePeriod.all(e,
                     (e in self.evictionSoft)):true
+              labels:
+                additionalProperties:
+                  type: string
+                description: labels is a map of Kubernetes node labels to apply to
+                  the Node.
+                type: object
               linodeInterfaces:
                 description: linodeInterfaces is a list of Linode network interfaces
                   to use for the instance. Requires Linode Interfaces beta opt-in
