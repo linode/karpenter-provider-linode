@@ -717,15 +717,9 @@ spec:
                   type: string
                 type: array
                 x-kubernetes-list-type: set
-              type:
-                description: type is the Linode instance type to create.
-                minLength: 1
-                type: string
               vpcID:
                 description: vpcID is the ID of an existing VPC in Linode.
                 type: integer
-            required:
-            - type
             type: object
           status:
             description: LinodeNodeClassStatus contains the resolved state of the
@@ -793,8 +787,8 @@ spec:
                   LinodeImage contains the current LinodeImage values that are available to the
                   cluster under the LinodeImage selectors.
                 items:
-                  description: LinodeImage contains resolved AMI selector values utilized
-                    for node launch
+                  description: LinodeImage contains resolved LinodeImage selector
+                    values utilized for node launch
                   properties:
                     deprecated:
                       description: Deprecation status of the Image
@@ -805,6 +799,37 @@ spec:
                     label:
                       description: Label of the Image
                       type: string
+                    requirements:
+                      description: Requirements used to select the Image
+                      items:
+                        description: |-
+                          A node selector requirement is a selector that contains values, a key, and an operator
+                          that relates the key and values.
+                        properties:
+                          key:
+                            description: The label key that the selector applies to.
+                            type: string
+                          operator:
+                            description: |-
+                              Represents a key's relationship to a set of values.
+                              Valid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.
+                            type: string
+                          values:
+                            description: |-
+                              An array of string values. If the operator is In or NotIn,
+                              the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                              the values array must be empty. If the operator is Gt or Lt, the values
+                              array must have a single element, which will be interpreted as an integer.
+                              This array is replaced during a strategic merge patch.
+                            items:
+                              type: string
+                            type: array
+                            x-kubernetes-list-type: atomic
+                        required:
+                        - key
+                        - operator
+                        type: object
+                      type: array
                   required:
                   - id
                   type: object
