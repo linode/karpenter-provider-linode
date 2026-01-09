@@ -10,6 +10,8 @@ WITH_GOFLAGS = GOFLAGS="$(GOFLAGS)"
 # CR for local builds of Karpenter
 KARPENTER_NAMESPACE ?= kube-system
 KARPENTER_VERSION ?= $(shell git tag --sort=committerdate | tail -1 | cut -d"v" -f2)
+KO_DOCKER_REPO ?= docker.io/linode/karpenter-provider-linode
+KOCACHE ?= ~/.ko
 
 # Common Directories
 MOD_DIRS = $(shell find . -path "./website" -prune -o -name go.mod -type f -print | xargs dirname)
@@ -23,14 +25,16 @@ TMPFILE := $(shell mktemp)
 GOARCH ?= $(shell go env GOARCH)
 BINARY_FILENAME = karpenter-provider-linode-$(GOARCH)
 
-# Use CACHE_BIN for tools that cannot use devbox and LOCALBIN for tools that can use either method
+# Use CACHE_BIN for tools that cannot use devbox
 CACHE_BIN ?= $(CURDIR)/bin
-LOCALBIN  ?= $(CACHE_BIN)
+
+# if the $DEVBOX_PACKAGES_DIR env variable exists that means we are within a devbox shell and can safely
+# use devbox's bin for our tools
+ifdef DEVBOX_PACKAGES_DIR
+	CACHE_BIN = $(DEVBOX_PACKAGES_DIR)/bin
+endif
 
 export PATH := $(CACHE_BIN):$(PATH)
-$(LOCALBIN):
-	mkdir -p $(LOCALBIN)
-
 $(CACHE_BIN):
 	mkdir -p $(CACHE_BIN)
 
@@ -60,7 +64,6 @@ run: ## Run Karpenter controller binary against your local cluster
 		DISABLE_LEADER_ELECTION=true \
 		CLUSTER_NAME=${CLUSTER_NAME} \
 		INTERRUPTION_QUEUE=${CLUSTER_NAME} \
-		FEATURE_GATES="SpotToSpotConsolidation=true,NodeOverlay=true,StaticCapacity=true" \
 		LOG_LEVEL="debug" \
 		go run ./cmd/controller/main.go
 
@@ -151,6 +154,18 @@ download: ## Recursively "go mod download" on all directories where go.mod exist
 update-karpenter: ## Update kubernetes-sigs/karpenter to latest
 	go get -u sigs.k8s.io/karpenter@HEAD
 	go mod tidy
+
+helm-install: ## install karpenter onto an existing cluster (requires k8s context to be set)
+	@helm upgrade --install --namespace karpenter --create-namespace karpenter-crd charts/karpenter-crd
+	@helm upgrade --install --namespace karpenter --create-namespace karpenter charts/karpenter \
+		--set controller.image.repository=$(KO_DOCKER_REPO) \
+		--set region=${LINODE_REGION} \
+		--set settings.clusterName=${CLUSTER_NAME} \
+		--set apiToken=${LINODE_TOKEN}
+
+helm-uninstall: ## remove both charts from the existing cluster (requires k8s context to be set)
+	@helm uninstall karpenter -n karpenter
+	@helm uninstall karpenter-crd -n karpenter
 
 .PHONY: help presubmit ci-test ci-non-test run test deflake e2etests e2etests-deflake benchmark coverage verify vulncheck image apply install delete docgen codegen tidy download update-karpenter
 

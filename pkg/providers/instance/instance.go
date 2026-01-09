@@ -20,13 +20,13 @@ import (
 	"strconv"
 
 	"github.com/awslabs/operatorpkg/option"
+	"github.com/google/uuid"
+	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
 	"k8s.io/utils/ptr"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
-
-	"github.com/linode/linodego"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
@@ -38,6 +38,7 @@ import (
 var SkipCache = func(opts *options) {
 	opts.SkipCache = true
 }
+var defaultImage = "linode/ubuntu22.04"
 
 type Provider interface {
 	Create(context.Context, *v1.LinodeNodeClass, *karpv1.NodeClaim, map[string]string, []*cloudprovider.InstanceType) (*Instance, error)
@@ -94,16 +95,20 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		tagList = append(tagList, fmt.Sprintf("%s:%s", k, v))
 	}
 
+	if nodeClass.Spec.Image == "" {
+		nodeClass.Spec.Image = defaultImage
+	}
+
 	createOpts := linodego.InstanceCreateOptions{
+		Label:               fmt.Sprintf("%s-%s", nodeClaim.Name, uuid.NewString()[0:8]),
 		Region:              p.region,
 		Type:                cheapestType.Name,
-		RootPass:            nodeClass.Spec.RootPass,
+		RootPass:            uuid.NewString(),
 		AuthorizedKeys:      nodeClass.Spec.AuthorizedKeys,
 		AuthorizedUsers:     nodeClass.Spec.AuthorizedUsers,
 		Image:               nodeClass.Spec.Image,
 		BackupsEnabled:      nodeClass.Spec.BackupsEnabled,
-		PrivateIP:           nodeClass.Spec.PrivateIP,
-		NetworkHelper:       nodeClass.Spec.NetworkHelper,
+		NetworkHelper:       ptr.To(true),
 		Tags:                utils.DedupeTags(tagList),
 		FirewallID:          nodeClass.Spec.FirewallID,
 		InterfaceGeneration: linodego.GenerationLinode, // We're not supporting legacy interfaces going forward.
@@ -147,6 +152,22 @@ func getCapacityType(_ *karpv1.NodeClaim, _ []*cloudprovider.InstanceType) strin
 // Unfortunately, this is necessary since DeepCopy can't be generated for linodego.LinodeInterfaceCreateOptions
 // so here we manually create the options for Linode interfaces.
 func constructLinodeInterfaceCreateOpts(createOpts []v1.LinodeInterfaceCreateOptions) []linodego.LinodeInterfaceCreateOptions {
+	// If no interfaces are specified, we create a default public interface with an auto-assigned IPv4 address.
+	if len(createOpts) == 0 {
+		return []linodego.LinodeInterfaceCreateOptions{{
+			FirewallID: nil,
+			Public: &linodego.PublicInterfaceCreateOptions{
+				IPv4: &linodego.PublicInterfaceIPv4CreateOptions{
+					Addresses: &[]linodego.PublicInterfaceIPv4AddressCreateOptions{
+						{
+							Address: ptr.To("auto"),
+						},
+					},
+				},
+			},
+		}}
+	}
+
 	linodeInterfaces := make([]linodego.LinodeInterfaceCreateOptions, len(createOpts))
 	for idx, iface := range createOpts {
 		ifaceCreateOpts := linodego.LinodeInterfaceCreateOptions{}

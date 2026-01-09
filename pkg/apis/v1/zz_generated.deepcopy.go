@@ -20,6 +20,7 @@ package v1
 
 import (
 	"github.com/awslabs/operatorpkg/status"
+	"github.com/linode/linodego"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -447,6 +448,13 @@ func (in *LinodeNodeClassSpec) DeepCopyInto(out *LinodeNodeClassSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.Labels != nil {
+		in, out := &in.Labels, &out.Labels
+		*out = make(linodego.LKENodePoolLabels, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.OSDisk != nil {
 		in, out := &in.OSDisk, &out.OSDisk
 		*out = new(InstanceDisk)
@@ -476,11 +484,6 @@ func (in *LinodeNodeClassSpec) DeepCopyInto(out *LinodeNodeClassSpec) {
 		in, out := &in.IPv6Options, &out.IPv6Options
 		*out = new(IPv6CreateOptions)
 		(*in).DeepCopyInto(*out)
-	}
-	if in.NetworkHelper != nil {
-		in, out := &in.NetworkHelper, &out.NetworkHelper
-		*out = new(bool)
-		**out = **in
 	}
 	if in.SwapSize != nil {
 		in, out := &in.SwapSize, &out.SwapSize
