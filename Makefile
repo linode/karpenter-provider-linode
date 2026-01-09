@@ -157,7 +157,11 @@ update-karpenter: ## Update kubernetes-sigs/karpenter to latest
 
 helm-install: ## install karpenter onto an existing cluster (requires k8s context to be set)
 	@helm upgrade --install --namespace karpenter --create-namespace karpenter-crd charts/karpenter-crd
-	@helm upgrade --install --namespace karpenter --create-namespace karpenter charts/karpenter --set controller.image.repository=$(KO_DOCKER_REPO) --set settings.clusterID=${CLUSTER_NAME} --set apiToken=${LINODE_TOKEN}
+	@helm upgrade --install --namespace karpenter --create-namespace karpenter charts/karpenter \
+		--set controller.image.repository=$(KO_DOCKER_REPO) \
+		--set region=${LINODE_REGION} \
+		--set settings.clusterID=${CLUSTER_NAME} \
+		--set apiToken=${LINODE_TOKEN}
 
 helm-uninstall: ## remove both charts from the existing cluster (requires k8s context to be set)
 	@helm uninstall karpenter -n karpenter
