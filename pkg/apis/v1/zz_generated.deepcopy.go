@@ -485,11 +485,6 @@ func (in *LinodeNodeClassSpec) DeepCopyInto(out *LinodeNodeClassSpec) {
 		*out = new(IPv6CreateOptions)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.NetworkHelper != nil {
-		in, out := &in.NetworkHelper, &out.NetworkHelper
-		*out = new(bool)
-		**out = **in
-	}
 	if in.SwapSize != nil {
 		in, out := &in.SwapSize, &out.SwapSize
 		*out = new(int)

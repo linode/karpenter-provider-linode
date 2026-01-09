@@ -653,13 +653,6 @@ spec:
                   type: object
                 type: array
                 x-kubernetes-list-type: atomic
-              networkHelper:
-                description: |-
-                  networkHelper is an option usually enabled on account level. It helps configure networking automatically for instances.
-                  You can use this to enable/disable the network helper for a specific instance.
-                  For more information, see https://techdocs.akamai.com/cloud-computing/docs/automatically-configure-networking
-                  Defaults to true.
-                type: boolean
               osDisk:
                 description: |-
                   osDisk is a configuration for the root disk that includes the OS,
@@ -707,13 +700,6 @@ spec:
                 required:
                 - id
                 type: object
-              privateIP:
-                description: privateIP is a boolean indicating whether the instance
-                  should have a private IP address.
-                type: boolean
-              rootPass:
-                description: rootPass is the root password for the instance.
-                type: string
               swap_size:
                 description: swapSize is the size of the swap disk in MiB.
                 type: integer

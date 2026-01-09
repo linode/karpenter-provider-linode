@@ -28,10 +28,6 @@ import (
 // LinodeNodeClassSpec is the top level specification for the Linode Karpenter Provider.
 // This will contain configuration necessary to launch instances in Linode.
 type LinodeNodeClassSpec struct {
-	// rootPass is the root password for the instance.
-	// +optional
-	RootPass string `json:"rootPass,omitempty"`
-
 	// authorizedKeys is a list of SSH public keys to add to the instance.
 	// +optional
 	// +listType=set
@@ -55,10 +51,6 @@ type LinodeNodeClassSpec struct {
 	// backupsEnabled is a boolean indicating whether backups should be enabled for the instance.
 	// +optional
 	BackupsEnabled bool `json:"backupsEnabled,omitempty"`
-
-	// privateIP is a boolean indicating whether the instance should have a private IP address.
-	// +optional
-	PrivateIP bool `json:"privateIP,omitempty"`
 
 	// tags is a list of tags to apply to the Linode instance.
 	// +optional
@@ -105,13 +97,6 @@ type LinodeNodeClassSpec struct {
 	// If not specified, IPv6 ranges won't be allocated to instance.
 	// +optional
 	IPv6Options *IPv6CreateOptions `json:"ipv6Options,omitempty"`
-
-	// networkHelper is an option usually enabled on account level. It helps configure networking automatically for instances.
-	// You can use this to enable/disable the network helper for a specific instance.
-	// For more information, see https://techdocs.akamai.com/cloud-computing/docs/automatically-configure-networking
-	// Defaults to true.
-	// +optional
-	NetworkHelper *bool `json:"networkHelper,omitempty"`
 
 	// swapSize is the size of the swap disk in MiB.
 	SwapSize *int `json:"swap_size,omitempty"`
