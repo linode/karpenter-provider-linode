@@ -167,7 +167,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 		var info linodego.LinodeType
 		BeforeEach(func() {
 			ctx = options.ToContext(ctx, test.Options(test.OptionsFields{
-				ClusterID: lo.ToPtr("karpenter-cluster"),
+				ClusterName: lo.ToPtr("karpenter-cluster"),
 			}))
 
 			var ok bool

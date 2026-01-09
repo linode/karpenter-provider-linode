@@ -51,8 +51,8 @@ func (o *Options) validateVMMemoryOverheadPercent() error {
 }
 
 func (o *Options) validateRequiredFields() error {
-	if o.ClusterID == "" {
-		return fmt.Errorf("missing field, cluster-id")
+	if o.ClusterName == "" {
+		return fmt.Errorf("missing field, cluster-name")
 	}
 	return nil
 }

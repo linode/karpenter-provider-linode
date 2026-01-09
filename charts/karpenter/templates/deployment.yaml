@@ -112,8 +112,8 @@ spec:
             - name: CLUSTER_CA_BUNDLE
               value: "{{ . }}"
           {{- end }}
-          {{- with .Values.settings.clusterID }}
-            - name: CLUSTER_ID
+          {{- with .Values.settings.clusterName }}
+            - name: CLUSTER_NAME
               value: "{{ . }}"
           {{- end }}
           {{- with .Values.settings.clusterEndpoint }}

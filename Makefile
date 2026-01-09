@@ -62,7 +62,7 @@ run: ## Run Karpenter controller binary against your local cluster
 	SYSTEM_NAMESPACE=${KARPENTER_NAMESPACE} \
 		KUBERNETES_MIN_VERSION="1.19.0-0" \
 		DISABLE_LEADER_ELECTION=true \
-		CLUSTER_ID=${CLUSTER_NAME} \
+		CLUSTER_NAME=${CLUSTER_NAME} \
 		INTERRUPTION_QUEUE=${CLUSTER_NAME} \
 		LOG_LEVEL="debug" \
 		go run ./cmd/controller/main.go
@@ -160,7 +160,7 @@ helm-install: ## install karpenter onto an existing cluster (requires k8s contex
 	@helm upgrade --install --namespace karpenter --create-namespace karpenter charts/karpenter \
 		--set controller.image.repository=$(KO_DOCKER_REPO) \
 		--set region=${LINODE_REGION} \
-		--set settings.clusterID=${CLUSTER_NAME} \
+		--set settings.clusterName=${CLUSTER_NAME} \
 		--set apiToken=${LINODE_TOKEN}
 
 helm-uninstall: ## remove both charts from the existing cluster (requires k8s context to be set)

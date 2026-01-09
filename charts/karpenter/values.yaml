@@ -165,7 +165,7 @@ settings:
   # -- Cluster CA bundle for TLS configuration of provisioned nodes. If not set, this is taken from the controller's TLS configuration for the API server.
   clusterCABundle: ""
   # -- Cluster name.
-  clusterID: ""
+  clusterName: ""
   # -- Cluster endpoint.
   clusterEndpoint: ""
   # -- The VM memory overhead as a percent that will be subtracted from the total memory for all instance types
