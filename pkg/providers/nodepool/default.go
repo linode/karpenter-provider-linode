@@ -134,9 +134,9 @@ func (p *DefaultProvider) Get(ctx context.Context, providerID string, opts ...Op
 	if err != nil {
 		return nil, err
 	}
-	node := findNodeInPool(pool, providerID)
-	if node == nil {
-		return nil, fmt.Errorf("node with providerID %s not found in pool %d", providerID, poolID)
+	node, err := findNodeInPool(pool, providerID)
+	if err != nil {
+		return nil, err
 	}
 	inst := NewLKENodePool(pool, *node, p.region)
 	p.cacheNode(inst)
@@ -225,21 +225,21 @@ func (p *DefaultProvider) lookupPoolByInstance(ctx context.Context, providerID s
 	return 0, fmt.Errorf("instance %d not found in any pool", instanceID)
 }
 
-func findNodeInPool(pool *linodego.LKENodePool, providerID string) *linodego.LKENodePoolLinode {
+func findNodeInPool(pool *linodego.LKENodePool, providerID string) (*linodego.LKENodePoolLinode, error) {
 	instanceID, err := utils.ParseInstanceID(providerID)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	intID, err := strconv.Atoi(instanceID)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	for _, node := range pool.Linodes {
 		if node.InstanceID == intID {
-			return &node
+			return &node, nil
 		}
 	}
-	return nil
+	return nil, fmt.Errorf("instance %d not found in pool %d", intID, pool.ID)
 }
 
 func (p *DefaultProvider) listLKEPools(ctx context.Context) ([]linodego.LKENodePool, error) {

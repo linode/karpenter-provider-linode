@@ -1,0 +1,31 @@
+apiVersion: karpenter.k8s.linode/v1
+kind: LinodeNodeClass
+metadata:
+  name: default
+spec:
+  image: "linode/ubuntu22.04"
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: default
+spec:
+  template:
+    spec:
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+      nodeClassRef:
+        group: karpenter.k8s.linode
+        kind: LinodeNodeClass
+        name: default
+      expireAfter: 720h # 30 * 24h = 720h
+  limits:
+    cpu: 1000

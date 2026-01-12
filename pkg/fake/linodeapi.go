@@ -89,26 +89,26 @@ type LinodeAPIBehavior struct {
 	// NodePool storage and behaviors
 	NodePools                 sync.Map // key: "clusterID-poolID", value: *linodego.LKENodePool
 	CreateLKENodePoolBehavior MockedFunction[struct {
-		ClusterID int
-		Opts      linodego.LKENodePoolCreateOptions
+		ClusterName int
+		Opts        linodego.LKENodePoolCreateOptions
 	}, *linodego.LKENodePool]
 	ListLKENodePoolsBehavior MockedFunction[int, []linodego.LKENodePool]
 	GetLKENodePoolBehavior   MockedFunction[struct {
-		ClusterID int
-		PoolID    int
+		ClusterName int
+		PoolID      int
 	}, *linodego.LKENodePool]
 	UpdateLKENodePoolBehavior MockedFunction[struct {
-		ClusterID int
-		PoolID    int
-		Opts      linodego.LKENodePoolUpdateOptions
+		ClusterName int
+		PoolID      int
+		Opts        linodego.LKENodePoolUpdateOptions
 	}, *linodego.LKENodePool]
 	DeleteLKENodePoolBehavior MockedFunction[struct {
-		ClusterID int
-		PoolID    int
+		ClusterName int
+		PoolID      int
 	}, error]
 	GetLKENodePoolNodeBehavior MockedFunction[struct {
-		ClusterID int
-		NodeID    string
+		ClusterName int
+		NodeID      string
 	}, *linodego.LKENodePoolLinode]
 }
 
@@ -280,16 +280,16 @@ func (l *LinodeClient) ListTypes(_ context.Context, _ *linodego.ListOptions) ([]
 
 func (l *LinodeClient) CreateLKENodePool(_ context.Context, clusterID int, opts linodego.LKENodePoolCreateOptions) (*linodego.LKENodePool, error) {
 	params := struct {
-		ClusterID int
-		Opts      linodego.LKENodePoolCreateOptions
+		ClusterName int
+		Opts        linodego.LKENodePoolCreateOptions
 	}{
-		ClusterID: clusterID,
-		Opts:      opts,
+		ClusterName: clusterID,
+		Opts:        opts,
 	}
 
 	pool, err := l.CreateLKENodePoolBehavior.Invoke(&params, func(params *struct {
-		ClusterID int
-		Opts      linodego.LKENodePoolCreateOptions
+		ClusterName int
+		Opts        linodego.LKENodePoolCreateOptions
 	}) (**linodego.LKENodePool, error) {
 		skipInstance := false
 		l.InsufficientCapacityPools.Range(func(pool CapacityPool) bool {
@@ -350,7 +350,7 @@ func (l *LinodeClient) CreateLKENodePool(_ context.Context, clusterID int, opts 
 			// Set other fields as needed
 		}
 
-		l.NodePools.Store(fmt.Sprintf("%d-%d", params.ClusterID, poolID), newPool)
+		l.NodePools.Store(fmt.Sprintf("%d-%d", params.ClusterName, poolID), newPool)
 
 		return ptr.To(newPool), nil
 	})
@@ -371,11 +371,11 @@ func (l *LinodeClient) ListLKENodePools(_ context.Context, clusterID int, opts *
 				return true
 			}
 			// Extract clusterID from key
-			var poolClusterID int
-			if n, err := fmt.Sscanf(key, "%d-", &poolClusterID); n != 1 || err != nil {
+			var poolClusterName int
+			if n, err := fmt.Sscanf(key, "%d-", &poolClusterName); n != 1 || err != nil {
 				return true
 			}
-			if poolClusterID == *clusterID {
+			if poolClusterName == *clusterID {
 				poolList = append(poolList, *pool)
 			}
 			return true
@@ -391,23 +391,23 @@ func (l *LinodeClient) ListLKENodePools(_ context.Context, clusterID int, opts *
 
 func (l *LinodeClient) GetLKENodePool(_ context.Context, clusterID, poolID int) (*linodego.LKENodePool, error) {
 	params := struct {
-		ClusterID int
-		PoolID    int
+		ClusterName int
+		PoolID      int
 	}{
-		ClusterID: clusterID,
-		PoolID:    poolID,
+		ClusterName: clusterID,
+		PoolID:      poolID,
 	}
 
 	pool, err := l.GetLKENodePoolBehavior.Invoke(&params, func(params *struct {
-		ClusterID int
-		PoolID    int
+		ClusterName int
+		PoolID      int
 	}) (**linodego.LKENodePool, error) {
-		key := fmt.Sprintf("%d-%d", params.ClusterID, params.PoolID)
+		key := fmt.Sprintf("%d-%d", params.ClusterName, params.PoolID)
 		raw, ok := l.NodePools.Load(key)
 		if !ok {
 			return nil, &linodego.Error{
 				Code:    http.StatusNotFound,
-				Message: fmt.Sprintf("node pool does not exist with id %d in cluster %d", params.PoolID, params.ClusterID),
+				Message: fmt.Sprintf("node pool does not exist with id %d in cluster %d", params.PoolID, params.ClusterName),
 			}
 		}
 		pool, ok := raw.(*linodego.LKENodePool)
@@ -430,26 +430,26 @@ func (l *LinodeClient) GetLKENodePool(_ context.Context, clusterID, poolID int) 
 // nolint:gocyclo // fix this later
 func (l *LinodeClient) UpdateLKENodePool(_ context.Context, clusterID, poolID int, opts linodego.LKENodePoolUpdateOptions) (*linodego.LKENodePool, error) {
 	params := struct {
-		ClusterID int
-		PoolID    int
-		Opts      linodego.LKENodePoolUpdateOptions
+		ClusterName int
+		PoolID      int
+		Opts        linodego.LKENodePoolUpdateOptions
 	}{
-		ClusterID: clusterID,
-		PoolID:    poolID,
-		Opts:      opts,
+		ClusterName: clusterID,
+		PoolID:      poolID,
+		Opts:        opts,
 	}
 
 	pool, err := l.UpdateLKENodePoolBehavior.Invoke(&params, func(params *struct {
-		ClusterID int
-		PoolID    int
-		Opts      linodego.LKENodePoolUpdateOptions
+		ClusterName int
+		PoolID      int
+		Opts        linodego.LKENodePoolUpdateOptions
 	}) (**linodego.LKENodePool, error) {
-		key := fmt.Sprintf("%d-%d", params.ClusterID, params.PoolID)
+		key := fmt.Sprintf("%d-%d", params.ClusterName, params.PoolID)
 		raw, ok := l.NodePools.Load(key)
 		if !ok {
 			return nil, &linodego.Error{
 				Code:    http.StatusNotFound,
-				Message: fmt.Sprintf("node pool does not exist with id %d in cluster %d", params.PoolID, params.ClusterID),
+				Message: fmt.Sprintf("node pool does not exist with id %d in cluster %d", params.PoolID, params.ClusterName),
 			}
 		}
 
@@ -558,23 +558,23 @@ func (l *LinodeClient) UpdateLKENodePool(_ context.Context, clusterID, poolID in
 
 func (l *LinodeClient) DeleteLKENodePool(_ context.Context, clusterID, poolID int) error {
 	params := struct {
-		ClusterID int
-		PoolID    int
+		ClusterName int
+		PoolID      int
 	}{
-		ClusterID: clusterID,
-		PoolID:    poolID,
+		ClusterName: clusterID,
+		PoolID:      poolID,
 	}
 
 	_, err := l.DeleteLKENodePoolBehavior.Invoke(&params, func(params *struct {
-		ClusterID int
-		PoolID    int
+		ClusterName int
+		PoolID      int
 	}) (*error, error) {
-		key := fmt.Sprintf("%d-%d", params.ClusterID, params.PoolID)
+		key := fmt.Sprintf("%d-%d", params.ClusterName, params.PoolID)
 		pool, ok := l.NodePools.Load(key)
 		if !ok {
 			return nil, &linodego.Error{
 				Code:    http.StatusNotFound,
-				Message: fmt.Sprintf("node pool does not exist with id %d in cluster %d", params.PoolID, params.ClusterID),
+				Message: fmt.Sprintf("node pool does not exist with id %d in cluster %d", params.PoolID, params.ClusterName),
 			}
 		}
 		for _, v := range pool.(*linodego.LKENodePool).Linodes {
@@ -591,16 +591,16 @@ func (l *LinodeClient) DeleteLKENodePool(_ context.Context, clusterID, poolID in
 
 func (l *LinodeClient) GetLKENodePoolNode(_ context.Context, clusterID int, nodeID string) (*linodego.LKENodePoolLinode, error) {
 	params := struct {
-		ClusterID int
-		NodeID    string
+		ClusterName int
+		NodeID      string
 	}{
-		ClusterID: clusterID,
-		NodeID:    nodeID,
+		ClusterName: clusterID,
+		NodeID:      nodeID,
 	}
 
 	node, err := l.GetLKENodePoolNodeBehavior.Invoke(&params, func(params *struct {
-		ClusterID int
-		NodeID    string
+		ClusterName int
+		NodeID      string
 	}) (**linodego.LKENodePoolLinode, error) {
 		// Find the pool that contains this node
 		var foundPool *linodego.LKENodePool
@@ -610,11 +610,11 @@ func (l *LinodeClient) GetLKENodePoolNode(_ context.Context, clusterID int, node
 			if !ok {
 				return true
 			}
-			var poolClusterID int
-			if n, err := fmt.Sscanf(key, "%d-", &poolClusterID); n != 1 || err != nil {
+			var poolClusterName int
+			if n, err := fmt.Sscanf(key, "%d-", &poolClusterName); n != 1 || err != nil {
 				return true
 			}
-			if poolClusterID == params.ClusterID {
+			if poolClusterName == params.ClusterName {
 				// Check if this pool has the node
 				for _, node := range pool.Linodes {
 					if node.ID == params.NodeID {
@@ -629,7 +629,7 @@ func (l *LinodeClient) GetLKENodePoolNode(_ context.Context, clusterID int, node
 		if foundPool == nil {
 			return nil, &linodego.Error{
 				Code:    http.StatusNotFound,
-				Message: fmt.Sprintf("node %s not found in cluster %d", params.NodeID, params.ClusterID),
+				Message: fmt.Sprintf("node %s not found in cluster %d", params.NodeID, params.ClusterName),
 			}
 		}
 
@@ -641,7 +641,7 @@ func (l *LinodeClient) GetLKENodePoolNode(_ context.Context, clusterID int, node
 		}
 		return nil, &linodego.Error{
 			Code:    http.StatusNotFound,
-			Message: fmt.Sprintf("node %s not found in cluster %d", params.NodeID, params.ClusterID),
+			Message: fmt.Sprintf("node %s not found in cluster %d", params.NodeID, params.ClusterName),
 		}
 	})
 
