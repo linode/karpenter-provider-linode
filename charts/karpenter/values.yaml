@@ -14,7 +14,7 @@ additionalLabels: {}
 # -- Additional annotations to add into metadata.
 additionalAnnotations: {}
 # -- Image pull policy for Docker images.
-imagePullPolicy: IfNotPresent
+imagePullPolicy: Always
 # -- Image pull secrets for Docker images.
 imagePullSecrets: []
 serviceAccount:

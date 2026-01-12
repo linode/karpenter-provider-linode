@@ -22,7 +22,6 @@ import (
 	"github.com/awslabs/operatorpkg/option"
 	"github.com/patrickmn/go-cache"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/ptr"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
@@ -91,8 +90,8 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		Labels: nodeClass.Spec.Labels,
 		Taints: taints,
 	}
-	if nodeClass.Spec.FirewallID != 0 {
-		createOpts.FirewallID = ptr.To(nodeClass.Spec.FirewallID)
+	if nodeClass.Spec.FirewallID != nil {
+		createOpts.FirewallID = nodeClass.Spec.FirewallID
 	}
 
 	pool, err := p.client.CreateLKENodePool(ctx, p.clusterID, createOpts)
