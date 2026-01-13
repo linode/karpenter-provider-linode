@@ -65,4 +65,9 @@ var (
 	LKEClusterNameTagKey                 = "lke-cluster-name"
 	NodePoolTagKey                       = karpv1.NodePoolLabelKey
 	NodeClassTagKey                      = LabelNodeClass
+
+	// LKENodeClass labels and annotations
+	LabelLKENodeClass                 = apis.Group + "/lkenodeclass"
+	AnnotationLKENodeClassHash        = apis.Group + "/lkenodeclass-hash"
+	AnnotationLKENodeClassHashVersion = apis.Group + "/lkenodeclass-hash-version"
 )
