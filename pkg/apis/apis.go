@@ -24,7 +24,8 @@ import (
 
 //go:generate controller-gen crd object:headerFile="../../hack/boilerplate.go.txt" paths="./..." output:crd:artifacts:config=crds
 var (
-	Group = "karpenter.k8s.linode"
+	Group              = "karpenter.k8s.linode"
+	CompatibilityGroup = "compatibility." + Group
 	//go:embed crds/karpenter.k8s.linode_linodenodeclasses.yaml
 	LinodeNodeClassCRD []byte
 	//go:embed crds/karpenter.sh_nodepools.yaml
