@@ -371,6 +371,9 @@ func (c *CloudProvider) RepairPolicies() []cloudprovider.RepairPolicy {
 }
 
 func (c *CloudProvider) resolveNodeClassFromNodeClaim(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*v1.LinodeNodeClass, error) {
+	if nodeClaim.Spec.NodeClassRef == nil {
+		return nil, errors.NewNotFound(schema.GroupResource{Group: apis.Group, Resource: "linodenodeclasses"}, "")
+	}
 	nodeClass := &v1.LinodeNodeClass{}
 	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nodeClaim.Spec.NodeClassRef.Name}, nodeClass); err != nil {
 		return nil, err
