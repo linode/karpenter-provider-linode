@@ -89,8 +89,8 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		Labels: nodeClass.Spec.Labels,
 		Taints: taints,
 	}
-	if nodeClass.Spec.FirewallID != 0 {
-		createOpts.FirewallID = &nodeClass.Spec.FirewallID
+	if nodeClass.Spec.FirewallID != nil {
+		createOpts.FirewallID = nodeClass.Spec.FirewallID
 	}
 	if nodeClass.Spec.LKEK8sVersion != nil {
 		createOpts.K8sVersion = nodeClass.Spec.LKEK8sVersion

@@ -310,7 +310,7 @@ spec:
                 type: string
               firewallID:
                 description: firewallID is the id of the cloud firewall to apply to
-                  the Linode Instance
+                  the Linode Instance.
                 type: integer
               image:
                 description: image is the Linode image to use for the instance.
@@ -453,206 +453,6 @@ spec:
                 description: labels is a map of Kubernetes node labels to apply to
                   the Node.
                 type: object
-              linodeInterfaces:
-                description: linodeInterfaces is a list of Linode network interfaces
-                  to use for the instance. Requires Linode Interfaces beta opt-in
-                  to use.
-                items:
-                  description: LinodeInterfaceCreateOptions defines the linode network
-                    interface config
-                  properties:
-                    defaultRoute:
-                      description: defaultRoute is the default route for the interface.
-                      properties:
-                        ipv4:
-                          description: ipv4 is the IPv4 default route for the interface.
-                          type: boolean
-                        ipv6:
-                          description: ipv6 is the IPv6 default route for the interface.
-                          type: boolean
-                      type: object
-                    firewallID:
-                      description: firewallID is the ID of the firewall to use for
-                        the interface.
-                      type: integer
-                    public:
-                      description: public is the public interface configuration for
-                        the interface.
-                      properties:
-                        ipv4:
-                          description: ipv4 is the IPv4 configuration for the public
-                            interface.
-                          properties:
-                            addresses:
-                              description: addresses is the IPv4 addresses for the
-                                public interface.
-                              items:
-                                description: PublicInterfaceIPv4AddressCreateOptions
-                                  defines the public IPv4 address and whether it is
-                                  primary
-                                properties:
-                                  address:
-                                    description: address is the IPv4 address for the
-                                      public interface.
-                                    minLength: 1
-                                    type: string
-                                  primary:
-                                    description: primary is a boolean indicating whether
-                                      the address is primary.
-                                    type: boolean
-                                required:
-                                - address
-                                type: object
-                              type: array
-                              x-kubernetes-list-map-keys:
-                              - address
-                              x-kubernetes-list-type: map
-                          type: object
-                        ipv6:
-                          description: ipv6 is the IPv6 configuration for the public
-                            interface.
-                          properties:
-                            ranges:
-                              description: ranges is the IPv6 ranges for the public
-                                interface.
-                              items:
-                                description: PublicInterfaceIPv6RangeCreateOptions
-                                  defines the IPv6 range for a public interface
-                                properties:
-                                  range:
-                                    description: range is the IPv6 range for the public
-                                      interface.
-                                    minLength: 1
-                                    type: string
-                                required:
-                                - range
-                                type: object
-                              type: array
-                              x-kubernetes-list-map-keys:
-                              - range
-                              x-kubernetes-list-type: map
-                          type: object
-                      type: object
-                    vlan:
-                      description: vlan is the VLAN interface configuration for the
-                        interface.
-                      properties:
-                        ipamAddress:
-                          description: ipamAddress is the IP address to assign to
-                            the interface.
-                          type: string
-                        vlanLabel:
-                          description: vlanLabel is the label of the VLAN.
-                          minLength: 1
-                          type: string
-                      required:
-                      - vlanLabel
-                      type: object
-                    vpc:
-                      description: vpc is the VPC interface configuration for the
-                        interface.
-                      properties:
-                        ipv4:
-                          description: ipv4 is the IPv4 configuration for the interface.
-                          properties:
-                            addresses:
-                              description: addresses is the IPv4 addresses for the
-                                interface.
-                              items:
-                                description: VPCInterfaceIPv4AddressCreateOptions
-                                  defines the IPv4 configuration for a VPC interface
-                                properties:
-                                  address:
-                                    description: address is the IPv4 address for the
-                                      interface.
-                                    minLength: 1
-                                    type: string
-                                  nat1to1Address:
-                                    description: nat1to1Address is the NAT 1:1 address
-                                      for the interface.
-                                    type: string
-                                  primary:
-                                    description: primary is a boolean indicating whether
-                                      the address is primary.
-                                    type: boolean
-                                required:
-                                - address
-                                type: object
-                              type: array
-                              x-kubernetes-list-map-keys:
-                              - address
-                              x-kubernetes-list-type: map
-                            ranges:
-                              description: ranges is the IPv4 ranges for the interface.
-                              items:
-                                description: VPCInterfaceIPv4RangeCreateOptions defines
-                                  the IPv4 range for a VPC interface
-                                properties:
-                                  range:
-                                    description: range is the IPv4 range for the interface.
-                                    minLength: 1
-                                    type: string
-                                required:
-                                - range
-                                type: object
-                              type: array
-                              x-kubernetes-list-map-keys:
-                              - range
-                              x-kubernetes-list-type: map
-                          type: object
-                        ipv6:
-                          description: ipv6 is the IPv6 configuration for the interface.
-                          properties:
-                            isPublic:
-                              description: isPublic is a boolean indicating whether
-                                the interface is public.
-                              type: boolean
-                            ranges:
-                              description: ranges is the IPv6 ranges for the interface.
-                              items:
-                                description: VPCInterfaceIPv6RangeCreateOptions defines
-                                  the IPv6 range for a VPC interface
-                                properties:
-                                  range:
-                                    description: range is the IPv6 range for the interface.
-                                    minLength: 1
-                                    type: string
-                                required:
-                                - range
-                                type: object
-                              type: array
-                              x-kubernetes-list-map-keys:
-                              - range
-                              x-kubernetes-list-type: map
-                            slaac:
-                              description: slaac is the IPv6 SLAAC configuration for
-                                the interface.
-                              items:
-                                description: VPCInterfaceIPv6SLAACCreateOptions defines
-                                  the Range for IPv6 SLAAC
-                                properties:
-                                  range:
-                                    description: range is the IPv6 range for the interface.
-                                    minLength: 1
-                                    type: string
-                                required:
-                                - range
-                                type: object
-                              type: array
-                              x-kubernetes-list-map-keys:
-                              - range
-                              x-kubernetes-list-type: map
-                          required:
-                          - isPublic
-                          type: object
-                        subnetId:
-                          description: subnetId is the ID of the subnet to use for
-                            the interface.
-                          type: integer
-                      type: object
-                  type: object
-                type: array
-                x-kubernetes-list-type: atomic
               lkeK8sVersion:
                 description: |-
                   lkeK8sVersion is the Kubernetes version for LKE node pools.
@@ -668,12 +468,14 @@ spec:
                 - on_recycle
                 type: string
               managedLKE:
+                default: true
                 description: |-
-                  managedLKE enables LKE-managed node pool mode. When true, Karpenter provisions
+                  managedLKE enables LKE-managed node pool mode. When true (default), Karpenter provisions
                   nodes via LKE NodePool APIs instead of creating direct Linode instances.
                   In this mode, LKE manages the node image, network configuration, and kubelet.
                   Fields like image, authorizedKeys, linodeInterfaces, osDisk, dataDisks,
                   placementGroup, configuration, vpcID, ipv6Options, swapSize, and kubelet are ignored.
+                  Set to false to use direct Linode instance provisioning.
                 type: boolean
               osDisk:
                 description: |-

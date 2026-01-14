@@ -73,7 +73,9 @@ func NewDefaultProvider(
 	offeringCache *cache.Cache,
 	discoveredCapacityCache *cache.Cache,
 	unavailableOfferingsCache *linodecache.UnavailableOfferings,
-	// TODO: add pricing provider here
+	// NOTE: we don't have a pricing provider since this is automatically updated
+	// when a new NodeClaim is created via the GetType API call incurred when
+	// fetching InstanceTypes which includes pricing info.
 ) *DefaultProvider {
 	return &DefaultProvider{
 		client:                  client,

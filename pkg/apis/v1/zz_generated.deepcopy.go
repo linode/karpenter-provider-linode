@@ -436,13 +436,6 @@ func (in *LinodeNodeClassSpec) DeepCopyInto(out *LinodeNodeClassSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	if in.LinodeInterfaces != nil {
-		in, out := &in.LinodeInterfaces, &out.LinodeInterfaces
-		*out = make([]LinodeInterfaceCreateOptions, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
 	if in.Tags != nil {
 		in, out := &in.Tags, &out.Tags
 		*out = make([]string, len(*in))
@@ -454,6 +447,11 @@ func (in *LinodeNodeClassSpec) DeepCopyInto(out *LinodeNodeClassSpec) {
 		for key, val := range *in {
 			(*out)[key] = val
 		}
+	}
+	if in.FirewallID != nil {
+		in, out := &in.FirewallID, &out.FirewallID
+		*out = new(int)
+		**out = **in
 	}
 	if in.OSDisk != nil {
 		in, out := &in.OSDisk, &out.OSDisk

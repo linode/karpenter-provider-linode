@@ -42,12 +42,6 @@ type LinodeNodeClassSpec struct {
 	// +optional
 	Image string `json:"image,omitempty"`
 
-	// linodeInterfaces is a list of Linode network interfaces to use for the instance. Requires Linode Interfaces beta opt-in to use.
-	// +optional
-	// +kubebuilder:object:generate=true
-	// +listType=atomic
-	LinodeInterfaces []LinodeInterfaceCreateOptions `json:"linodeInterfaces,omitempty"`
-
 	// backupsEnabled is a boolean indicating whether backups should be enabled for the instance.
 	// +optional
 	BackupsEnabled bool `json:"backupsEnabled,omitempty"`
@@ -61,9 +55,9 @@ type LinodeNodeClassSpec struct {
 	// +optional
 	Labels linodego.LKENodePoolLabels `json:"labels,omitempty"`
 
-	// firewallID is the id of the cloud firewall to apply to the Linode Instance
+	// firewallID is the id of the cloud firewall to apply to the Linode Instance.
 	// +optional
-	FirewallID int `json:"firewallID,omitempty"`
+	FirewallID *int `json:"firewallID,omitempty"`
 
 	// osDisk is a configuration for the root disk that includes the OS,
 	// if not specified, this defaults to whatever space is not taken up by the DataDisks
