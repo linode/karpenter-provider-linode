@@ -12,7 +12,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package nodepool
+package lkenode
 
 import (
 	"context"
@@ -27,10 +27,10 @@ import (
 // Provider defines the Linode LKE NodePool provider contract. This mirrors the
 // instance Provider interface but targets NodePool-backed provisioning.
 type Provider interface {
-	Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*LKENodePool, error)
-	Get(ctx context.Context, providerID string, opts ...Options) (*LKENodePool, error)
-	List(ctx context.Context) ([]*LKENodePool, error)
-	Delete(ctx context.Context, providerID string) error
+	Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*LKENode, error)
+	Get(ctx context.Context, id string, opts ...Options) (*LKENode, error)
+	List(ctx context.Context) ([]*LKENode, error)
+	Delete(ctx context.Context, id string) error
 	UpdateTags(ctx context.Context, poolID int, tags map[string]string) error
 }
 

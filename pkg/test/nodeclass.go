@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/imdario/mergo"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/karpenter/pkg/test"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
@@ -35,6 +36,21 @@ func LinodeNodeClass(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {
 		Spec:       options.Spec,
 		Status:     options.Status,
 	}
+}
+
+// LinodeNodeClassWithLKE creates a LinodeNodeClass with ManagedLKE explicitly enabled.
+// Note: ManagedLKE defaults to true, so this is mainly for clarity in tests.
+func LinodeNodeClassWithLKE(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {
+	nc := LinodeNodeClass(overrides...)
+	nc.Spec.ManagedLKE = ptr.To(true)
+	return nc
+}
+
+// LinodeNodeClassWithoutLKE creates a LinodeNodeClass with ManagedLKE disabled (direct Linode instances).
+func LinodeNodeClassWithoutLKE(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {
+	nc := LinodeNodeClass(overrides...)
+	nc.Spec.ManagedLKE = ptr.To(false)
+	return nc
 }
 
 type TestNodeClass struct {

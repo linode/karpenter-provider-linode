@@ -57,12 +57,14 @@ var _ = Describe("Options", func() {
 		opts.AddFlags(fs)
 		err := opts.Parse(fs,
 			"--cluster-name", "env-cluster",
+			"--cluster-id", "12345",
 			"--cluster-endpoint", "https://env-cluster",
 			"--cluster-region", "us-west",
 			"--vm-memory-overhead-percent", "0.1")
 		Expect(err).ToNot(HaveOccurred())
 		expectOptionsEqual(opts, test.Options(test.OptionsFields{
 			ClusterName:             lo.ToPtr("env-cluster"),
+			ClusterID:               lo.ToPtr(12345),
 			ClusterEndpoint:         lo.ToPtr("https://env-cluster"),
 			ClusterRegion:           lo.ToPtr("us-west"),
 			VMMemoryOverheadPercent: lo.ToPtr[float64](0.1),
@@ -70,6 +72,7 @@ var _ = Describe("Options", func() {
 	})
 	It("should correctly fallback to env vars when CLI flags aren't set", func() {
 		os.Setenv("CLUSTER_NAME", "env-cluster")
+		os.Setenv("LKE_CLUSTER_ID", "12345")
 		os.Setenv("CLUSTER_REGION", "us-west")
 		os.Setenv("CLUSTER_ENDPOINT", "https://env-cluster")
 		os.Setenv("VM_MEMORY_OVERHEAD_PERCENT", "0.1")
@@ -81,6 +84,7 @@ var _ = Describe("Options", func() {
 		Expect(err).ToNot(HaveOccurred())
 		expectOptionsEqual(opts, test.Options(test.OptionsFields{
 			ClusterName:             lo.ToPtr("env-cluster"),
+			ClusterID:               lo.ToPtr(12345),
 			ClusterEndpoint:         lo.ToPtr("https://env-cluster"),
 			ClusterRegion:           lo.ToPtr("us-west"),
 			VMMemoryOverheadPercent: lo.ToPtr[float64](0.1),
@@ -96,11 +100,11 @@ var _ = Describe("Options", func() {
 			Expect(err).To(HaveOccurred())
 		})
 		It("should fail when clusterEndpoint is invalid (not absolute)", func() {
-			err := opts.Parse(fs, "--cluster-name", "test-cluster", "--cluster-endpoint", "00000000000000000000000.test.us-west.linode.com")
+			err := opts.Parse(fs, "--cluster-name", "test-cluster", "--cluster-id", "12345", "--cluster-endpoint", "00000000000000000000000.test.us-west.linode.com")
 			Expect(err).To(HaveOccurred())
 		})
 		It("should fail when vmMemoryOverheadPercent is negative", func() {
-			err := opts.Parse(fs, "--cluster-name", "test-cluster", "--vm-memory-overhead-percent", "-0.01")
+			err := opts.Parse(fs, "--cluster-name", "test-cluster", "--cluster-id", "12345", "--vm-memory-overhead-percent", "-0.01")
 			Expect(err).To(HaveOccurred())
 		})
 	})
@@ -109,6 +113,7 @@ var _ = Describe("Options", func() {
 func expectOptionsEqual(optsA *options.Options, optsB *options.Options) {
 	GinkgoHelper()
 	Expect(optsA.ClusterName).To(Equal(optsB.ClusterName))
+	Expect(optsA.ClusterID).To(Equal(optsB.ClusterID))
 	Expect(optsA.ClusterEndpoint).To(Equal(optsB.ClusterEndpoint))
 	Expect(optsA.VMMemoryOverheadPercent).To(Equal(optsB.VMMemoryOverheadPercent))
 	Expect(optsA.ClusterRegion).To(Equal(optsB.ClusterRegion))

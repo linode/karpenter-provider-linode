@@ -36,6 +36,7 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/lkenode"
 )
 
 func NewControllers(
@@ -48,6 +49,7 @@ func NewControllers(
 	validationCache *cache.Cache,
 	cloudProvider cloudprovider.CloudProvider,
 	instanceProvider instance.Provider,
+	lkenodeProvider lkenode.Provider,
 	instanceTypeProvider *instancetype.DefaultProvider,
 ) []controller.Controller {
 	controllers := []controller.Controller{
@@ -62,7 +64,7 @@ func NewControllers(
 			options.FromContext(ctx).DisableDryRun,
 		),
 		nodeclaimgarbagecollection.NewController(kubeClient, cloudProvider),
-		nodeclaimtagging.NewController(kubeClient, cloudProvider, instanceProvider),
+		nodeclaimtagging.NewController(kubeClient, cloudProvider, instanceProvider, lkenodeProvider),
 		controllersinstancetype.NewController(instanceTypeProvider),
 		controllersinstancetypecapacity.NewController(kubeClient, cloudProvider, instanceTypeProvider),
 		status.NewController[*v1.LinodeNodeClass](kubeClient, mgr.GetEventRecorderFor("karpenter"), status.EmitDeprecatedMetrics),

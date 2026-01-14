@@ -32,7 +32,5 @@ func init() {
 	scheme.Scheme.AddKnownTypes(gv,
 		&LinodeNodeClass{},
 		&LinodeNodeClassList{},
-		&LKENodeClass{},
-		&LKENodeClassList{},
 	)
 }

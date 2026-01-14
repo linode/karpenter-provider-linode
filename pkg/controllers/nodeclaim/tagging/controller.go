@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -29,32 +31,32 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/operator/injection"
 	"sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
-
-	"github.com/samber/lo"
 
 	"github.com/awslabs/operatorpkg/reasonable"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/lkenode"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
-
-	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
-	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 )
 
 type Controller struct {
 	kubeClient       client.Client
 	cloudProvider    cloudprovider.CloudProvider
 	instanceProvider instance.Provider
+	lkenodeProvider  lkenode.Provider
 }
 
-func NewController(kubeClient client.Client, cloudProvider cloudprovider.CloudProvider, instanceProvider instance.Provider) *Controller {
+func NewController(kubeClient client.Client, cloudProvider cloudprovider.CloudProvider, instanceProvider instance.Provider, lkenodeProvider lkenode.Provider) *Controller {
 	return &Controller{
 		kubeClient:       kubeClient,
 		cloudProvider:    cloudProvider,
 		instanceProvider: instanceProvider,
+		lkenodeProvider:  lkenodeProvider,
 	}
 }
 
@@ -103,10 +105,47 @@ func (c *Controller) tagInstance(ctx context.Context, nc *karpv1.NodeClaim, id s
 		v1.NodeClaimTagKey: nc.Name,
 	}
 
-	// Remove tags which have been already populated
+	// Resolve NodeClass from NodeClaim's NodeClassRef to determine which provider to use
+	nodeClass, err := c.resolveNodeClassFromNodeClaim(ctx, nc)
+	if err != nil {
+		return fmt.Errorf("resolving nodeclass for tagging, %w", err)
+	}
+
+	if nodeClass.IsLKEManaged() {
+		return c.tagLKENode(ctx, tags, id)
+	}
+	return c.tagLinodeInstance(ctx, tags, id)
+}
+
+func (c *Controller) resolveNodeClassFromNodeClaim(ctx context.Context, nc *karpv1.NodeClaim) (*v1.LinodeNodeClass, error) {
+	nodeClass := &v1.LinodeNodeClass{}
+	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nc.Spec.NodeClassRef.Name}, nodeClass); err != nil {
+		return nil, err
+	}
+	return nodeClass, nil
+}
+
+func (c *Controller) tagLKENode(ctx context.Context, tags map[string]string, id string) error {
+	lkeNode, err := c.lkenodeProvider.Get(ctx, id, lkenode.SkipCache)
+	if err != nil {
+		return fmt.Errorf("getting lke node for tagging, %w", err)
+	}
+	existingTags := utils.TagListToMap(lkeNode.Tags)
+	tags = lo.OmitByKeys(tags, lo.Keys(existingTags))
+	if len(tags) == 0 {
+		return nil
+	}
+	defer time.Sleep(time.Second)
+	if err := c.lkenodeProvider.UpdateTags(ctx, lkeNode.PoolID, tags); err != nil {
+		return fmt.Errorf("tagging lke nodeclaim, %w", err)
+	}
+	return nil
+}
+
+func (c *Controller) tagLinodeInstance(ctx context.Context, tags map[string]string, id string) error {
 	instance, err := c.instanceProvider.Get(ctx, id, instance.SkipCache)
 	if err != nil {
-		return fmt.Errorf("tagging nodeclaim, %w", err)
+		return fmt.Errorf("getting instance for tagging, %w", err)
 	}
 	tags = lo.OmitByKeys(tags, instance.Tags)
 	if len(tags) == 0 {

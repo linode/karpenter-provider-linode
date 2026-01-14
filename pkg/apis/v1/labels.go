@@ -66,8 +66,6 @@ var (
 	NodePoolTagKey                       = karpv1.NodePoolLabelKey
 	NodeClassTagKey                      = LabelNodeClass
 
-	// LKENodeClass labels and annotations
-	LabelLKENodeClass                 = apis.Group + "/lkenodeclass"
-	AnnotationLKENodeClassHash        = apis.Group + "/lkenodeclass-hash"
-	AnnotationLKENodeClassHashVersion = apis.Group + "/lkenodeclass-hash-version"
+	// LKE managed mode label - indicates the node is managed by LKE NodePool APIs
+	LabelLKEManaged = apis.Group + "/lke-managed"
 )

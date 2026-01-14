@@ -64,6 +64,7 @@ var _ = BeforeSuite(func() {
 	cloudProvider = cloudprovider.New(
 		linodeEnv.InstanceTypesProvider,
 		linodeEnv.InstanceProvider,
+		linodeEnv.LKENodeProvider,
 		events.NewRecorder(&record.FakeRecorder{}),
 		env.Client,
 	)

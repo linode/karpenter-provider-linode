@@ -12,7 +12,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package nodepool
+package lkenode
 
 import (
 	"time"
@@ -20,8 +20,8 @@ import (
 	"github.com/linode/linodego"
 )
 
-// LKENodePool represents a single Linode node within an LKE NodePool.
-type LKENodePool struct {
+// LKENode represents a single Linode node within an LKE NodePool.
+type LKENode struct {
 	// From linodego.LKENodePool
 	PoolID int
 	Type   string // Plan type (e.g., "g6-standard-2")
@@ -39,8 +39,8 @@ type LKENodePool struct {
 	Created *time.Time
 }
 
-func NewLKENodePool(pool *linodego.LKENodePool, node linodego.LKENodePoolLinode, region string) *LKENodePool {
-	return &LKENodePool{
+func NewLKENode(pool *linodego.LKENodePool, node linodego.LKENodePoolLinode, region string) *LKENode {
+	return &LKENode{
 		PoolID:     pool.ID,
 		InstanceID: node.InstanceID,
 		NodeID:     node.ID,

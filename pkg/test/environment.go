@@ -30,7 +30,7 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
-	"github.com/linode/karpenter-provider-linode/pkg/providers/nodepool"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/lkenode"
 )
 
 func init() {
@@ -59,7 +59,7 @@ type Environment struct {
 	InstanceTypesProvider *instancetype.DefaultProvider
 	InstanceProvider      *instance.DefaultProvider
 	InstanceTypesResolver *instancetype.DefaultResolver
-	NodePoolProvider      *nodepool.DefaultProvider
+	LKENodeProvider       *lkenode.DefaultProvider
 }
 
 func NewEnvironment(ctx context.Context) *Environment {
@@ -102,8 +102,8 @@ func NewEnvironment(ctx context.Context) *Environment {
 		instanceCache,
 	)
 
-	nodePoolProvider := nodepool.NewDefaultProvider(
-		fake.DefaultClusterName,
+	lkeNodeProvider := lkenode.NewDefaultProvider(
+		fake.DefaultClusterID,
 		fake.DefaultRegion,
 		eventRecorder,
 		linodeClient,
@@ -128,7 +128,7 @@ func NewEnvironment(ctx context.Context) *Environment {
 
 		InstanceTypesProvider: instanceTypesProvider,
 		InstanceProvider:      instanceProvider,
-		NodePoolProvider:      nodePoolProvider,
+		LKENodeProvider:       lkeNodeProvider,
 	}
 }
 

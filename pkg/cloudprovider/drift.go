@@ -26,3 +26,7 @@ import (
 func (c *CloudProvider) isNodeClassDrifted(ctx context.Context, nodeClaim *karpv1.NodeClaim, nodePool *karpv1.NodePool, nodeClass *v1.LinodeNodeClass) (cloudprovider.DriftReason, error) {
 	return "", nil
 }
+
+func (c *CloudProvider) isLKEDrifted(ctx context.Context, nodeClaim *karpv1.NodeClaim, nodePool *karpv1.NodePool, nodeClass *v1.LinodeNodeClass) (cloudprovider.DriftReason, error) {
+	return "", nil
+}
