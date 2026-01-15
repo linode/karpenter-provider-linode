@@ -155,6 +155,9 @@ func (p *DefaultProvider) List(ctx context.Context) ([]*LKENode, error) {
 	var instances []*LKENode
 	for i := range pools {
 		pool := pools[i]
+		if !isKarpenterManagedPool(&pool) {
+			continue
+		}
 		for _, node := range pool.Linodes {
 			inst := NewLKENode(&pool, node, p.region)
 			instances = append(instances, inst)
@@ -162,6 +165,13 @@ func (p *DefaultProvider) List(ctx context.Context) ([]*LKENode, error) {
 		}
 	}
 	return instances, nil
+}
+
+func isKarpenterManagedPool(pool *linodego.LKENodePool) bool {
+	tags := utils.TagListToMap(pool.Tags)
+	_, hasNodePoolLabel := tags[karpv1.NodePoolLabelKey]
+	_, hasLKEManagedLabel := tags[v1.LabelLKEManaged]
+	return hasNodePoolLabel && hasLKEManagedLabel
 }
 
 func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
