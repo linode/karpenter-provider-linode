@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/awslabs/operatorpkg/option"
 	"github.com/google/uuid"
@@ -227,6 +228,8 @@ func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[st
 		return fmt.Errorf("invalid instance id %s, %w", id, err)
 	}
 	for k, v := range tags {
+		// Ensures that no more than 1 CreateTag call is made per second.
+		time.Sleep(time.Second)
 		if _, err := p.client.CreateTag(ctx, linodego.TagCreateOptions{
 			Linodes: []int{intId},
 			Label:   fmt.Sprintf("%s:%s", k, v),

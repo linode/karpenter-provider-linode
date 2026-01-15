@@ -17,8 +17,9 @@ package tagging
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/awslabs/operatorpkg/reasonable"
+	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/klog/v2"
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -29,19 +30,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/operator/injection"
 	"sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
 
-	"github.com/samber/lo"
-
-	"github.com/awslabs/operatorpkg/reasonable"
-
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
-
-	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
-	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 )
 
 type Controller struct {
@@ -75,6 +72,9 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	if err = c.tagInstance(ctx, nodeClaim, id); err != nil {
 		return reconcile.Result{}, cloudprovider.IgnoreNodeClaimNotFoundError(err)
 	}
+	nodeClaim.Annotations = lo.Assign(nodeClaim.Annotations, map[string]string{
+		v1.AnnotationInstanceTagged: "true",
+	})
 	if !equality.Semantic.DeepEqual(nodeClaim, stored) {
 		if err := c.kubeClient.Patch(ctx, nodeClaim, client.MergeFrom(stored)); err != nil {
 			return reconcile.Result{}, client.IgnoreNotFound(err)
@@ -99,8 +99,9 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 
 func (c *Controller) tagInstance(ctx context.Context, nc *karpv1.NodeClaim, id string) error {
 	tags := map[string]string{
-		v1.NameTagKey:      nc.Status.NodeName,
-		v1.NodeClaimTagKey: nc.Name,
+		v1.NameTagKey:           nc.Status.NodeName,
+		v1.NodeClaimTagKey:      nc.Name,
+		v1.LKEClusterNameTagKey: options.FromContext(ctx).ClusterName,
 	}
 
 	// Remove tags which have been already populated
@@ -113,9 +114,6 @@ func (c *Controller) tagInstance(ctx context.Context, nc *karpv1.NodeClaim, id s
 		return nil
 	}
 
-	// Ensures that no more than 1 CreateTags call is made per second. Rate limiting is required since CreateTags
-	// shares a pool with other mutating calls (e.g. CreateFleet).
-	defer time.Sleep(time.Second)
 	if err := c.instanceProvider.CreateTags(ctx, id, tags); err != nil {
 		return fmt.Errorf("tagging nodeclaim, %w", err)
 	}
