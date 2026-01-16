@@ -1,29 +1,88 @@
-name: CI-TEST
+name: Test and Upload Coverage Reports
+
 on:
   push:
     branches:
       - 'main'
-      - 'release-v*'
-      - 'staging/*'
-  pull_request:
+  pull_request_target:
   workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: build-test-ci-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
-  ci-test:
+  changes:
     runs-on: ubuntu-latest
-    if: github.repository == 'aws/karpenter-provider-aws'
-    strategy:
-        fail-fast: false
-        matrix:
-          k8sVersion: ["1.28.x", "1.29.x", "1.30.x", "1.31.x", "1.32.x", "1.33.x", "1.34.x"]
+    outputs:
+      # Expose matched filters as job 'src' output variable
+      paths: ${{ steps.filter.outputs.changes }}
     steps:
-    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-    - uses: ./.github/actions/install-deps
-      with:
-        k8sVersion: ${{ matrix.k8sVersion }}
-    - run: K8S_VERSION=${{ matrix.k8sVersion }} make ci-test
-    - name: Send coverage
-      # should only send converage once https://docs.coveralls.io/parallel-builds
-      if: matrix.k8sVersion == '1.34.x'
-      env:
-        COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: goveralls -coverprofile=coverage.out -service=github
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: .github/filters.yml
+
+  ci-test:
+    environment: ${{ (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && 'prod-external' || 'prod' }}
+    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ contains(fromJSON(needs.changes.outputs.paths), 'src') }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            golang.org:443
+            go.dev:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            *.githubusercontent.com:443
+            storage.googleapis.com:443
+            cli.codecov.io:443
+            api.codecov.io:443
+            ingest.codecov.io:443
+            dl.k8s.io:443
+            cdn.dl.k8s.io:443
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Test
+        run: make ci-test
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.out
+          fail_ci_if_error: false
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: linode/karpenter-provider-linode

@@ -3,18 +3,77 @@ on:
   push:
     branches:
       - 'main'
-      - 'release-v*'
-      - 'staging/*'
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: build-test-ci-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
-  ci:
+  changes:
     runs-on: ubuntu-latest
-    if: github.repository == 'aws/karpenter-provider-aws'
+    outputs:
+      # Expose matched filters as job 'src' output variable
+      src: ${{ steps.filter.outputs.src }}
     steps:
-    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-    - uses: ./.github/actions/install-deps
-    - name: Enable the actionlint matcher
-      run: echo "::add-matcher::.github/actionlint-matcher.json"
-    - run: make ci-non-test
-      shell: bash
+      - uses: actions/checkout@v6
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            *.githubusercontent.com:443
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          predicate-quantifier: 'every'
+          filters: .github/filters.yml
+  go-analyze:
+    needs: changes
+    runs-on: ubuntu-latest
+    if: ${{ needs.changes.outputs.src == 'true' }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            golang.org:443
+            go.dev:443
+            *.githubusercontent.com:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            vuln.go.dev:443
+            storage.googleapis.com:443
+            golangci-lint.run:443
+            dl.k8s.io:443
+            cdn.dl.k8s.io:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: lint
+        uses: golangci/golangci-lint-action@v9
+
+      - run: make ci-non-test
+        shell: bash
