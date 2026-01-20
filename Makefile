@@ -110,7 +110,7 @@ verify: tidy download controller-gen ## Verify code. Includes dependencies, lint
 			exit 1;\
 		fi;}
 
-vulncheck: ## Verify code vulnerabilities
+vulncheck: govulncheck ## Verify code vulnerabilities
 	@govulncheck ./pkg/...
 
 image: ## Build the Karpenter controller images using ko build
@@ -181,8 +181,9 @@ $(CACHE_BIN):
 ##@ Tooling Binaries:
 # setup-envtest does not have devbox support so always use CACHE_BIN
 
-ENVTEST   ?= $(CACHE_BIN)/setup-envtest
+ENVTEST        ?= $(CACHE_BIN)/setup-envtest
 CONTROLLER_GEN ?= $(CACHE_BIN)/controller-gen
+GOVULNC        ?= $(LOCALBIN)/govulncheck
 
 ## Tool Versions
 # renovate: datasource=go depName=sigs.k8s.io/controller-runtime/tools/setup-envtest
@@ -191,8 +192,11 @@ ENVTEST_VERSION ?= release-0.22
 # renovate: datasource=go depName=sigs.k8s.io/controller-tools
 CONTROLLER_TOOLS_VERSION ?= v0.19.0
 
+# renovate: datasource=go depName=golang.org/x/vuln
+GOVULNC_VERSION          ?= v1.1.4
+
 .PHONY: tools
-tools: $(CONTROLLER_GEN) $(ENVTEST)
+tools: $(CONTROLLER_GEN) $(ENVTEST) $(GOVULNC)
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
@@ -203,6 +207,11 @@ $(ENVTEST): $(CACHE_BIN)
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 $(CONTROLLER_GEN): $(LOCALBIN)
 	GOBIN=$(CACHE_BIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
+
+.PHONY: govulncheck
+govulncheck: $(GOVULNC) ## Download govulncheck locally if necessary.
+$(GOVULNC): $(LOCALBIN)
+	GOBIN=$(LOCALBIN) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNC_VERSION)
 
 define newline
 
