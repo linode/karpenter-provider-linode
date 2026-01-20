@@ -16,6 +16,7 @@ KOCACHE ?= ~/.ko
 # Common Directories
 MOD_DIRS = $(shell find . -path "./website" -prune -o -name go.mod -type f -print | xargs dirname)
 KARPENTER_CORE_DIR = $(shell go list -m -f '{{ .Dir }}' sigs.k8s.io/karpenter)
+RELEASE_DIR ?= release
 
 # TEST_SUITE enables you to select a specific test suite directory to run "make e2etests" against
 TEST_SUITE ?= "..."
@@ -141,6 +142,12 @@ image: ## Build the Karpenter controller images using ko build
 	$(eval IMG_REPOSITORY=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 1 | cut -d ":" -f 1))
 	$(eval IMG_TAG=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 1 | cut -d ":" -f 2 -s))
 	$(eval IMG_DIGEST=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 2))
+
+release:
+	mkdir -p $(RELEASE_DIR)
+	sed -e 's/appVersion: "latest"/appVersion: "$(IMAGE_VERSION)"/g' ./chart/*/Chart.yaml
+	tar -czvf ./$(RELEASE_DIR)/karpenter-crd-$(IMAGE_VERSION).tgz -C ./chart/karpenter-crd .
+	tar -czvf ./$(RELEASE_DIR)/karpenter-$(IMAGE_VERSION).tgz -C ./chart/karpenter .
 
 binary: ## Build the Karpenter controller binary using go build
 	go build $(GOFLAGS) -o $(BINARY_FILENAME) ./cmd/controller/...
