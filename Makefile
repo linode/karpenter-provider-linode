@@ -26,30 +26,6 @@ TMPFILE := $(shell mktemp)
 GOARCH ?= $(shell go env GOARCH)
 BINARY_FILENAME = karpenter-provider-linode-$(GOARCH)
 
-# Use CACHE_BIN for tools that cannot use devbox
-CACHE_BIN ?= $(CURDIR)/bin
-
-# if the $DEVBOX_PACKAGES_DIR env variable exists that means we are within a devbox shell and can safely
-# use devbox's bin for our tools
-ifdef DEVBOX_PACKAGES_DIR
-	CACHE_BIN = $(DEVBOX_PACKAGES_DIR)/bin
-endif
-
-export PATH := $(CACHE_BIN):$(PATH)
-$(CACHE_BIN):
-	mkdir -p $(CACHE_BIN)
-
-# Tooling
-ENVTEST   ?= $(CACHE_BIN)/setup-envtest
-# renovate: datasource=go depName=sigs.k8s.io/controller-runtime/tools/setup-envtest
-ENVTEST_VERSION ?= release-0.22
-
-.PHONY: envtest
-envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
-$(ENVTEST): $(CACHE_BIN)
-	GOBIN=$(CACHE_BIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION)
-
-
 help: ## Display help
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
@@ -122,7 +98,7 @@ benchmark: envtest
 coverage:
 	go tool cover -html coverage.out -o coverage.html
 
-verify: tidy download ## Verify code. Includes dependencies, linting, formatting, etc
+verify: tidy download controller-gen ## Verify code. Includes dependencies, linting, formatting, etc
 	go generate ./...
 	hack/boilerplate.sh
 	cp  $(KARPENTER_CORE_DIR)/pkg/apis/crds/* pkg/apis/crds
@@ -175,6 +151,58 @@ helm-uninstall: ## remove both charts from the existing cluster (requires k8s co
 	@helm uninstall karpenter-crd -n karpenter
 
 .PHONY: help presubmit ci-test ci-non-test run test deflake e2etests e2etests-deflake benchmark coverage verify vulncheck image apply install delete docgen codegen tidy download update-karpenter
+
+## --------------------------------------
+## Build Dependencies
+## --------------------------------------
+
+##@ Build Dependencies:
+
+## Location to install dependencies to
+
+# Use CACHE_BIN for tools that cannot use devbox
+CACHE_BIN ?= $(CURDIR)/bin
+
+# if the $DEVBOX_PACKAGES_DIR env variable exists that means we are within a devbox shell and can safely
+# use devbox's bin for our tools
+ifdef DEVBOX_PACKAGES_DIR
+	CACHE_BIN = $(DEVBOX_PACKAGES_DIR)/bin
+endif
+
+export PATH := $(CACHE_BIN):$(PATH)
+$(CACHE_BIN):
+	mkdir -p $(CACHE_BIN)
+
+
+## --------------------------------------
+## Tooling Binaries
+## --------------------------------------
+
+##@ Tooling Binaries:
+# setup-envtest does not have devbox support so always use CACHE_BIN
+
+ENVTEST   ?= $(CACHE_BIN)/setup-envtest
+CONTROLLER_GEN ?= $(CACHE_BIN)/controller-gen
+
+## Tool Versions
+# renovate: datasource=go depName=sigs.k8s.io/controller-runtime/tools/setup-envtest
+ENVTEST_VERSION ?= release-0.22
+
+# renovate: datasource=go depName=sigs.k8s.io/controller-tools
+CONTROLLER_TOOLS_VERSION ?= v0.19.0
+
+.PHONY: tools
+tools: $(CONTROLLER_GEN) $(ENVTEST)
+
+.PHONY: envtest
+envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
+$(ENVTEST): $(CACHE_BIN)
+	GOBIN=$(CACHE_BIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION)
+
+.PHONY: controller-gen
+controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
+$(CONTROLLER_GEN): $(LOCALBIN)
+	GOBIN=$(CACHE_BIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
 
 define newline
 
