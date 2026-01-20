@@ -1,14 +1,51 @@
-[![CI](https://github.com/linode/karpenter-provider-linode/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/aws/karpenter/actions/workflows/ci.yaml)
-![GitHub stars](https://img.shields.io/github/stars/aws/karpenter-provider-aws)
-![GitHub forks](https://img.shields.io/github/forks/aws/karpenter-provider-aws)
-[![GitHub License](https://img.shields.io/badge/License-Apache%202.0-ff69b4.svg)](https://github.com/linode/karpenter-provider-linode/blob/main/LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/linode/karpenter-provider-linode)](https://goreportcard.com/report/github.com/aws/karpenter)
-[![Coverage Status](https://coveralls.io/repos/github/aws/karpenter-provider-aws/badge.svg?branch=main)](https://coveralls.io/github/aws/karpenter?branch=main)
-[![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/linode/karpenter-provider-linode/issues)
+# Karpenter Provider Linode
 
-![](website/static/banner.png)
+<p align="center">
+<!-- go doc / reference card -->
+<a href="https://pkg.go.dev/github.com/linode/karpenter-provider-linode">
+<img src="https://pkg.go.dev/badge/github.com/linode/karpenter-provider-linode.svg"></a>
+<!-- goreportcard badge -->
+<a href="https://goreportcard.com/report/github.com/linode/karpenter-provider-linode">
+<img src="https://goreportcard.com/badge/github.com/linode/karpenter-provider-linode"></a>
+<!-- join kubernetes slack channel for linode -->
+<a href="https://kubernetes.slack.com/messages/CD4B15LUR">
+<img src="https://img.shields.io/badge/join%20slack-%23linode-brightgreen"></a>
+<!-- PRs welcome -->
+<a href="http://makeapullrequest.com">
+<img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"></a>
+</p>
+<p align="center">
+<!-- go build / test CI -->
+<a href="https://github.com/linode/karpenter-provider-linode/actions/workflows/ci.yml">
+<img src="https://github.com/linode/karpenter-provider-linode/actions/workflows/ci.yml/badge.svg"></a>
+<!-- ko build CI -->
+<a href="https://github.com/linode/karpenter-provider-linode/actions/workflows/release.yml">
+<img src="https://github.com/linode/karpenter-provider-linode/actions/workflows/release.yml/badge.svg"></a>
+</p>
 
-Karpenter is an open-source node provisioning project built for Kubernetes.
+---
+
+*PLEASE NOTE*: This project is considered ALPHA quality and should NOT be used for production, as it is currently in active development. Use at your own risk. APIs, configuration file formats, and functionality are all subject to change frequently. That said, please try it out in your development and test environments and let us know if it works. Contributions welcome! Thanks!
+
+---
+
+Table of contents:
+- [Features Overview](#features-overview)
+- [Installation](#installation)
+  - [Install utilities](#install-tools)
+  - [Create a cluster](#create-a-cluster)
+  - [Configure Helm chart values](#configure-helm-chart-values)
+  - [Install Karpenter](#install-karpenter)
+- [Using Karpenter](#using-karpenter)
+  - [Create NodePool](#create-nodepool)
+  - [Scale up deployment](#scale-up-deployment)
+  - [Scale down deployment](#scale-down-deployment)
+  - [Delete Karpenter nodes manually](#delete-karpenter-nodes-manually)
+- [Cleanup](#cleanup)
+  - [Delete the cluster](#delete-the-cluster)
+
+## Features Overview
+The LKE Karpenter Provider enables node autoprovisioning using [Karpenter](https://karpenter.sh/) on your LKE cluster.
 Karpenter improves the efficiency and cost of running workloads on Kubernetes clusters by:
 
 * **Watching** for pods that the Kubernetes scheduler has marked as unschedulable
@@ -16,18 +53,188 @@ Karpenter improves the efficiency and cost of running workloads on Kubernetes cl
 * **Provisioning** nodes that meet the requirements of the pods
 * **Removing** the nodes when the nodes are no longer needed
 
-Come discuss Karpenter in the [#karpenter](https://kubernetes.slack.com/archives/C02SFFZSA2K) channel, in the [Kubernetes slack](https://slack.k8s.io/) or join the [Karpenter working group](https://karpenter.sh/docs/contributing/community-meetings/#working-group-meetings) bi-weekly calls. If you want to contribute to the Karpenter project, please refer to the Karpenter docs.
+## Installation
 
-Check out the [Docs](https://karpenter.sh/docs/) to learn more.
+### Install tools
 
-## Talks
-- 03/19/2024 [Harnessing Karpenter: Transforming Kubernetes Clusters with Argo Workflows](https://www.youtube.com/watch?v=rq57liGu0H4)
-- 12/04/2023 [AWS re:Invent 2023 - Harness the power of Karpenter to scale, optimize & upgrade Kubernetes](https://www.youtube.com/watch?v=lkg_9ETHeks)
-- 09/08/2022 [Workload Consolidation with Karpenter](https://youtu.be/BnksdJ3oOEs)
-- 05/19/2022 [Scaling K8s Nodes Without Breaking the Bank or Your Sanity](https://www.youtube.com/watch?v=UBb8wbfSc34)
-- 03/25/2022 [Karpenter @ AWS Community Day 2022](https://youtu.be/sxDtmzbNHwE?t=3931)
-- 12/20/2021 [How To Auto-Scale Kubernetes Clusters With Karpenter](https://youtu.be/C-2v7HT-uSA)
-- 11/30/2021 [Karpenter vs Kubernetes Cluster Autoscaler](https://youtu.be/3QsVRHVdOnM)
-- 11/19/2021 [Karpenter @ Container Day](https://youtu.be/qxWJRUF6JJc)
-- 05/14/2021 [Groupless Autoscaling with Karpenter @ Kubecon](https://www.youtube.com/watch?v=43g8uPohTgc)
-- 05/04/2021 [Karpenter @ Container Day](https://youtu.be/MZ-4HzOC_ac?t=7137)
+Install these tools before proceeding:
+* [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
+* [Helm](https://helm.sh/docs/intro/install/)
+
+### Create a cluster
+
+1. Create a new LKE cluster with any amount of nodes in any region.
+This can be easily done in [Linode Cloud Manager](https://cloud.linode.com/) or via the [Linode CLI](https://techdocs.akamai.com/cloud-computing/docs/getting-started-with-the-linode-cli).
+2. Download the cluster's kubeconfig when ready.
+
+### Configure Helm chart values
+
+The Karpenter Helm chart requires specific configuration values to work with an LKE cluster.
+
+1. Create a Linode PAT if you don't already have a LINODE\_TOKEN env var set. Karpenter will use this for managing nodes in the LKE cluster.
+2. Set the variables:
+
+    ```bash
+    export CLUSTER_NAME=<cluster name>
+    export LINODE_REGION=<region> # whatever region your LKE cluster is running in
+    export KUBECONFIG=<path to your LKE kubeconfig>
+    export KARPENTER_NAMESPACE=kube-system
+    ```
+
+### Install Karpenter
+
+Use the configured environment variables to install Karpenter using Helm:
+
+```bash
+helm upgrade --install --namespace karpenter --create-namespace karpenter-crd charts/karpenter-crd
+helm upgrade --install --namespace karpenter --create-namespace karpenter charts/karpenter \
+        --namespace "${KARPENTER_NAMESPACE}" --create-namespace \
+		--set region=${LINODE_REGION} \
+		--set settings.clusterName=${CLUSTER_NAME} \
+		--set apiToken=${LINODE_TOKEN} \
+        --wait
+```
+
+Check karpenter deployed successfully:
+
+```bash
+kubectl get pods --namespace "${KARPENTER_NAMESPACE}" -l app.kubernetes.io/name=karpenter
+```
+
+Check its logs:
+
+```bash
+kubectl logs -f -n "${KARPENTER_NAMESPACE}" -l app.kubernetes.io/name=karpenter -c controller
+```
+
+## Using Karpenter
+
+### Create NodePool
+
+A single Karpenter NodePool is capable of handling many different pod shapes. Karpenter makes scheduling and provisioning decisions based on pod attributes such as labels and affinity. In other words, Karpenter eliminates the need to manage many different node groups.
+
+Create a default NodePool using the command below. (Additional examples available in the repository under [`examples/v1`](/examples/v1).) The `consolidationPolicy` set to `WhenUnderutilized` in the `disruption` block configures Karpenter to reduce cluster cost by removing and replacing nodes. As a result, consolidation will terminate any empty nodes on the cluster. This behavior can be disabled by setting consolidateAfter to `Never`, telling Karpenter that it should never consolidate nodes.
+
+Note: This NodePool will create capacity as long as the sum of all created capacity is less than the specified limit.
+
+```bash
+cat <<EOF | kubectl apply -f -
+---
+apiVersion: karpenter.k8s.linode/v1
+kind: LinodeNodeClass
+metadata:
+  name: default
+spec:
+  image: "linode/ubuntu22.04"
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: default
+spec:
+  template:
+    spec:
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+      nodeClassRef:
+        group: karpenter.k8s.linode
+        kind: LinodeNodeClass
+        name: default
+      expireAfter: 720h # 30 * 24h = 720h
+  limits:
+    cpu: 1000
+EOF
+```
+
+Karpenter is now active and ready to begin provisioning nodes.
+
+### Scale up deployment
+
+This deployment uses the [pause image](https://www.ianlewis.org/en/almighty-pause-container) and starts with zero replicas.
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inflate
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: inflate
+  template:
+    metadata:
+      labels:
+        app: inflate
+    spec:
+      terminationGracePeriodSeconds: 0
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+      containers:
+      - name: inflate
+        image: public.ecr.aws/eks-distro/kubernetes/pause:3.7
+        resources:
+          requests:
+            cpu: 1
+        securityContext:
+          allowPrivilegeEscalation: false
+EOF
+
+kubectl scale deployment inflate --replicas 5
+kubectl logs -f -n "${KARPENTER_NAMESPACE}" -l app.kubernetes.io/name=karpenter -c controller
+```
+
+### Scale down deployment
+
+Now, delete the deployment. After a short amount of time, Karpenter should terminate the empty nodes due to consolidation.
+
+```bash
+kubectl delete deployment inflate
+kubectl logs -f -n "${KARPENTER_NAMESPACE}" -l app.kubernetes.io/name=karpenter -c controller
+```
+
+### Delete Karpenter nodes manually
+
+If you delete a node with kubectl, Karpenter will gracefully cordon, drain, and shutdown the corresponding instance. Under the hood, Karpenter adds a finalizer to the node object, which blocks deletion until all pods are drained and the instance is terminated. Keep in mind, this only works for nodes provisioned by Karpenter.
+
+```bash
+kubectl delete node $NODE_NAME
+```
+
+## Cleanup
+
+### Delete the cluster
+
+To avoid additional charges, remove the demo infrastructure from your Linode account.
+
+```bash
+helm uninstall karpenter --namespace "${KARPENTER_NAMESPACE}"
+linode-cli lke cluster-delete --label "${CLUSTER_NAME}"
+```
+
+---
+
+### Source Attribution
+
+Notice: Files in this source code originated from a fork of https://github.com/aws/karpenter-provider-aws
+which is under an Apache 2.0 license. Those files have been modified to reflect environmental requirements in LKE and Linode.
+
+---
+### Community, discussion, contribution, and support
+This project follows the [Linode Community Code of Conduct](https://www.linode.com/community/questions/conduct). 
+
+Come discuss Karpenter in the [#karpenter](https://kubernetes.slack.com/archives/C02SFFZSA2K) channel in the [Kubernetes slack](https://slack.k8s.io/)!
+
+Check out the [Docs](https://karpenter.sh/) to learn more.
+
