@@ -82,7 +82,9 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	tagList = append(tagList, utils.MapToTagList(tags)...)
 	tagList = utils.DedupeTags(tagList)
 
-	taints := convertToLkeTaints(nodeClaim.Spec.Taints)
+	// Merge both regular taints and startup taints (includes karpenter.sh/unregistered)
+	allTaints := append(nodeClaim.Spec.Taints, nodeClaim.Spec.StartupTaints...)
+	taints := convertToLkeTaints(allTaints)
 
 	createOpts := linodego.LKENodePoolCreateOptions{
 		Count:  1, // we only create one node per nodepool
@@ -212,9 +214,13 @@ func isKarpenterManagedPool(pool *linodego.LKENodePool) bool {
 func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
 	poolID, err := p.lookupPoolByInstance(ctx, id)
 	if err != nil {
-		return err
+		return cloudprovider.NewNodeClaimNotFoundError(err)
 	}
 	if err := p.client.DeleteLKENodePool(ctx, p.clusterID, poolID); err != nil {
+		if linodego.IsNotFound(err) {
+			p.nodeCache.Delete(id)
+			return cloudprovider.NewNodeClaimNotFoundError(err)
+		}
 		return err
 	}
 	p.nodeCache.Delete(id)
