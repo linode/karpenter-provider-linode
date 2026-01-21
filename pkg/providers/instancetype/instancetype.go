@@ -199,7 +199,7 @@ func (p *DefaultProvider) UpdateInstanceTypes(ctx context.Context) error {
 	p.muInstanceTypesInfo.Lock()
 	defer p.muInstanceTypesInfo.Unlock()
 
-	instanceTypes, err := p.client.ListTypes(ctx, &linodego.ListOptions{}) // TODO: pagination / filter by region (do we expect to support multiple regions?)
+	instanceTypes, err := p.client.ListTypes(ctx, &linodego.ListOptions{}) // TODO: filter by region (do we expect to support multiple regions?)
 	if err != nil {
 		return fmt.Errorf("listing linode instance types, %w", err)
 	}

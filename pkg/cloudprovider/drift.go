@@ -17,13 +17,33 @@ package cloudprovider
 import (
 	"context"
 
+	"github.com/samber/lo"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 )
 
-// TODO: Implement drift detection
-func (c *CloudProvider) isNodeClassDrifted(ctx context.Context, nodeClaim *karpv1.NodeClaim, nodePool *karpv1.NodePool, nodeClass *v1.LinodeNodeClass) (cloudprovider.DriftReason, error) {
-	return "", nil
+const (
+	NodeClassDrift cloudprovider.DriftReason = "NodeClassDrift"
+)
+
+func (c *CloudProvider) isNodeClassDrifted(_ context.Context, nodeClaim *karpv1.NodeClaim, _ *karpv1.NodePool, nodeClass *v1.LinodeNodeClass) cloudprovider.DriftReason {
+	return c.areStaticFieldsDrifted(nodeClaim, nodeClass)
+}
+
+func (c *CloudProvider) areStaticFieldsDrifted(nodeClaim *karpv1.NodeClaim, nodeClass *v1.LinodeNodeClass) cloudprovider.DriftReason {
+	nodeClassHash, foundNodeClassHash := nodeClass.Annotations[v1.AnnotationLinodeNodeClassHash]
+	nodeClassHashVersion, foundNodeClassHashVersion := nodeClass.Annotations[v1.AnnotationLinodeNodeClassHashVersion]
+	nodeClaimHash, foundNodeClaimHash := nodeClaim.Annotations[v1.AnnotationLinodeNodeClassHash]
+	nodeClaimHashVersion, foundNodeClaimHashVersion := nodeClaim.Annotations[v1.AnnotationLinodeNodeClassHashVersion]
+
+	if !foundNodeClassHash || !foundNodeClaimHash || !foundNodeClassHashVersion || !foundNodeClaimHashVersion {
+		return ""
+	}
+	// validate that the hash version for the LinodeNodeClass is the same as the NodeClaim before evaluating for static drift
+	if nodeClassHashVersion != nodeClaimHashVersion {
+		return ""
+	}
+	return lo.Ternary(nodeClassHash != nodeClaimHash, NodeClassDrift, "")
 }

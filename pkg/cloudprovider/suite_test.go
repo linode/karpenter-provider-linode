@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/awslabs/operatorpkg/object"
 	opstatus "github.com/awslabs/operatorpkg/status"
 	"github.com/linode/linodego"
@@ -28,20 +30,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	clock "k8s.io/utils/clock/testing"
+	"k8s.io/utils/ptr"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/controllers/provisioning"
 	"sigs.k8s.io/karpenter/pkg/controllers/state"
 	"sigs.k8s.io/karpenter/pkg/events"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
+	"sigs.k8s.io/karpenter/pkg/scheduling"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 	testv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
-
-	"github.com/linode/karpenter-provider-linode/pkg/fake"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
+	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/test"
 
@@ -170,6 +173,19 @@ var _ = Describe("CloudProvider", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(corecloudprovider.IsNodeClassNotReadyError(err)).To(BeFalse())
 	})
+	It("should return with NotFound if NodeClass is terminating", func() {
+		nodeClass.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+		ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
+		_, err := cloudProvider.Create(ctx, nodeClaim)
+		Expect(err).To(HaveOccurred())
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+	It("should return InsufficientCapacityError error on creation if NodeClass does not exist", func() {
+		ExpectApplied(ctx, env.Client, nodePool, nodeClaim)
+		_, err := cloudProvider.Create(ctx, nodeClaim)
+		Expect(err).To(HaveOccurred())
+		Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeTrue())
+	})
 	It("should return NodeClassNotReady error on creation if NodeClass is not ready", func() {
 		nodeClass.StatusConditions().SetFalse(opstatus.ConditionReady, "NodeClassNotReady", "NodeClass not ready")
 		ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
@@ -249,8 +265,6 @@ var _ = Describe("CloudProvider", func() {
 			// 1 instance launch would have been sufficient to fit the pods and was cheaper but we would launch 2 separate
 			// instances to meet the minimum requirement.
 			linodeInstanceTypeInfo := fake.MakeInstances()
-			linodeInstanceTypeInfo[0].VCPUs = 1
-			linodeInstanceTypeInfo[1].VCPUs = 8
 			linodeEnv.LinodeAPI.ListTypesOutput.Set(&linodeInstanceTypeInfo)
 			linodeOfferings := fake.MakeInstanceOfferings(linodeInstanceTypeInfo)
 			linodeEnv.LinodeAPI.ListRegionsAvailabilityOutput.Set(&linodeOfferings)
@@ -296,13 +310,13 @@ var _ = Describe("CloudProvider", func() {
 			pod1 := coretest.UnschedulablePod(
 				coretest.PodOptions{
 					ResourceRequirements: corev1.ResourceRequirements{Requests: corev1.ResourceList{
-						corev1.ResourceCPU: resource.MustParse("0.9")},
+						corev1.ResourceCPU: resource.MustParse("3.9")},
 					},
 				})
 			pod2 := coretest.UnschedulablePod(
 				coretest.PodOptions{
 					ResourceRequirements: corev1.ResourceRequirements{Requests: corev1.ResourceList{
-						corev1.ResourceCPU: resource.MustParse("0.9")},
+						corev1.ResourceCPU: resource.MustParse("3.9")},
 					},
 				})
 			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod1, pod2)
@@ -310,14 +324,153 @@ var _ = Describe("CloudProvider", func() {
 			// Under normal circumstances 1 node would have been created that fits both the pods but
 			// here minValue enforces to include both the instances. And since one of the instances can
 			// only fit 1 pod, only 1 pod is scheduled to run in the node to be launched by CreateInstances.
-
-			// FIXME
-			/* node1 := ExpectScheduled(ctx, env.Client, pod1)
+			node1 := ExpectScheduled(ctx, env.Client, pod1)
 			node2 := ExpectScheduled(ctx, env.Client, pod2)
 
 			// This ensures that the pods are scheduled in 2 different nodes.
 			Expect(node1.Name).ToNot(Equal(node2.Name))
-			Expect(linodeEnv.LinodeAPI.CreateInstanceBehavior.Calls() == 2).To(BeTrue()) */
+			Expect(linodeEnv.LinodeAPI.CreateInstanceBehavior.Calls() == 2).To(BeTrue())
+		})
+	})
+	Context("NodeClaim Drift", func() {
+		var selectedInstanceType *corecloudprovider.InstanceType
+		var instance linodego.Instance
+		BeforeEach(func() {
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			instanceTypes, err := cloudProvider.GetInstanceTypes(ctx, nodePool)
+			Expect(err).ToNot(HaveOccurred())
+			var ok bool
+			selectedInstanceType, ok = lo.Find(instanceTypes, func(i *corecloudprovider.InstanceType) bool {
+				return i.Requirements.Compatible(scheduling.NewLabelRequirements(map[string]string{
+					corev1.LabelArchStable: karpv1.ArchitectureAmd64,
+				})) == nil
+			})
+			Expect(ok).To(BeTrue())
+
+			// Create the instance we want returned from the Linode API
+			instance = linodego.Instance{
+				Type:   selectedInstanceType.Name,
+				Status: linodego.InstanceRunning,
+				ID:     fake.InstanceID(),
+				Region: fake.DefaultRegion,
+			}
+			linodeEnv.LinodeAPI.GetInstanceBehavior.Output.Set(ptr.To(ptr.To(instance)))
+			nodeClass.Annotations = lo.Assign(nodeClass.Annotations, map[string]string{
+				v1.AnnotationLinodeNodeClassHash:        nodeClass.Hash(),
+				v1.AnnotationLinodeNodeClassHashVersion: v1.LinodeNodeClassHashVersion,
+			})
+			nodeClaim.Status.ProviderID = fake.ProviderID(instance.ID)
+			nodeClaim.Annotations = lo.Assign(nodeClaim.Annotations, map[string]string{
+				v1.AnnotationLinodeNodeClassHash:        nodeClass.Hash(),
+				v1.AnnotationLinodeNodeClassHashVersion: v1.LinodeNodeClassHashVersion,
+			})
+			nodeClaim.Labels = lo.Assign(nodeClaim.Labels, map[string]string{corev1.LabelInstanceTypeStable: selectedInstanceType.Name})
+		})
+		It("should not fail if NodeClass does not exist", func() {
+			ExpectDeleted(ctx, env.Client, nodeClass)
+			drifted, err := cloudProvider.IsDrifted(ctx, nodeClaim)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(drifted).To(BeEmpty())
+		})
+		It("should not fail if NodePool does not exist", func() {
+			ExpectDeleted(ctx, env.Client, nodePool)
+			drifted, err := cloudProvider.IsDrifted(ctx, nodeClaim)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(drifted).To(BeEmpty())
+		})
+		It("should return drifted if there are multiple drift reasons", func() {
+			// Instance is a reference to what we return in the GetInstances call
+			instance.ID = fake.InstanceID()
+			linodeEnv.LinodeAPI.GetInstanceBehavior.Output.Set(ptr.To(ptr.To(instance)))
+
+			// Assign a fake hash
+			nodeClass.Annotations = lo.Assign(nodeClass.Annotations, map[string]string{
+				v1.AnnotationLinodeNodeClassHash: "abcdefghijkl",
+			})
+			ExpectApplied(ctx, env.Client, nodeClass)
+			isDrifted, err := cloudProvider.IsDrifted(ctx, nodeClaim)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(isDrifted).To(Equal(cloudprovider.NodeClassDrift))
+		})
+		It("should not return drifted if the NodeClaim is valid", func() {
+			isDrifted, err := cloudProvider.IsDrifted(ctx, nodeClaim)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(isDrifted).To(BeEmpty())
+		})
+		Context("Static Drift Detection", func() {
+			BeforeEach(func() {
+				nodeClass = &v1.LinodeNodeClass{
+					ObjectMeta: nodeClass.ObjectMeta,
+					Spec: v1.LinodeNodeClassSpec{
+						Tags: []string{
+							"fakeKey:fakeValue",
+						},
+					},
+					Status: v1.LinodeNodeClassStatus{},
+				}
+				nodeClass.Annotations = lo.Assign(nodeClass.Annotations, map[string]string{v1.AnnotationLinodeNodeClassHash: nodeClass.Hash()})
+				nodeClaim.Annotations = lo.Assign(nodeClaim.Annotations, map[string]string{v1.AnnotationLinodeNodeClassHash: nodeClass.Hash()})
+			})
+			It("should not return drifted if karpenter.k8s.linode/LinodeNodeclass-hash annotation is not present on the NodeClaim", func() {
+				nodeClaim.Annotations = map[string]string{
+					v1.AnnotationLinodeNodeClassHashVersion: v1.LinodeNodeClassHashVersion,
+				}
+				nodeClass.Spec.Tags = []string{
+					"Test Key:Test Value",
+				}
+				ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+				isDrifted, err := cloudProvider.IsDrifted(ctx, nodeClaim)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(isDrifted).To(BeEmpty())
+			})
+			It("should not return drifted if the NodeClaim's karpenter.k8s.linode/LinodeNodeclass-hash-version annotation does not match the LinodeNodeClass's", func() {
+				nodeClass.Annotations = map[string]string{
+					v1.AnnotationLinodeNodeClassHash:        "test-hash-111111",
+					v1.AnnotationLinodeNodeClassHashVersion: "test-hash-version-1",
+				}
+				nodeClaim.Annotations = map[string]string{
+					v1.AnnotationLinodeNodeClassHash:        "test-hash-222222",
+					v1.AnnotationLinodeNodeClassHashVersion: "test-hash-version-2",
+				}
+				ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+				isDrifted, err := cloudProvider.IsDrifted(ctx, nodeClaim)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(isDrifted).To(BeEmpty())
+			})
+			It("should not return drifted if karpenter.k8s.linode/LinodeNodeclass-hash-version annotation is not present on the NodeClass", func() {
+				nodeClass.Annotations = map[string]string{
+					v1.AnnotationLinodeNodeClassHash: "test-hash-111111",
+				}
+				nodeClaim.Annotations = map[string]string{
+					v1.AnnotationLinodeNodeClassHash:        "test-hash-222222",
+					v1.AnnotationLinodeNodeClassHashVersion: "test-hash-version-2",
+				}
+				// should trigger drift
+				nodeClass.Spec.Tags = []string{
+					"Test Key:Test Value",
+				}
+				ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+				isDrifted, err := cloudProvider.IsDrifted(ctx, nodeClaim)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(isDrifted).To(BeEmpty())
+			})
+			It("should not return drifted if karpenter.k8s.linode/LinodeNodeclass-hash-version annotation is not present on the NodeClaim", func() {
+				nodeClass.Annotations = map[string]string{
+					v1.AnnotationLinodeNodeClassHash:        "test-hash-111111",
+					v1.AnnotationLinodeNodeClassHashVersion: "test-hash-version-1",
+				}
+				nodeClaim.Annotations = map[string]string{
+					v1.AnnotationLinodeNodeClassHash: "test-hash-222222",
+				}
+				// should trigger drift
+				nodeClass.Spec.Tags = []string{
+					"Test Key:Test Value",
+				}
+				ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+				isDrifted, err := cloudProvider.IsDrifted(ctx, nodeClaim)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(isDrifted).To(BeEmpty())
+			})
 		})
 	})
 })
