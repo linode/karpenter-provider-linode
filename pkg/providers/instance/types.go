@@ -34,6 +34,11 @@ type Instance struct {
 	Status              linodego.InstanceStatus
 	WatchdogEnabled     bool
 	Tags                []string
+	Labels              map[string]string
+	Taints              []linodego.LKENodePoolTaint
+	PoolID              int
+	NodeID              string
+	LKEStatus           linodego.LKELinodeStatus
 	PlacementGroup      *linodego.InstancePlacementGroup
 	DiskEncryption      linodego.InstanceDiskEncryption
 	InterfaceGeneration linodego.InterfaceGeneration
@@ -57,5 +62,24 @@ func NewInstance(ctx context.Context, instance linodego.Instance) *Instance {
 		DiskEncryption: instance.DiskEncryption,
 		// Note: Linode interfaces may not currently be available to all users.
 		InterfaceGeneration: instance.InterfaceGeneration,
+	}
+}
+
+// NewLKEInstance returns an Instance representing an LKE node pool linode.
+func NewLKEInstance(pool *linodego.LKENodePool, node linodego.LKENodePoolLinode, region string) *Instance {
+	// Use current time as Created since LKE API doesn't return node creation time.
+	// This is important for GC's 30-second grace period to work correctly.
+	now := time.Now()
+	return &Instance{
+		ID:        node.InstanceID,
+		Created:   &now,
+		Region:    region,
+		Type:      pool.Type,
+		Tags:      pool.Tags,
+		Labels:    pool.Labels,
+		Taints:    pool.Taints,
+		PoolID:    pool.ID,
+		NodeID:    node.ID,
+		LKEStatus: node.Status,
 	}
 }

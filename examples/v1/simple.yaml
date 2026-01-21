@@ -3,7 +3,7 @@ kind: LinodeNodeClass
 metadata:
   name: default
 spec:
-  image: "linode/ubuntu22.04"
+  managedLKE: true
 ---
 apiVersion: karpenter.sh/v1
 kind: NodePool

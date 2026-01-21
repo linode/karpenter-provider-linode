@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: linodenodeclasses.karpenter.k8s.linode
 spec:
   group: karpenter.k8s.linode
@@ -453,6 +453,30 @@ spec:
                 description: labels is a map of Kubernetes node labels to apply to
                   the Node.
                 type: object
+              lkeK8sVersion:
+                description: |-
+                  lkeK8sVersion is the Kubernetes version for LKE node pools.
+                  Only used when managedLKE is true. Only available for Enterprise LKE clusters.
+                type: string
+              lkeUpdateStrategy:
+                description: |-
+                  lkeUpdateStrategy defines how nodes are updated when the LKE node pool is modified.
+                  Only used when managedLKE is true.
+                  Valid values are "rolling_update" and "on_recycle".
+                enum:
+                - rolling_update
+                - on_recycle
+                type: string
+              managedLKE:
+                default: true
+                description: |-
+                  managedLKE enables LKE-managed node pool mode. When true (default), Karpenter provisions
+                  nodes via LKE NodePool APIs instead of creating direct Linode instances.
+                  In this mode, LKE manages the node image, network configuration, and kubelet.
+                  Fields like image, authorizedKeys, linodeInterfaces, osDisk, dataDisks,
+                  placementGroup, configuration, vpcID, ipv6Options, swapSize, and kubelet are ignored.
+                  Set to false to use direct Linode instance provisioning.
+                type: boolean
               osDisk:
                 description: |-
                   osDisk is a configuration for the root disk that includes the OS,

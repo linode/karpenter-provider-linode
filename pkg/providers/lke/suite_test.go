@@ -12,11 +12,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package lkenode_test
+package lke_test
 
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/awslabs/operatorpkg/object"
@@ -36,7 +37,7 @@ import (
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
-	"github.com/linode/karpenter-provider-linode/pkg/providers/lkenode"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/test"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -161,7 +162,7 @@ var _ = Describe("LKENodeProvider", func() {
 		Expect(err).To(BeNil())
 		Expect(poolInstance).ToNot(BeNil())
 		Expect(poolInstance.Type).ToNot(BeEmpty())
-		Expect(poolInstance.InstanceID).ToNot(BeZero())
+		Expect(poolInstance.ID).ToNot(BeZero())
 	})
 
 	It("should merge NodeClass tags with provided tags", func() {
@@ -223,11 +224,11 @@ var _ = Describe("LKENodeProvider", func() {
 			Expect(createdNode).ToNot(BeNil())
 
 			// Get the node - should return from cache
-			id := fmt.Sprintf("%d", createdNode.InstanceID)
+			id := fmt.Sprintf("%d", createdNode.ID)
 			retrievedNode, err := linodeEnv.LKENodeProvider.Get(ctx, id)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(retrievedNode).ToNot(BeNil())
-			Expect(retrievedNode.InstanceID).To(Equal(createdNode.InstanceID))
+			Expect(retrievedNode.ID).To(Equal(createdNode.ID))
 			Expect(retrievedNode.PoolID).To(Equal(createdNode.PoolID))
 		})
 
@@ -277,9 +278,9 @@ var _ = Describe("LKENodeProvider", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(nodes)).To(BeNumerically(">=", 2))
 
-			instanceIDs := lo.Map(nodes, func(n *lkenode.LKENode, _ int) int { return n.InstanceID })
-			Expect(instanceIDs).To(ContainElement(node1.InstanceID))
-			Expect(instanceIDs).To(ContainElement(node2.InstanceID))
+			instanceIDs := lo.Map(nodes, func(n *instance.Instance, _ int) int { return n.ID })
+			Expect(instanceIDs).To(ContainElement(node1.ID))
+			Expect(instanceIDs).To(ContainElement(node2.ID))
 		})
 
 		It("should return empty list when no pools exist", func() {
@@ -303,7 +304,7 @@ var _ = Describe("LKENodeProvider", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// Delete by instance ID
-			id := fmt.Sprintf("%d", createdNode.InstanceID)
+			id := fmt.Sprintf("%d", createdNode.ID)
 			err = linodeEnv.LKENodeProvider.Delete(ctx, id)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -346,19 +347,19 @@ var _ = Describe("LKENodeProvider", func() {
 				v1.NameTagKey:      "test-node",
 				v1.NodeClaimTagKey: "test-claim",
 			}
-			err = linodeEnv.LKENodeProvider.UpdateTags(ctx, createdNode.PoolID, newTags)
+			err = linodeEnv.LKENodeProvider.CreateTags(ctx, strconv.Itoa(createdNode.ID), newTags)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Verify tags were merged by getting the node fresh
-			id := fmt.Sprintf("%d", createdNode.InstanceID)
-			updatedNode, err := linodeEnv.LKENodeProvider.Get(ctx, id, lkenode.SkipCache)
+			id := fmt.Sprintf("%d", createdNode.ID)
+			updatedNode, err := linodeEnv.LKENodeProvider.Get(ctx, id, instance.SkipCache)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(updatedNode.Tags).To(ContainElement(ContainSubstring(v1.NameTagKey)))
 			Expect(updatedNode.Tags).To(ContainElement(ContainSubstring(v1.NodeClaimTagKey)))
 		})
 
 		It("should return error when pool not found", func() {
-			err := linodeEnv.LKENodeProvider.UpdateTags(ctx, 999999, map[string]string{"test": "value"})
+			err := linodeEnv.LKENodeProvider.CreateTags(ctx, "999999", map[string]string{"test": "value"})
 			Expect(err).To(HaveOccurred())
 		})
 	})

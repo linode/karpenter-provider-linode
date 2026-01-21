@@ -166,6 +166,8 @@ settings:
   clusterCABundle: ""
   # -- Cluster name.
   clusterName: ""
+  # -- LKE cluster ID (required for managed LKE operations).
+  clusterID: ""
   # -- Cluster endpoint.
   clusterEndpoint: ""
   # -- The VM memory overhead as a percent that will be subtracted from the total memory for all instance types

@@ -12,12 +12,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package lkenode
+package lke
 
 import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/awslabs/operatorpkg/option"
 	"github.com/patrickmn/go-cache"
@@ -31,6 +32,7 @@ import (
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
@@ -62,8 +64,8 @@ func NewDefaultProvider(
 	}
 }
 
-// Create provisions a new LKE node pool with a single node and returns the first node as LKENode.
-func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*LKENode, error) {
+// Create provisions a new LKE node pool with a single node and returns the first node as Instance.
+func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*instance.Instance, error) {
 	instanceTypes, err := utils.FilterInstanceTypes(ctx, instanceTypes, nodeClaim)
 	if err != nil {
 		return nil, err
@@ -116,17 +118,45 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	if len(pool.Linodes) == 0 {
 		return nil, fmt.Errorf("created node pool %d but no linodes returned", pool.ID)
 	}
-	node := pool.Linodes[0]
-	instance := NewLKENode(pool, node, p.region)
-	p.cacheNode(instance)
-	return instance, nil
+
+	// Wait for InstanceID to be populated (LKE may return 0 while provisioning)
+	node, err := p.waitForInstanceID(ctx, pool.ID)
+	if err != nil {
+		return nil, fmt.Errorf("waiting for instance ID, %w", err)
+	}
+
+	inst := instance.NewLKEInstance(pool, *node, p.region)
+	p.cacheNode(inst)
+	return inst, nil
 }
 
-func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...Options) (*LKENode, error) {
+// waitForInstanceID polls the node pool until the first node has a valid InstanceID
+func (p *DefaultProvider) waitForInstanceID(ctx context.Context, poolID int) (*linodego.LKENodePoolLinode, error) {
+	const maxAttempts = 30
+	const pollInterval = 10 * time.Second
+
+	for i := 0; i < maxAttempts; i++ {
+		pool, err := p.client.GetLKENodePool(ctx, p.clusterID, poolID)
+		if err != nil {
+			return nil, fmt.Errorf("getting node pool %d, %w", poolID, err)
+		}
+		if len(pool.Linodes) > 0 && pool.Linodes[0].InstanceID != 0 {
+			return &pool.Linodes[0], nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+	return nil, fmt.Errorf("timed out waiting for instance ID on pool %d", poolID)
+}
+
+func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...instance.Options) (*instance.Instance, error) {
 	options := option.Resolve(opts...)
 	if !options.SkipCache {
 		if cached, found := p.nodeCache.Get(id); found {
-			return cached.(*LKENode), nil
+			return cached.(*instance.Instance), nil
 		}
 	}
 
@@ -142,24 +172,29 @@ func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...Options) (
 	if err != nil {
 		return nil, err
 	}
-	inst := NewLKENode(pool, *node, p.region)
+	inst := instance.NewLKEInstance(pool, *node, p.region)
 	p.cacheNode(inst)
 	return inst, nil
 }
 
-func (p *DefaultProvider) List(ctx context.Context) ([]*LKENode, error) {
+func (p *DefaultProvider) List(ctx context.Context) ([]*instance.Instance, error) {
 	pools, err := p.listLKEPools(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var instances []*LKENode
+	var instances []*instance.Instance
 	for i := range pools {
 		pool := pools[i]
+		// checking if api filtering is not working but manually filtering here
 		if !isKarpenterManagedPool(&pool) {
 			continue
 		}
 		for _, node := range pool.Linodes {
-			inst := NewLKENode(&pool, node, p.region)
+			// Skip nodes that don't have an InstanceID yet (still provisioning)
+			if node.InstanceID == 0 {
+				continue
+			}
+			inst := instance.NewLKEInstance(&pool, node, p.region)
 			instances = append(instances, inst)
 			p.cacheNode(inst)
 		}
@@ -186,7 +221,11 @@ func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (p *DefaultProvider) UpdateTags(ctx context.Context, poolID int, tags map[string]string) error {
+func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[string]string) error {
+	poolID, err := p.lookupPoolByInstance(ctx, id)
+	if err != nil {
+		return err
+	}
 	pool, err := p.client.GetLKENodePool(ctx, p.clusterID, poolID)
 	if err != nil {
 		return err
@@ -208,14 +247,14 @@ func convertToLkeTaints(taints []corev1.Taint) []linodego.LKENodePoolTaint {
 	return res
 }
 
-func (p *DefaultProvider) cacheNode(n *LKENode) {
-	id := strconv.Itoa(n.InstanceID)
+func (p *DefaultProvider) cacheNode(n *instance.Instance) {
+	id := strconv.Itoa(n.ID)
 	p.nodeCache.SetDefault(id, n)
 }
 
 func (p *DefaultProvider) lookupPoolByInstance(ctx context.Context, id string) (int, error) {
 	if cached, found := p.nodeCache.Get(id); found {
-		return cached.(*LKENode).PoolID, nil
+		return cached.(*instance.Instance).PoolID, nil
 	}
 	instanceID, err := strconv.Atoi(id)
 	if err != nil {
@@ -226,13 +265,17 @@ func (p *DefaultProvider) lookupPoolByInstance(ctx context.Context, id string) (
 		return 0, err
 	}
 	for _, pool := range pools {
+		// Only look in Karpenter-managed pools (API filtering may not work)
+		if !isKarpenterManagedPool(&pool) {
+			continue
+		}
 		for _, node := range pool.Linodes {
 			if node.InstanceID == instanceID {
 				return pool.ID, nil
 			}
 		}
 	}
-	return 0, fmt.Errorf("instance %d not found in any pool", instanceID)
+	return 0, fmt.Errorf("instance %d not found in any Karpenter-managed pool", instanceID)
 }
 
 func findNodeInPool(pool *linodego.LKENodePool, id string) (*linodego.LKENodePoolLinode, error) {

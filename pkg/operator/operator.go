@@ -31,7 +31,7 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
-	"github.com/linode/karpenter-provider-linode/pkg/providers/lkenode"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/lke"
 )
 
 func init() {
@@ -44,7 +44,7 @@ type Operator struct {
 	ValidationCache           *cache.Cache
 	InstanceTypesProvider     *instancetype.DefaultProvider
 	InstanceProvider          instance.Provider
-	LKENodeProvider           lkenode.Provider
+	LKENodeProvider           instance.Provider
 	LinodeClient              sdk.LinodeAPI
 }
 
@@ -79,7 +79,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClientC
 		unavailableOfferingsCache,
 		cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
 	)
-	lkeNodeProvider := lkenode.NewDefaultProvider(
+	lkeNodeProvider := lke.NewDefaultProvider(
 		options.FromContext(ctx).ClusterID,
 		options.FromContext(ctx).ClusterRegion,
 		operator.EventRecorder,

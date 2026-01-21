@@ -36,7 +36,6 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
-	"github.com/linode/karpenter-provider-linode/pkg/providers/lkenode"
 )
 
 func NewControllers(
@@ -49,7 +48,7 @@ func NewControllers(
 	validationCache *cache.Cache,
 	cloudProvider cloudprovider.CloudProvider,
 	instanceProvider instance.Provider,
-	lkenodeProvider lkenode.Provider,
+	lkenodeProvider instance.Provider,
 	instanceTypeProvider *instancetype.DefaultProvider,
 ) []controller.Controller {
 	controllers := []controller.Controller{

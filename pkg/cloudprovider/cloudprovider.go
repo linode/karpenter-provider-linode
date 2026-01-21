@@ -43,7 +43,6 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
-	"github.com/linode/karpenter-provider-linode/pkg/providers/lkenode"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
@@ -55,13 +54,13 @@ type CloudProvider struct {
 
 	instanceTypeProvider instancetype.Provider
 	instanceProvider     instance.Provider
-	lkenodeProvider      lkenode.Provider
+	lkenodeProvider      instance.Provider
 }
 
 func New(
 	instanceTypeProvider instancetype.Provider,
 	instanceProvider instance.Provider,
-	lkenodeProvider lkenode.Provider,
+	lkenodeProvider instance.Provider,
 	recorder events.Recorder,
 	kubeClient client.Client,
 ) *CloudProvider {
@@ -105,7 +104,7 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 
 	// Dispatch based on ManagedLKE mode
 	if nodeClass.IsLKEManaged() {
-		return c.createLKE(ctx, nodeClaim, nodeClass, instanceTypes)
+		return c.createLKENode(ctx, nodeClaim, nodeClass, instanceTypes)
 	}
 	return c.createLinode(ctx, nodeClaim, nodeClass, instanceTypes)
 }
@@ -128,8 +127,8 @@ func (c *CloudProvider) createLinode(ctx context.Context, nodeClaim *karpv1.Node
 	return nc, nil
 }
 
-// createLKE handles LKE-managed node pools
-func (c *CloudProvider) createLKE(ctx context.Context, nodeClaim *karpv1.NodeClaim, nodeClass *v1.LinodeNodeClass, instanceTypes []*cloudprovider.InstanceType) (*karpv1.NodeClaim, error) {
+// createLKENode handles LKE-managed node pools
+func (c *CloudProvider) createLKENode(ctx context.Context, nodeClaim *karpv1.NodeClaim, nodeClass *v1.LinodeNodeClass, instanceTypes []*cloudprovider.InstanceType) (*karpv1.NodeClaim, error) {
 	tags := utils.GetTagsForLKE(nodeClass, nodeClaim, options.FromContext(ctx).ClusterName)
 	lkeNode, err := c.lkenodeProvider.Create(ctx, nodeClass, nodeClaim, tags, instanceTypes)
 	if err != nil {
@@ -196,25 +195,9 @@ func (c *CloudProvider) Get(ctx context.Context, providerID string) (*karpv1.Nod
 		return nil, fmt.Errorf("getting instance ID, %w", err)
 	}
 	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("id", id))
-	instance, instanceErr := c.instanceProvider.Get(ctx, id)
-	if instanceErr == nil {
-		tags := utils.TagListToMap(instance.Tags)
-		// Skip LKE-managed instances - they should be handled by lkenodeProvider
-		if _, isLKEManaged := tags[v1.LabelLKEManaged]; !isLKEManaged {
-			instanceType, err := c.resolveInstanceTypeFromInstance(ctx, instance)
-			if err != nil {
-				return nil, fmt.Errorf("resolving instance type, %w", err)
-			}
-			nc, err := c.resolveNodeClassFromInstance(ctx, instance)
-			if client.IgnoreNotFound(err) != nil {
-				return nil, fmt.Errorf("resolving nodeclass, %w", err)
-			}
-			return c.instanceToNodeClaim(instance, instanceType, nc), nil
-		}
-		// Instance is LKE-managed - fall through to try LKE provider
-	}
 
-	// Try lkenode provider (either instance not found, or it's an LKE-managed node)
+	// Try lkenode provider first - LKE instance tags are on the pool, not the instance,
+	// so we can't rely on instance tags to determine if it's LKE-managed
 	lkeNode, lkenodeErr := c.lkenodeProvider.Get(ctx, id)
 	if lkenodeErr == nil {
 		instanceType, err := c.resolveInstanceTypeFromLKENode(ctx, lkeNode)
@@ -228,8 +211,22 @@ func (c *CloudProvider) Get(ctx context.Context, providerID string) (*karpv1.Nod
 		return c.lkeNodeToNodeClaim(lkeNode, instanceType, nc), nil
 	}
 
+	// Try instance provider if not found in LKE pools
+	instance, instanceErr := c.instanceProvider.Get(ctx, id)
+	if instanceErr == nil {
+		instanceType, err := c.resolveInstanceTypeFromInstance(ctx, instance)
+		if err != nil {
+			return nil, fmt.Errorf("resolving instance type, %w", err)
+		}
+		nc, err := c.resolveNodeClassFromInstance(ctx, instance)
+		if client.IgnoreNotFound(err) != nil {
+			return nil, fmt.Errorf("resolving nodeclass, %w", err)
+		}
+		return c.instanceToNodeClaim(instance, instanceType, nc), nil
+	}
+
 	// if neither found
-	return nil, fmt.Errorf("getting instance: instance provider error (%w), lke node provider error (%w)", instanceErr, lkenodeErr)
+	return nil, fmt.Errorf("getting instance: lke node provider error (%w), instance provider error (%w)", lkenodeErr, instanceErr)
 }
 
 // GetInstanceTypes returns all available InstanceTypes
@@ -277,10 +274,14 @@ func (c *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	}
 	ctx = log.IntoContext(ctx, log.FromContext(ctx).WithValues("id", id))
 
-	nodeClass, err := c.resolveNodeClassFromNodeClaim(ctx, nodeClaim)
-	if err == nil && nodeClass.IsLKEManaged() {
-		return c.lkenodeProvider.Delete(ctx, id)
+	// Try lkenodeProvider first - if the instance is in a Karpenter-managed LKE pool,
+	// delete via LKE API. This handles cases where NodeClassRef may not be set
+	// (e.g., synthetic NodeClaims from List() during garbage collection).
+	if lkeErr := c.lkenodeProvider.Delete(ctx, id); lkeErr == nil {
+		return nil
 	}
+
+	// If not found in LKE pools, try direct instance deletion
 	return c.instanceProvider.Delete(ctx, id)
 }
 
@@ -497,8 +498,8 @@ func newTerminatingNodeClassError(name string) *errors.StatusError {
 	return err
 }
 
-// resolveNodeClassFromLKENode fetches the LinodeNodeClass from an LKENode's tags
-func (c *CloudProvider) resolveNodeClassFromLKENode(ctx context.Context, node *lkenode.LKENode) (*v1.LinodeNodeClass, error) {
+// resolveNodeClassFromLKENode fetches the LinodeNodeClass from an LKE instance's tags
+func (c *CloudProvider) resolveNodeClassFromLKENode(ctx context.Context, node *instance.Instance) (*v1.LinodeNodeClass, error) {
 	tags := utils.TagListToMap(node.Tags)
 	name, ok := tags[v1.LabelNodeClass]
 	if !ok {
@@ -514,7 +515,7 @@ func (c *CloudProvider) resolveNodeClassFromLKENode(ctx context.Context, node *l
 	return nc, nil
 }
 
-func (c *CloudProvider) resolveInstanceTypeFromLKENode(ctx context.Context, node *lkenode.LKENode) (*cloudprovider.InstanceType, error) {
+func (c *CloudProvider) resolveInstanceTypeFromLKENode(ctx context.Context, node *instance.Instance) (*cloudprovider.InstanceType, error) {
 	nodePool, err := c.resolveNodePoolFromLKENode(ctx, node)
 	if err != nil {
 		return nil, client.IgnoreNotFound(fmt.Errorf("resolving nodepool, %w", err))
@@ -526,7 +527,7 @@ func (c *CloudProvider) resolveInstanceTypeFromLKENode(ctx context.Context, node
 	return instanceType, nil
 }
 
-func (c *CloudProvider) resolveNodePoolFromLKENode(ctx context.Context, node *lkenode.LKENode) (*karpv1.NodePool, error) {
+func (c *CloudProvider) resolveNodePoolFromLKENode(ctx context.Context, node *instance.Instance) (*karpv1.NodePool, error) {
 	tags := utils.TagListToMap(node.Tags)
 	if nodePoolName, ok := tags[karpv1.NodePoolLabelKey]; ok {
 		nodePool := &karpv1.NodePool{}
@@ -538,7 +539,7 @@ func (c *CloudProvider) resolveNodePoolFromLKENode(ctx context.Context, node *lk
 	return nil, errors.NewNotFound(schema.GroupResource{Group: coreapis.Group, Resource: "nodepools"}, "")
 }
 
-func (c *CloudProvider) lkeNodeToNodeClaim(node *lkenode.LKENode, instanceType *cloudprovider.InstanceType, _ *v1.LinodeNodeClass) *karpv1.NodeClaim {
+func (c *CloudProvider) lkeNodeToNodeClaim(node *instance.Instance, instanceType *cloudprovider.InstanceType, _ *v1.LinodeNodeClass) *karpv1.NodeClaim {
 	nodeClaim := &karpv1.NodeClaim{}
 	labels := map[string]string{}
 	annotations := map[string]string{}
@@ -563,6 +564,6 @@ func (c *CloudProvider) lkeNodeToNodeClaim(node *lkenode.LKENode, instanceType *
 	if node.Created != nil {
 		nodeClaim.CreationTimestamp = metav1.Time{Time: *node.Created}
 	}
-	nodeClaim.Status.ProviderID = fmt.Sprintf("linode://%d", node.InstanceID)
+	nodeClaim.Status.ProviderID = fmt.Sprintf("linode://%d", node.ID)
 	return nodeClaim
 }

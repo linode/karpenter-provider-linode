@@ -40,7 +40,6 @@ import (
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
-	"github.com/linode/karpenter-provider-linode/pkg/providers/lkenode"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
@@ -48,10 +47,10 @@ type Controller struct {
 	kubeClient       client.Client
 	cloudProvider    cloudprovider.CloudProvider
 	instanceProvider instance.Provider
-	lkenodeProvider  lkenode.Provider
+	lkenodeProvider  instance.Provider
 }
 
-func NewController(kubeClient client.Client, cloudProvider cloudprovider.CloudProvider, instanceProvider instance.Provider, lkenodeProvider lkenode.Provider) *Controller {
+func NewController(kubeClient client.Client, cloudProvider cloudprovider.CloudProvider, instanceProvider instance.Provider, lkenodeProvider instance.Provider) *Controller {
 	return &Controller{
 		kubeClient:       kubeClient,
 		cloudProvider:    cloudProvider,
@@ -126,7 +125,7 @@ func (c *Controller) resolveNodeClassFromNodeClaim(ctx context.Context, nc *karp
 }
 
 func (c *Controller) tagLKENode(ctx context.Context, tags map[string]string, id string) error {
-	lkeNode, err := c.lkenodeProvider.Get(ctx, id, lkenode.SkipCache)
+	lkeNode, err := c.lkenodeProvider.Get(ctx, id, instance.SkipCache)
 	if err != nil {
 		return fmt.Errorf("getting lke node for tagging, %w", err)
 	}
@@ -136,7 +135,7 @@ func (c *Controller) tagLKENode(ctx context.Context, tags map[string]string, id 
 		return nil
 	}
 	defer time.Sleep(time.Second)
-	if err := c.lkenodeProvider.UpdateTags(ctx, lkeNode.PoolID, tags); err != nil {
+	if err := c.lkenodeProvider.CreateTags(ctx, id, tags); err != nil {
 		return fmt.Errorf("tagging lke nodeclaim, %w", err)
 	}
 	return nil
