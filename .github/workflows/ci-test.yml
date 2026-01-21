@@ -1,27 +1,31 @@
-name: CI
+name: Test and Upload Coverage Reports
+
 on:
   push:
     branches:
       - 'main'
-  pull_request:
+  pull_request_target:
   workflow_dispatch:
+
+concurrency:
+  group: ci-test-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
   pull-requests: read
-
-concurrency:
-  group: build-test-ci-${{ github.event.pull_request.number || github.ref_name }}
-  cancel-in-progress: true
+  actions: read
 
 jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
       # Expose matched filters as job 'src' output variable
-      src: ${{ steps.filter.outputs.src }}
+      paths: ${{ steps.filter.outputs.changes }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Harden Runner
         uses: step-security/harden-runner@v2
         with:
@@ -30,16 +34,16 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             github.com:443
-            *.githubusercontent.com:443
       - uses: dorny/paths-filter@v3
         id: filter
         with:
-          predicate-quantifier: 'every'
           filters: .github/filters.yml
-  go-analyze:
-    needs: changes
+
+  ci-test:
+    environment: ${{ (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && 'prod-external' || 'prod' }}
     runs-on: ubuntu-latest
-    if: ${{ needs.changes.outputs.src == 'true' }}
+    needs: changes
+    if: ${{ contains(fromJSON(needs.changes.outputs.paths), 'src') }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@v2
@@ -49,22 +53,21 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             github.com:443
-            proxy.golang.org:443
-            sum.golang.org:443
             golang.org:443
             go.dev:443
+            proxy.golang.org:443
+            sum.golang.org:443
             *.githubusercontent.com:443
-            auth.docker.io:443
-            production.cloudflare.docker.com:443
-            vuln.go.dev:443
             storage.googleapis.com:443
-            golangci-lint.run:443
+            cli.codecov.io:443
+            api.codecov.io:443
+            ingest.codecov.io:443
             dl.k8s.io:443
             cdn.dl.k8s.io:443
-            registry-1.docker.io:443
-            auth.docker.io:443
 
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -72,8 +75,14 @@ jobs:
           go-version-file: 'go.mod'
           check-latest: true
 
-      - name: lint
-        uses: golangci/golangci-lint-action@v9
+      - name: Test
+        run: make ci-test
 
-      - run: make ci-non-test
-        shell: bash
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.out
+          fail_ci_if_error: false
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: linode/karpenter-provider-linode
