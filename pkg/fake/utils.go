@@ -21,20 +21,16 @@ import (
 	"github.com/linode/linodego"
 )
 
-func InstanceID() string {
-	return fmt.Sprintf("i-%s", randomdata.Alphanumeric(17))
+func InstanceID() int {
+	return randomdata.Number(1000000, 9999999)
 }
 
 func RandomProviderID() string {
 	return ProviderID(InstanceID())
 }
 
-func ProviderID(id string) string {
-	return fmt.Sprintf("linode://%s", id)
-}
-
-func PrivateDNSName() string {
-	return fmt.Sprintf("ip-192-168-%d-%d.%s.compute.internal", randomdata.Number(0, 256), randomdata.Number(0, 256), DefaultRegion)
+func ProviderID(id int) string {
+	return fmt.Sprintf("linode://%d", id)
 }
 
 func MakeInstances() []linodego.LinodeType {

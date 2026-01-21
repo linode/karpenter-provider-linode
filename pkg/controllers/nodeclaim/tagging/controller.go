@@ -17,7 +17,6 @@ package tagging
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -36,8 +35,8 @@ import (
 	"sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
 
 	"github.com/awslabs/operatorpkg/reasonable"
-
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
@@ -73,6 +72,9 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	if err = c.tagInstance(ctx, nodeClaim, id); err != nil {
 		return reconcile.Result{}, cloudprovider.IgnoreNodeClaimNotFoundError(err)
 	}
+	nodeClaim.Annotations = lo.Assign(nodeClaim.Annotations, map[string]string{
+		v1.AnnotationInstanceTagged: "true",
+	})
 	if !equality.Semantic.DeepEqual(nodeClaim, stored) {
 		if err := c.kubeClient.Patch(ctx, nodeClaim, client.MergeFrom(stored)); err != nil {
 			return reconcile.Result{}, client.IgnoreNotFound(err)
@@ -97,8 +99,9 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 
 func (c *Controller) tagInstance(ctx context.Context, nc *karpv1.NodeClaim, id string) error {
 	tags := map[string]string{
-		v1.NameTagKey:      nc.Status.NodeName,
-		v1.NodeClaimTagKey: nc.Name,
+		v1.NameTagKey:           nc.Status.NodeName,
+		v1.NodeClaimTagKey:      nc.Name,
+		v1.LKEClusterNameTagKey: options.FromContext(ctx).ClusterName,
 	}
 
 	node, err := c.nodeProvider.Get(ctx, id, instance.SkipCache)
@@ -111,9 +114,6 @@ func (c *Controller) tagInstance(ctx context.Context, nc *karpv1.NodeClaim, id s
 		return nil
 	}
 
-	// Ensures that no more than 1 CreateTags call is made per second. Rate limiting is required since CreateTags
-	// shares a pool with other mutating calls (e.g. CreateFleet).
-	defer time.Sleep(time.Second)
 	if err := c.nodeProvider.CreateTags(ctx, id, tags); err != nil {
 		return fmt.Errorf("tagging nodeclaim, %w", err)
 	}
@@ -123,7 +123,8 @@ func (c *Controller) tagInstance(ctx context.Context, nc *karpv1.NodeClaim, id s
 func isTaggable(nc *karpv1.NodeClaim) bool {
 	// Instance has already been tagged
 	instanceTagged := nc.Annotations[v1.AnnotationInstanceTagged]
-	if instanceTagged == "true" {
+	clusterNameTagged := nc.Annotations[v1.AnnotationClusterNameTaggedCompatability]
+	if instanceTagged == "true" && clusterNameTagged == "true" {
 		return false
 	}
 	// Node name is not yet known

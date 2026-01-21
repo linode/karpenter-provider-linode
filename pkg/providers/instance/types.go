@@ -44,7 +44,7 @@ type Instance struct {
 	InterfaceGeneration linodego.InterfaceGeneration
 }
 
-func NewInstance(ctx context.Context, instance linodego.Instance) *Instance {
+func NewInstance(_ context.Context, instance linodego.Instance) *Instance {
 	return &Instance{
 		ID:              instance.ID,
 		Created:         instance.Created,

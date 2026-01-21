@@ -18,6 +18,9 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
+
+	"github.com/samber/lo"
 
 	"github.com/awslabs/operatorpkg/option"
 	"github.com/google/uuid"
@@ -161,18 +164,26 @@ func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...Options) (
 		return nil, fmt.Errorf("invalid instance id %s, %w", id, err)
 	}
 
-	instance, err := p.client.GetInstance(ctx, intID)
+	linodeInstance, err := p.client.GetInstance(ctx, intID)
 	if linodego.IsNotFound(err) {
 		p.instanceCache.Delete(id)
 		return nil, cloudprovider.NewNodeClaimNotFoundError(err)
 	}
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get linode instance, %w", err)
 	}
-	p.instanceCache.SetDefault(id, instance)
 
-	return NewInstance(ctx, *instance), nil
+	instances, err := instancesFromLinodeInstances(ctx, []linodego.Instance{*linodeInstance})
+	if err != nil {
+		return nil, fmt.Errorf("getting instances from lindoe instance, %w", err)
+	}
+
+	if len(instances) != 1 {
+		return nil, fmt.Errorf("expected a single instance, %w", err)
+	}
+	p.instanceCache.SetDefault(id, instances[0])
+
+	return instances[0], nil
 }
 
 func (p *DefaultProvider) List(ctx context.Context) ([]*Instance, error) {
@@ -186,18 +197,16 @@ func (p *DefaultProvider) List(ctx context.Context) ([]*Instance, error) {
 	if err != nil {
 		return nil, err
 	}
-	instances, err := p.client.ListInstances(ctx, linodego.NewListOptions(1, filter))
+	linodeInstances, err := p.client.ListInstances(ctx, linodego.NewListOptions(1, filter))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list linode instances, %w", err)
 	}
-
-	res := make([]*Instance, 0, len(instances))
+	instances, err := instancesFromLinodeInstances(ctx, linodeInstances)
 	for _, it := range instances {
 		p.instanceCache.SetDefault(strconv.Itoa(it.ID), it)
-		res = append(res, NewInstance(ctx, it))
 	}
 
-	return res, cloudprovider.IgnoreNodeClaimNotFoundError(err)
+	return instances, cloudprovider.IgnoreNodeClaimNotFoundError(err)
 }
 
 func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
@@ -227,6 +236,8 @@ func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[st
 		return fmt.Errorf("invalid instance id %s, %w", id, err)
 	}
 	for k, v := range tags {
+		// Ensures that no more than 1 CreateTag call is made per second.
+		time.Sleep(time.Second)
 		if _, err := p.client.CreateTag(ctx, linodego.TagCreateOptions{
 			Linodes: []int{intId},
 			Label:   fmt.Sprintf("%s:%s", k, v),
@@ -239,4 +250,11 @@ func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[st
 	}
 
 	return nil
+}
+
+func instancesFromLinodeInstances(ctx context.Context, instances []linodego.Instance) ([]*Instance, error) {
+	if len(instances) == 0 {
+		return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("instance not found"))
+	}
+	return lo.Map(instances, func(i linodego.Instance, _ int) *Instance { return NewInstance(ctx, i) }), nil
 }

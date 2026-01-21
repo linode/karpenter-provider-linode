@@ -148,7 +148,7 @@ func (l *LinodeClient) ListRegionsAvailability(_ context.Context, _ *linodego.Li
 
 func (l *LinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.Instance, error) {
 	instance, err := l.GetInstanceBehavior.Invoke(&linodeID, func(linodeID *int) (**linodego.Instance, error) {
-		raw, ok := l.Instances.Load(linodeID)
+		raw, ok := l.Instances.Load(*linodeID)
 		if !ok {
 			return nil, &linodego.Error{
 				Code:    http.StatusNotFound,
@@ -218,7 +218,8 @@ func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceC
 				Message: fmt.Sprintf("Insufficient capacity for instance type %s in region %s", opts.Type, opts.Region),
 			}
 		}
-		return ptr.To(&linodego.Instance{
+		// create and store the instance
+		instance := linodego.Instance{
 			ID:                  len(opts.Label) + 1, // just a simple way to generate an ID
 			Image:               opts.Image,
 			Label:               opts.Label,
@@ -227,7 +228,10 @@ func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceC
 			InterfaceGeneration: opts.InterfaceGeneration,
 			Created:             ptr.To(time.Now()),
 			Status:              linodego.InstanceRunning,
-		}), nil
+		}
+		l.Instances.Store(instance.ID, instance)
+
+		return ptr.To(ptr.To(instance)), nil
 	})
 	if instance == nil {
 		return nil, err
@@ -252,7 +256,7 @@ func (l *LinodeClient) ListInstances(_ context.Context, opts *linodego.ListOptio
 
 func (l *LinodeClient) DeleteInstance(_ context.Context, linodeID int) error {
 	_, err := l.DeleteInstanceBehavior.Invoke(&linodeID, func(linodeID *int) (*error, error) {
-		l.Instances.LoadAndDelete(linodeID)
+		l.Instances.LoadAndDelete(*linodeID)
 		return nil, nil
 	})
 	return err
@@ -260,6 +264,19 @@ func (l *LinodeClient) DeleteInstance(_ context.Context, linodeID int) error {
 
 func (l *LinodeClient) CreateTag(_ context.Context, opts linodego.TagCreateOptions) (*linodego.Tag, error) {
 	tag, err := l.CreateTagsBehavior.Invoke(&opts, func(opts *linodego.TagCreateOptions) (*linodego.Tag, error) {
+		linodeIDs := opts.Linodes
+		for _, linodeID := range linodeIDs {
+			raw, ok := l.Instances.Load(linodeID)
+			if !ok {
+				return nil, &linodego.Error{
+					Code:    http.StatusNotFound,
+					Message: fmt.Sprintf("instance does not exist with id %d", linodeID),
+				}
+			}
+			instance := raw.(linodego.Instance)
+			instance.Tags = append(instance.Tags, opts.Label)
+			l.Instances.Store(linodeID, instance)
+		}
 		return &linodego.Tag{
 			Label: opts.Label,
 		}, nil

@@ -1,0 +1,3 @@
+ignore:
+  - "**/*.gen.go"
+  - "**/zz_generated.deepcopy.go"
