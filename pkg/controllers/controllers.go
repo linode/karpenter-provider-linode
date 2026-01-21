@@ -47,8 +47,7 @@ func NewControllers(
 	recorder events.Recorder,
 	validationCache *cache.Cache,
 	cloudProvider cloudprovider.CloudProvider,
-	instanceProvider instance.Provider,
-	lkenodeProvider instance.Provider,
+	nodeProvider instance.Provider,
 	instanceTypeProvider *instancetype.DefaultProvider,
 ) []controller.Controller {
 	controllers := []controller.Controller{
@@ -63,7 +62,7 @@ func NewControllers(
 			options.FromContext(ctx).DisableDryRun,
 		),
 		nodeclaimgarbagecollection.NewController(kubeClient, cloudProvider),
-		nodeclaimtagging.NewController(kubeClient, cloudProvider, instanceProvider, lkenodeProvider),
+		nodeclaimtagging.NewController(kubeClient, cloudProvider, nodeProvider),
 		controllersinstancetype.NewController(instanceTypeProvider),
 		controllersinstancetypecapacity.NewController(kubeClient, cloudProvider, instanceTypeProvider),
 		status.NewController[*v1.LinodeNodeClass](kubeClient, mgr.GetEventRecorderFor("karpenter"), status.EmitDeprecatedMetrics),

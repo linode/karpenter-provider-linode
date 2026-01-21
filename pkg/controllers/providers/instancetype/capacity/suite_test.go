@@ -78,7 +78,7 @@ var _ = BeforeSuite(func() {
 	nodeClass = test.LinodeNodeClass()
 	nodeClaim = coretest.NodeClaim()
 	node = coretest.Node()
-	cloudProvider := cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.InstanceProvider, linodeEnv.LKENodeProvider, events.NewRecorder(&record.FakeRecorder{}),
+	cloudProvider := cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.NodeProvider(ctx), events.NewRecorder(&record.FakeRecorder{}),
 		env.Client)
 	controller = controllersinstancetypecapacity.NewController(env.Client, cloudProvider, linodeEnv.InstanceTypesProvider)
 })

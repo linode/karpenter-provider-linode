@@ -166,10 +166,12 @@ settings:
   clusterCABundle: ""
   # -- Cluster name.
   clusterName: ""
-  # -- LKE cluster ID (required for managed LKE operations).
+  # -- LKE cluster ID (required when mode is 'lke').
   clusterID: ""
   # -- Cluster endpoint.
   clusterEndpoint: ""
+  # -- Operating mode: 'lke' for LKE NodePool provisioning, 'instance' for direct Linode instances.
+  mode: "lke"
   # -- The VM memory overhead as a percent that will be subtracted from the total memory for all instance types
   vmMemoryOverheadPercent: 0.075
   # -- The global tags to use on all Azure infrastructure resources (VMs, etc.)

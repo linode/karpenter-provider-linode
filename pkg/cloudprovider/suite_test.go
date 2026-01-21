@@ -80,9 +80,6 @@ var _ = BeforeSuite(func() {
 	linodeEnv = test.NewEnvironment(ctx)
 	fakeClock = clock.NewFakeClock(time.Now())
 	recorder = events.NewRecorder(&record.FakeRecorder{})
-	cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.InstanceProvider, linodeEnv.LKENodeProvider, recorder, env.Client)
-	cluster = state.NewCluster(fakeClock, env.Client, cloudProvider)
-	prov = provisioning.NewProvisioner(env.Client, recorder, cloudProvider, cluster, fakeClock)
 })
 
 var _ = AfterSuite(func() {
@@ -93,8 +90,6 @@ var _ = AfterSuite(func() {
 var _ = BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
-
-	cluster.Reset()
 	linodeEnv.Reset()
 })
 
@@ -107,7 +102,13 @@ var _ = Describe("CloudProvider", func() {
 	var nodePool *karpv1.NodePool
 	var nodeClaim *karpv1.NodeClaim
 	var _ = BeforeEach(func() {
-		// Use LinodeNodeClassWithoutLKE for direct Linode instance tests (managedLKE=false)
+		// Override context with instance mode for direct Linode instance tests
+		ctx = options.ToContext(ctx, test.Options(test.OptionsFields{Mode: lo.ToPtr("instance")}))
+		// Create CloudProvider with instance provider for this test suite
+		cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.InstanceProvider, recorder, env.Client)
+		cluster = state.NewCluster(fakeClock, env.Client, cloudProvider)
+		prov = provisioning.NewProvisioner(env.Client, recorder, cloudProvider, cluster, fakeClock)
+		// Use LinodeNodeClassWithoutLKE for direct Linode instance tests
 		nodeClass = test.LinodeNodeClassWithoutLKE(
 			v1.LinodeNodeClass{
 				Spec: v1.LinodeNodeClassSpec{
@@ -325,10 +326,15 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 	var lkeNodeClass *v1.LinodeNodeClass
 	var lkeNodePool *karpv1.NodePool
 	var lkeNodeClaim *karpv1.NodeClaim
-
-	BeforeEach(func() {
-		// Use LinodeNodeClassWithLKE for LKE-managed tests (managedLKE=true, the default)
-		lkeNodeClass = test.LinodeNodeClassWithLKE()
+	var _ = BeforeEach(func() {
+		// Override context with lke mode for LKE-managed mode tests
+		ctx = options.ToContext(ctx, test.Options(test.OptionsFields{Mode: lo.ToPtr("lke")}))
+		// Create CloudProvider with LKE provider for this test suite
+		cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.LKENodeProvider, recorder, env.Client)
+		cluster = state.NewCluster(fakeClock, env.Client, cloudProvider)
+		prov = provisioning.NewProvisioner(env.Client, recorder, cloudProvider, cluster, fakeClock)
+		// Use LinodeNodeClass for LKE-managed mode tests
+		lkeNodeClass = test.LinodeNodeClass()
 		lkeNodeClass.StatusConditions().SetTrue(opstatus.ConditionReady)
 		lkeNodePool = coretest.NodePool(karpv1.NodePool{
 			Spec: karpv1.NodePoolSpec{
@@ -377,7 +383,7 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 	})
 
 	Context("Create", func() {
-		It("should create LKE node pool when IsLKEManaged() is true", func() {
+		It("should create LKE node pool in LKE mode", func() {
 			ExpectApplied(ctx, env.Client, lkeNodePool, lkeNodeClass, lkeNodeClaim)
 			cloudProviderNodeClaim, err := cloudProvider.Create(ctx, lkeNodeClaim)
 			Expect(err).ToNot(HaveOccurred())

@@ -83,7 +83,7 @@ var _ = Describe("LKENodeProvider", func() {
 	var nodeClaim *karpv1.NodeClaim
 
 	BeforeEach(func() {
-		nodeClass = test.LinodeNodeClassWithLKE()
+		nodeClass = test.LinodeNodeClass()
 		nodePoolObj = coretest.NodePool(karpv1.NodePool{
 			Spec: karpv1.NodePoolSpec{
 				Template: karpv1.NodeClaimTemplate{

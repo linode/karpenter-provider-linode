@@ -64,7 +64,7 @@ var _ = BeforeSuite(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
 	linodeEnv = test.NewEnvironment(ctx)
-	cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.InstanceProvider, linodeEnv.LKENodeProvider, events.NewRecorder(&record.FakeRecorder{}), env.Client)
+	cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.NodeProvider(ctx), events.NewRecorder(&record.FakeRecorder{}), env.Client)
 	controller = metrics.NewController(env.Client, cloudProvider)
 })
 

@@ -72,7 +72,7 @@ var _ = Describe("Options", func() {
 	})
 	It("should correctly fallback to env vars when CLI flags aren't set", func() {
 		os.Setenv("CLUSTER_NAME", "env-cluster")
-		os.Setenv("LKE_CLUSTER_ID", "12345")
+		os.Setenv("CLUSTER_ID", "12345")
 		os.Setenv("CLUSTER_REGION", "us-west")
 		os.Setenv("CLUSTER_ENDPOINT", "https://env-cluster")
 		os.Setenv("VM_MEMORY_OVERHEAD_PERCENT", "0.1")

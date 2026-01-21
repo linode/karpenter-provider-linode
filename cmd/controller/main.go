@@ -41,8 +41,7 @@ func main() {
 
 	linodeCloudProvider := cloudprovider.New(
 		op.InstanceTypesProvider,
-		op.InstanceProvider,
-		op.LKENodeProvider,
+		op.NodeProvider,
 		op.EventRecorder,
 		op.GetClient(),
 	)
@@ -71,8 +70,7 @@ func main() {
 			op.EventRecorder,
 			op.ValidationCache,
 			cloudProvider,
-			op.InstanceProvider,
-			op.LKENodeProvider,
+			op.NodeProvider,
 			op.InstanceTypesProvider,
 		)...).
 		Start(ctx)

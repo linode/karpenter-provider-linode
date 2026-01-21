@@ -103,23 +103,13 @@ type LinodeNodeClassSpec struct {
 	// +optional
 	Kubelet *KubeletConfiguration `json:"kubelet,omitempty"`
 
-	// managedLKE enables LKE-managed node pool mode. When true (default), Karpenter provisions
-	// nodes via LKE NodePool APIs instead of creating direct Linode instances.
-	// In this mode, LKE manages the node image, network configuration, and kubelet.
-	// Fields like image, authorizedKeys, linodeInterfaces, osDisk, dataDisks,
-	// placementGroup, configuration, vpcID, ipv6Options, swapSize, and kubelet are ignored.
-	// Set to false to use direct Linode instance provisioning.
-	// +optional
-	// +kubebuilder:default=true
-	ManagedLKE *bool `json:"managedLKE,omitempty"`
-
 	// lkeK8sVersion is the Kubernetes version for LKE node pools.
-	// Only used when managedLKE is true. Only available for Enterprise LKE clusters.
+	// Only used in LKE mode. Only available for Enterprise LKE clusters.
 	// +optional
 	LKEK8sVersion *string `json:"lkeK8sVersion,omitempty"`
 
 	// lkeUpdateStrategy defines how nodes are updated when the LKE node pool is modified.
-	// Only used when managedLKE is true.
+	// Only used in LKE mode.
 	// Valid values are "rolling_update" and "on_recycle".
 	// +optional
 	// +kubebuilder:validation:Enum=rolling_update;on_recycle
@@ -534,12 +524,6 @@ func (in *LinodeNodeClass) Hash() string {
 
 func (in *LinodeNodeClass) KubeletConfiguration() *KubeletConfiguration {
 	return in.Spec.Kubelet
-}
-
-// IsLKEManaged returns true if this NodeClass is configured for LKE-managed mode.
-// Defaults to true if not explicitly set.
-func (in *LinodeNodeClass) IsLKEManaged() bool {
-	return in.Spec.ManagedLKE == nil || *in.Spec.ManagedLKE
 }
 
 func (in *LinodeNodeClass) GetConditions() []status.Condition {

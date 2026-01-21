@@ -104,9 +104,9 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1.LinodeNodeClas
 		},
 	}
 
-	// Use appropriate tag function based on ManagedLKE mode
+	// Use appropriate tag function based on mode
 	var tags map[string]string
-	if nodeClass.IsLKEManaged() {
+	if options.FromContext(ctx).Mode == "lke" {
 		tags = utils.GetTagsForLKE(nodeClass, nodeClaim, options.FromContext(ctx).ClusterName)
 	} else {
 		tags = utils.GetTags(nodeClass, nodeClaim, options.FromContext(ctx).ClusterName)

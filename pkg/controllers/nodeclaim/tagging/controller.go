@@ -21,7 +21,6 @@ import (
 
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -44,18 +43,16 @@ import (
 )
 
 type Controller struct {
-	kubeClient       client.Client
-	cloudProvider    cloudprovider.CloudProvider
-	instanceProvider instance.Provider
-	lkenodeProvider  instance.Provider
+	kubeClient    client.Client
+	cloudProvider cloudprovider.CloudProvider
+	nodeProvider  instance.Provider
 }
 
-func NewController(kubeClient client.Client, cloudProvider cloudprovider.CloudProvider, instanceProvider instance.Provider, lkenodeProvider instance.Provider) *Controller {
+func NewController(kubeClient client.Client, cloudProvider cloudprovider.CloudProvider, nodeProvider instance.Provider) *Controller {
 	return &Controller{
-		kubeClient:       kubeClient,
-		cloudProvider:    cloudProvider,
-		instanceProvider: instanceProvider,
-		lkenodeProvider:  lkenodeProvider,
+		kubeClient:    kubeClient,
+		cloudProvider: cloudProvider,
+		nodeProvider:  nodeProvider,
 	}
 }
 
@@ -104,49 +101,12 @@ func (c *Controller) tagInstance(ctx context.Context, nc *karpv1.NodeClaim, id s
 		v1.NodeClaimTagKey: nc.Name,
 	}
 
-	// Resolve NodeClass from NodeClaim's NodeClassRef to determine which provider to use
-	nodeClass, err := c.resolveNodeClassFromNodeClaim(ctx, nc)
-	if err != nil {
-		return fmt.Errorf("resolving nodeclass for tagging, %w", err)
-	}
-
-	if nodeClass.IsLKEManaged() {
-		return c.tagLKENode(ctx, tags, id)
-	}
-	return c.tagLinodeInstance(ctx, tags, id)
-}
-
-func (c *Controller) resolveNodeClassFromNodeClaim(ctx context.Context, nc *karpv1.NodeClaim) (*v1.LinodeNodeClass, error) {
-	nodeClass := &v1.LinodeNodeClass{}
-	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nc.Spec.NodeClassRef.Name}, nodeClass); err != nil {
-		return nil, err
-	}
-	return nodeClass, nil
-}
-
-func (c *Controller) tagLKENode(ctx context.Context, tags map[string]string, id string) error {
-	lkeNode, err := c.lkenodeProvider.Get(ctx, id, instance.SkipCache)
-	if err != nil {
-		return fmt.Errorf("getting lke node for tagging, %w", err)
-	}
-	existingTags := utils.TagListToMap(lkeNode.Tags)
-	tags = lo.OmitByKeys(tags, lo.Keys(existingTags))
-	if len(tags) == 0 {
-		return nil
-	}
-	defer time.Sleep(time.Second)
-	if err := c.lkenodeProvider.CreateTags(ctx, id, tags); err != nil {
-		return fmt.Errorf("tagging lke nodeclaim, %w", err)
-	}
-	return nil
-}
-
-func (c *Controller) tagLinodeInstance(ctx context.Context, tags map[string]string, id string) error {
-	instance, err := c.instanceProvider.Get(ctx, id, instance.SkipCache)
+	node, err := c.nodeProvider.Get(ctx, id, instance.SkipCache)
 	if err != nil {
 		return fmt.Errorf("getting instance for tagging, %w", err)
 	}
-	tags = lo.OmitByKeys(tags, instance.Tags)
+	existingTags := utils.TagListToMap(node.Tags)
+	tags = lo.OmitByKeys(tags, lo.Keys(existingTags))
 	if len(tags) == 0 {
 		return nil
 	}
@@ -154,7 +114,7 @@ func (c *Controller) tagLinodeInstance(ctx context.Context, tags map[string]stri
 	// Ensures that no more than 1 CreateTags call is made per second. Rate limiting is required since CreateTags
 	// shares a pool with other mutating calls (e.g. CreateFleet).
 	defer time.Sleep(time.Second)
-	if err := c.instanceProvider.CreateTags(ctx, id, tags); err != nil {
+	if err := c.nodeProvider.CreateTags(ctx, id, tags); err != nil {
 		return fmt.Errorf("tagging nodeclaim, %w", err)
 	}
 	return nil
