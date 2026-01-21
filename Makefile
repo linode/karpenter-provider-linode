@@ -160,16 +160,22 @@ helm-uninstall: ## remove both charts from the existing cluster (requires k8s co
 
 ## Location to install dependencies to
 
-# Use CACHE_BIN for tools that cannot use devbox
+# Use CACHE_BIN for tools that cannot use devbox and LOCALBIN for tools that can use either method
 CACHE_BIN ?= $(CURDIR)/bin
+LOCALBIN ?= $(CACHE_BIN)
+
+DEVBOX_BIN ?= $(DEVBOX_PACKAGES_DIR)/bin
 
 # if the $DEVBOX_PACKAGES_DIR env variable exists that means we are within a devbox shell and can safely
 # use devbox's bin for our tools
 ifdef DEVBOX_PACKAGES_DIR
-	CACHE_BIN = $(DEVBOX_PACKAGES_DIR)/bin
+	LOCALBIN = $(DEVBOX_BIN)
 endif
 
 export PATH := $(CACHE_BIN):$(PATH)
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
 $(CACHE_BIN):
 	mkdir -p $(CACHE_BIN)
 
