@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
 
 	"github.com/awslabs/operatorpkg/reasonable"
+
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
