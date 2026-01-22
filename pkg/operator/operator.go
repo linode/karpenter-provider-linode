@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
 	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,6 +33,7 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/lke"
+	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
 func init() {
@@ -47,7 +49,7 @@ type Operator struct {
 	LinodeClient              sdk.LinodeAPI
 }
 
-func NewOperator(ctx context.Context, operator *operator.Operator, linodeClientConfig sdk.ClientConfig) (context.Context, *Operator) {
+func NewOperator(ctx context.Context, operator *operator.Operator, linodeClientConfig sdk.ClientConfig) (context.Context, *Operator, error) {
 	linodeClient := lo.Must(sdk.CreateLinodeClient(linodeClientConfig))
 	unavailableOfferingsCache := linodecache.NewUnavailableOfferings()
 	kubeDNSIP, err := KubeDNSIP(ctx, operator.KubernetesInterface)
@@ -79,8 +81,24 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClientC
 	switch opts.Mode {
 	case "lke":
 		log.FromContext(ctx).Info("initializing in LKE mode")
+		listFilter := utils.Filter{Label: opts.ClusterName}
+		filter, err := listFilter.String()
+		if err != nil {
+			return nil, nil, err
+		}
+		// Get cluster ID from the cluster name (label)
+		clusterList, err := linodeClient.ListLKEClusters(ctx, &linodego.ListOptions{
+			Filter: filter,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(clusterList) != 1 {
+			return nil, nil, fmt.Errorf("could not determine LKE cluster with name: %s", opts.ClusterName)
+		}
+
 		nodeProvider = lke.NewDefaultProvider(
-			opts.ClusterID,
+			clusterList[0].ID,
 			opts.ClusterRegion,
 			operator.EventRecorder,
 			linodeClient,
@@ -105,7 +123,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClientC
 		InstanceTypesProvider:     instanceTypeProvider,
 		NodeProvider:              nodeProvider,
 		LinodeClient:              linodeClient,
-	}
+	}, nil
 }
 
 func KubeDNSIP(ctx context.Context, kubernetesInterface kubernetes.Interface) (net.IP, error) {

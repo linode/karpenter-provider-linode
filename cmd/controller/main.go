@@ -37,7 +37,11 @@ import (
 func main() {
 	ctx1, op1 := coreoperator.NewOperator()
 	linodeClientConfig := validateEnvironment(ctx1)
-	ctx, op := operator.NewOperator(ctx1, op1, linodeClientConfig)
+	ctx, op, err := operator.NewOperator(ctx1, op1, linodeClientConfig)
+	if err != nil {
+		log.FromContext(ctx1).Error(err, "Failed to create Linode operator")
+		os.Exit(1)
+	}
 
 	linodeCloudProvider := cloudprovider.New(
 		op.InstanceTypesProvider,
