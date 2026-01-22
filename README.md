@@ -18,6 +18,10 @@
 <!-- go build / test CI -->
 <a href="https://github.com/linode/karpenter-provider-linode/actions/workflows/ci.yml">
 <img src="https://github.com/linode/karpenter-provider-linode/actions/workflows/ci.yml/badge.svg"></a>
+<!-- codecov badge -->
+<a href="https://codecov.io/github/linode/karpenter-provider-linode" > 
+<img src="https://codecov.io/github/linode/karpenter-provider-linode/graph/badge.svg?token=YQFKF86KJ6"/> 
+</a>
 <!-- ko build CI -->
 <a href="https://github.com/linode/karpenter-provider-linode/actions/workflows/release.yml">
 <img src="https://github.com/linode/karpenter-provider-linode/actions/workflows/release.yml/badge.svg"></a>
