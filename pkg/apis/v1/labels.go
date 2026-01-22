@@ -49,6 +49,9 @@ var (
 		LabelInstanceMemory,
 		LabelInstanceNetworkBandwidth,
 		LabelInstanceGPUCount,
+		LabelInstanceAcceleratedDevicesCount,
+		LabelInstanceClass,
+		LabelInstanceGeneration,
 	)
 
 	TerminationFinalizer                     = apis.Group + "/termination"
@@ -61,6 +64,9 @@ var (
 	LabelInstanceNetworkBandwidth            = apis.Group + "/instance-network-bandwidth"
 	LabelInstanceCPU                         = apis.Group + "/instance-cpu"
 	LabelInstanceGPUCount                    = apis.Group + "/instance-gpu-count"
+	LabelInstanceAcceleratedDevicesCount     = apis.Group + "/instance-accelerated-devices-count"
+	LabelInstanceClass                       = apis.Group + "/instance-class"
+	LabelInstanceGeneration                  = apis.Group + "/instance-generation"
 	LabelInstanceMemory                      = apis.Group + "/instance-memory"
 	LKEClusterNameTagKey                     = "lke-cluster-name"
 	NodePoolTagKey                           = karpv1.NodePoolLabelKey

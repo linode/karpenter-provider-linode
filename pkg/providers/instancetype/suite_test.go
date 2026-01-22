@@ -146,10 +146,13 @@ var _ = Describe("InstanceTypeProvider", func() {
 			corev1.LabelArchStable:         "amd64",
 			karpv1.CapacityTypeLabelKey:    karpv1.CapacityTypeOnDemand,
 			// Well Known to Linode
-			v1.LabelInstanceCPU:              "2",
-			v1.LabelInstanceMemory:           "4096",
-			v1.LabelInstanceNetworkBandwidth: "1000",
-			v1.LabelInstanceGPUCount:         "0",
+			v1.LabelInstanceCPU:                     "2",
+			v1.LabelInstanceMemory:                  "4096",
+			v1.LabelInstanceNetworkBandwidth:        "1000",
+			v1.LabelInstanceGPUCount:                "0",
+			v1.LabelInstanceAcceleratedDevicesCount: "0",
+			v1.LabelInstanceClass:                   "standard",
+			v1.LabelInstanceGeneration:              "g6",
 		}
 
 		// Ensure that we're exercising all well-known labels
