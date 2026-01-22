@@ -90,9 +90,8 @@ The Karpenter Helm chart requires specific configuration values to work with an 
 Use the configured environment variables to install Karpenter using Helm:
 
 ```bash
-helm upgrade --install --namespace karpenter --create-namespace karpenter-crd charts/karpenter-crd
-helm upgrade --install --namespace karpenter --create-namespace karpenter charts/karpenter \
-        --namespace "${KARPENTER_NAMESPACE}" --create-namespace \
+helm upgrade --install --namespace "${KARPENTER_NAMESPACE}" --create-namespace karpenter-crd charts/karpenter-crd
+helm upgrade --install --namespace "${KARPENTER_NAMESPACE}" --create-namespace karpenter charts/karpenter \
 		--set region=${LINODE_REGION} \
 		--set settings.clusterName=${CLUSTER_NAME} \
 		--set apiToken=${LINODE_TOKEN} \
