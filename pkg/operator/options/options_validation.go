@@ -55,9 +55,6 @@ func (o *Options) validateRequiredFields() error {
 	if o.ClusterName == "" {
 		return fmt.Errorf("missing field, cluster-name")
 	}
-	if o.Mode == "lke" && o.ClusterID <= 0 {
-		return fmt.Errorf("missing or invalid field, cluster-id must be a positive integer when mode is 'lke'")
-	}
 	return nil
 }
 

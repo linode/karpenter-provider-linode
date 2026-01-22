@@ -166,8 +166,6 @@ settings:
   clusterCABundle: ""
   # -- Cluster name.
   clusterName: ""
-  # -- LKE cluster ID (required when mode is 'lke').
-  clusterID: ""
   # -- Cluster endpoint.
   clusterEndpoint: ""
   # -- Operating mode: 'lke' for LKE NodePool provisioning, 'instance' for direct Linode instances.

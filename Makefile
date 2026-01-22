@@ -143,7 +143,6 @@ helm-install: ## install karpenter onto an existing cluster (requires k8s contex
 	@helm upgrade --install --namespace karpenter --create-namespace karpenter charts/karpenter \
 		--set controller.image.repository=$(KO_DOCKER_REPO) \
 		--set region=${LINODE_REGION} \
-		--set settings.clusterID=${CLUSTER_ID} \
 		--set settings.clusterName=${CLUSTER_NAME} \
 		--set apiToken=${LINODE_TOKEN}
 
