@@ -102,6 +102,18 @@ type LinodeNodeClassSpec struct {
 	// +kubebuilder:validation:XValidation:message="evictionSoftGracePeriod OwnerKey does not have a matching evictionSoft",rule="has(self.evictionSoftGracePeriod) ? self.evictionSoftGracePeriod.all(e, (e in self.evictionSoft)):true"
 	// +optional
 	Kubelet *KubeletConfiguration `json:"kubelet,omitempty"`
+
+	// lkeK8sVersion is the Kubernetes version for LKE node pools.
+	// Only used in LKE mode. Only available for Enterprise LKE clusters.
+	// +optional
+	LKEK8sVersion *string `json:"lkeK8sVersion,omitempty"`
+
+	// lkeUpdateStrategy defines how nodes are updated when the LKE node pool is modified.
+	// Only used in LKE mode.
+	// Valid values are "rolling_update" and "on_recycle".
+	// +optional
+	// +kubebuilder:validation:Enum=rolling_update;on_recycle
+	LKEUpdateStrategy *linodego.LKENodePoolUpdateStrategy `json:"lkeUpdateStrategy,omitempty"`
 }
 
 type InstanceCreatePlacementGroupOptions struct {

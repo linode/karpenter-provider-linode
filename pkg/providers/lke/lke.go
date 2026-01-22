@@ -12,12 +12,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package nodepool
+package lke
 
 import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/awslabs/operatorpkg/option"
 	"github.com/patrickmn/go-cache"
@@ -28,10 +29,10 @@ import (
 
 	"github.com/linode/linodego"
 
-	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
@@ -63,8 +64,8 @@ func NewDefaultProvider(
 	}
 }
 
-// Create provisions a new LKE node pool with a single node and returns the first node as NodePoolInstance.
-func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*LKENodePool, error) {
+// Create provisions a new LKE node pool with a single node and returns the first node as Instance.
+func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*instance.Instance, error) {
 	instanceTypes, err := utils.FilterInstanceTypes(ctx, instanceTypes, nodeClaim)
 	if err != nil {
 		return nil, err
@@ -81,7 +82,9 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	tagList = append(tagList, utils.MapToTagList(tags)...)
 	tagList = utils.DedupeTags(tagList)
 
-	taints := convertToLkeTaints(nodeClaim.Spec.Taints)
+	// Merge both regular taints and startup taints (includes karpenter.sh/unregistered)
+	allTaints := append(nodeClaim.Spec.Taints, nodeClaim.Spec.StartupTaints...)
+	taints := convertToLkeTaints(allTaints)
 
 	createOpts := linodego.LKENodePoolCreateOptions{
 		Count:  1, // we only create one node per nodepool
@@ -92,6 +95,12 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	}
 	if nodeClass.Spec.FirewallID != nil {
 		createOpts.FirewallID = nodeClass.Spec.FirewallID
+	}
+	if nodeClass.Spec.LKEK8sVersion != nil {
+		createOpts.K8sVersion = nodeClass.Spec.LKEK8sVersion
+	}
+	if nodeClass.Spec.LKEUpdateStrategy != nil {
+		createOpts.UpdateStrategy = nodeClass.Spec.LKEUpdateStrategy
 	}
 
 	pool, err := p.client.CreateLKENodePool(ctx, p.clusterID, createOpts)
@@ -111,21 +120,49 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	if len(pool.Linodes) == 0 {
 		return nil, fmt.Errorf("created node pool %d but no linodes returned", pool.ID)
 	}
-	node := pool.Linodes[0]
-	instance := NewLKENodePool(pool, node, p.region)
-	p.cacheNode(instance)
-	return instance, nil
+
+	// Wait for InstanceID to be populated (LKE may return 0 while provisioning)
+	node, err := p.waitForInstanceID(ctx, pool.ID)
+	if err != nil {
+		return nil, fmt.Errorf("waiting for instance ID, %w", err)
+	}
+
+	inst := instance.NewLKEInstance(pool, *node, p.region)
+	p.cacheNode(inst)
+	return inst, nil
 }
 
-func (p *DefaultProvider) Get(ctx context.Context, providerID string, opts ...Options) (*LKENodePool, error) {
+// waitForInstanceID polls the node pool until the first node has a valid InstanceID
+func (p *DefaultProvider) waitForInstanceID(ctx context.Context, poolID int) (*linodego.LKENodePoolLinode, error) {
+	const maxAttempts = 30
+	const pollInterval = 10 * time.Second
+
+	for i := 0; i < maxAttempts; i++ {
+		pool, err := p.client.GetLKENodePool(ctx, p.clusterID, poolID)
+		if err != nil {
+			return nil, fmt.Errorf("getting node pool %d, %w", poolID, err)
+		}
+		if len(pool.Linodes) > 0 && pool.Linodes[0].InstanceID != 0 {
+			return &pool.Linodes[0], nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+	return nil, fmt.Errorf("timed out waiting for instance ID on pool %d", poolID)
+}
+
+func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...instance.Options) (*instance.Instance, error) {
 	options := option.Resolve(opts...)
 	if !options.SkipCache {
-		if cached, found := p.nodeCache.Get(providerID); found {
-			return cached.(*LKENodePool), nil
+		if cached, found := p.nodeCache.Get(id); found {
+			return cached.(*instance.Instance), nil
 		}
 	}
 
-	poolID, err := p.lookupPoolByInstance(ctx, providerID)
+	poolID, err := p.lookupPoolByInstance(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -133,25 +170,33 @@ func (p *DefaultProvider) Get(ctx context.Context, providerID string, opts ...Op
 	if err != nil {
 		return nil, err
 	}
-	node, err := findNodeInPool(pool, providerID)
+	node, err := findNodeInPool(pool, id)
 	if err != nil {
 		return nil, err
 	}
-	inst := NewLKENodePool(pool, *node, p.region)
+	inst := instance.NewLKEInstance(pool, *node, p.region)
 	p.cacheNode(inst)
 	return inst, nil
 }
 
-func (p *DefaultProvider) List(ctx context.Context) ([]*LKENodePool, error) {
+func (p *DefaultProvider) List(ctx context.Context) ([]*instance.Instance, error) {
 	pools, err := p.listLKEPools(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var instances []*LKENodePool
+	var instances []*instance.Instance
 	for i := range pools {
 		pool := pools[i]
+		// checking if api filtering is not working but manually filtering here
+		if !isKarpenterManagedPool(&pool) {
+			continue
+		}
 		for _, node := range pool.Linodes {
-			inst := NewLKENodePool(&pool, node, p.region)
+			// Skip nodes that don't have an InstanceID yet (still provisioning)
+			if node.InstanceID == 0 {
+				continue
+			}
+			inst := instance.NewLKEInstance(&pool, node, p.region)
 			instances = append(instances, inst)
 			p.cacheNode(inst)
 		}
@@ -159,19 +204,34 @@ func (p *DefaultProvider) List(ctx context.Context) ([]*LKENodePool, error) {
 	return instances, nil
 }
 
-func (p *DefaultProvider) Delete(ctx context.Context, providerID string) error {
-	poolID, err := p.lookupPoolByInstance(ctx, providerID)
+func isKarpenterManagedPool(pool *linodego.LKENodePool) bool {
+	tags := utils.TagListToMap(pool.Tags)
+	_, hasNodePoolLabel := tags[karpv1.NodePoolLabelKey]
+	_, hasLKEManagedLabel := tags[v1.LabelLKEManaged]
+	return hasNodePoolLabel && hasLKEManagedLabel
+}
+
+func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
+	poolID, err := p.lookupPoolByInstance(ctx, id)
 	if err != nil {
-		return err
+		return cloudprovider.NewNodeClaimNotFoundError(err)
 	}
 	if err := p.client.DeleteLKENodePool(ctx, p.clusterID, poolID); err != nil {
+		if linodego.IsNotFound(err) {
+			p.nodeCache.Delete(id)
+			return cloudprovider.NewNodeClaimNotFoundError(err)
+		}
 		return err
 	}
-	p.nodeCache.Delete(providerID)
+	p.nodeCache.Delete(id)
 	return nil
 }
 
-func (p *DefaultProvider) UpdateTags(ctx context.Context, poolID int, tags map[string]string) error {
+func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[string]string) error {
+	poolID, err := p.lookupPoolByInstance(ctx, id)
+	if err != nil {
+		return err
+	}
 	pool, err := p.client.GetLKENodePool(ctx, p.clusterID, poolID)
 	if err != nil {
 		return err
@@ -193,20 +253,16 @@ func convertToLkeTaints(taints []corev1.Taint) []linodego.LKENodePoolTaint {
 	return res
 }
 
-func (p *DefaultProvider) cacheNode(n *LKENodePool) {
-	providerID := fmt.Sprintf("linode://%d", n.InstanceID)
-	p.nodeCache.SetDefault(providerID, n)
+func (p *DefaultProvider) cacheNode(n *instance.Instance) {
+	id := strconv.Itoa(n.ID)
+	p.nodeCache.SetDefault(id, n)
 }
 
-func (p *DefaultProvider) lookupPoolByInstance(ctx context.Context, providerID string) (int, error) {
-	if cached, found := p.nodeCache.Get(providerID); found {
-		return cached.(*LKENodePool).PoolID, nil
+func (p *DefaultProvider) lookupPoolByInstance(ctx context.Context, id string) (int, error) {
+	if cached, found := p.nodeCache.Get(id); found {
+		return cached.(*instance.Instance).PoolID, nil
 	}
-	instanceIDStr, err := utils.ParseInstanceID(providerID)
-	if err != nil {
-		return 0, fmt.Errorf("getting instance ID, %w", err)
-	}
-	instanceID, err := strconv.Atoi(instanceIDStr)
+	instanceID, err := strconv.Atoi(id)
 	if err != nil {
 		return 0, fmt.Errorf("parsing instance ID, %w", err)
 	}
@@ -215,37 +271,37 @@ func (p *DefaultProvider) lookupPoolByInstance(ctx context.Context, providerID s
 		return 0, err
 	}
 	for _, pool := range pools {
+		// Only look in Karpenter-managed pools (API filtering may not work)
+		if !isKarpenterManagedPool(&pool) {
+			continue
+		}
 		for _, node := range pool.Linodes {
 			if node.InstanceID == instanceID {
 				return pool.ID, nil
 			}
 		}
 	}
-	return 0, fmt.Errorf("instance %d not found in any pool", instanceID)
+	return 0, fmt.Errorf("instance %d not found in any Karpenter-managed pool", instanceID)
 }
 
-func findNodeInPool(pool *linodego.LKENodePool, providerID string) (*linodego.LKENodePoolLinode, error) {
-	instanceID, err := utils.ParseInstanceID(providerID)
+func findNodeInPool(pool *linodego.LKENodePool, id string) (*linodego.LKENodePoolLinode, error) {
+	instanceID, err := strconv.Atoi(id)
 	if err != nil {
-		return nil, err
-	}
-	intID, err := strconv.Atoi(instanceID)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parsing instance ID, %w", err)
 	}
 	for _, node := range pool.Linodes {
-		if node.InstanceID == intID {
+		if node.InstanceID == instanceID {
 			return &node, nil
 		}
 	}
-	return nil, fmt.Errorf("instance %d not found in pool %d", intID, pool.ID)
+	return nil, fmt.Errorf("instance %d not found in pool %d", instanceID, pool.ID)
 }
 
 func (p *DefaultProvider) listLKEPools(ctx context.Context) ([]linodego.LKENodePool, error) {
 	listFilter := utils.Filter{
 		Tags: []string{
 			karpv1.NodePoolLabelKey,
-			apis.Group + "/linodenodeclass",
+			v1.LabelLKEManaged,
 		},
 	}
 	filter, err := listFilter.String()

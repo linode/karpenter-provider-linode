@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/awslabs/operatorpkg/reasonable"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/klog/v2"
@@ -35,6 +34,8 @@ import (
 	"sigs.k8s.io/karpenter/pkg/operator/injection"
 	"sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
 
+	"github.com/awslabs/operatorpkg/reasonable"
+
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
@@ -42,16 +43,16 @@ import (
 )
 
 type Controller struct {
-	kubeClient       client.Client
-	cloudProvider    cloudprovider.CloudProvider
-	instanceProvider instance.Provider
+	kubeClient    client.Client
+	cloudProvider cloudprovider.CloudProvider
+	nodeProvider  instance.Provider
 }
 
-func NewController(kubeClient client.Client, cloudProvider cloudprovider.CloudProvider, instanceProvider instance.Provider) *Controller {
+func NewController(kubeClient client.Client, cloudProvider cloudprovider.CloudProvider, nodeProvider instance.Provider) *Controller {
 	return &Controller{
-		kubeClient:       kubeClient,
-		cloudProvider:    cloudProvider,
-		instanceProvider: instanceProvider,
+		kubeClient:    kubeClient,
+		cloudProvider: cloudProvider,
+		nodeProvider:  nodeProvider,
 	}
 }
 
@@ -104,17 +105,17 @@ func (c *Controller) tagInstance(ctx context.Context, nc *karpv1.NodeClaim, id s
 		v1.LKEClusterNameTagKey: options.FromContext(ctx).ClusterName,
 	}
 
-	// Remove tags which have been already populated
-	instance, err := c.instanceProvider.Get(ctx, id, instance.SkipCache)
+	node, err := c.nodeProvider.Get(ctx, id, instance.SkipCache)
 	if err != nil {
-		return fmt.Errorf("tagging nodeclaim, %w", err)
+		return fmt.Errorf("getting instance for tagging, %w", err)
 	}
-	tags = lo.OmitByKeys(tags, instance.Tags)
+	existingTags := utils.TagListToMap(node.Tags)
+	tags = lo.OmitByKeys(tags, lo.Keys(existingTags))
 	if len(tags) == 0 {
 		return nil
 	}
 
-	if err := c.instanceProvider.CreateTags(ctx, id, tags); err != nil {
+	if err := c.nodeProvider.CreateTags(ctx, id, tags); err != nil {
 		return fmt.Errorf("tagging nodeclaim, %w", err)
 	}
 	return nil

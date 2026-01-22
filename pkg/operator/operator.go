@@ -31,6 +31,7 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/lke"
 )
 
 func init() {
@@ -42,7 +43,7 @@ type Operator struct {
 	UnavailableOfferingsCache *linodecache.UnavailableOfferings
 	ValidationCache           *cache.Cache
 	InstanceTypesProvider     *instancetype.DefaultProvider
-	InstanceProvider          instance.Provider
+	NodeProvider              instance.Provider
 	LinodeClient              sdk.LinodeAPI
 }
 
@@ -70,20 +71,39 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClientC
 	// Instance type updates are hydrated asynchronously after this by controllers.
 	lo.Must0(instanceTypeProvider.UpdateInstanceTypes(ctx))
 	lo.Must0(instanceTypeProvider.UpdateInstanceTypeOfferings(ctx))
-	instanceProvider := instance.NewDefaultProvider(
-		options.FromContext(ctx).ClusterRegion,
-		operator.EventRecorder,
-		linodeClient,
-		unavailableOfferingsCache,
-		cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
-	)
+
+	opts := options.FromContext(ctx)
+	var nodeProvider instance.Provider
+
+	// Initialize only the provider needed for the configured mode
+	switch opts.Mode {
+	case "lke":
+		log.FromContext(ctx).Info("initializing in LKE mode")
+		nodeProvider = lke.NewDefaultProvider(
+			opts.ClusterID,
+			opts.ClusterRegion,
+			operator.EventRecorder,
+			linodeClient,
+			unavailableOfferingsCache,
+			cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
+		)
+	case "instance":
+		log.FromContext(ctx).Info("initializing in direct instance mode")
+		nodeProvider = instance.NewDefaultProvider(
+			opts.ClusterRegion,
+			operator.EventRecorder,
+			linodeClient,
+			unavailableOfferingsCache,
+			cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
+		)
+	}
 
 	return ctx, &Operator{
 		Operator:                  operator,
 		UnavailableOfferingsCache: unavailableOfferingsCache,
 		ValidationCache:           validationCache,
 		InstanceTypesProvider:     instanceTypeProvider,
-		InstanceProvider:          instanceProvider,
+		NodeProvider:              nodeProvider,
 		LinodeClient:              linodeClient,
 	}
 }

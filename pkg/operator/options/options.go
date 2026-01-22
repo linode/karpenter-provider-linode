@@ -35,18 +35,22 @@ type optionsKey struct{}
 
 type Options struct {
 	ClusterName             string
+	ClusterID               int
 	ClusterRegion           string
 	ClusterEndpoint         string
 	VMMemoryOverheadPercent float64
 	DisableDryRun           bool
+	Mode                    string
 }
 
 func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
 	fs.StringVar(&o.ClusterName, "cluster-name", env.WithDefaultString("CLUSTER_NAME", ""), "[REQUIRED] The kubernetes cluster name for resource discovery.")
+	fs.IntVar(&o.ClusterID, "cluster-id", env.WithDefaultInt("CLUSTER_ID", 0), "The LKE cluster ID for LKE node pool operations. Required when mode is 'lke'.")
 	fs.StringVar(&o.ClusterRegion, "cluster-region", env.WithDefaultString("CLUSTER_REGION", "us-east"), "The region the kubernetes cluster is deployed in.")
 	fs.StringVar(&o.ClusterEndpoint, "cluster-endpoint", env.WithDefaultString("CLUSTER_ENDPOINT", ""), "The external kubernetes cluster endpoint for new nodes to connect with. If not specified, will discover the cluster endpoint using DescribeCluster API.")
 	fs.Float64Var(&o.VMMemoryOverheadPercent, "vm-memory-overhead-percent", utils.WithDefaultFloat64("VM_MEMORY_OVERHEAD_PERCENT", 0.075), "The VM memory overhead as a percent that will be subtracted from the total memory for all instance types when cached information is unavailable.")
 	fs.BoolVarWithEnv(&o.DisableDryRun, "disable-dry-run", "DISABLE_DRY_RUN", false, "If true, then disable dry run validation for LinodeNodeClasses.")
+	fs.StringVar(&o.Mode, "mode", env.WithDefaultString("KARPENTER_MODE", "lke"), "Operating mode: 'lke' for LKE NodePool provisioning, 'instance' for direct Linode instances.")
 }
 
 func (o *Options) Parse(fs *coreoptions.FlagSet, args ...string) error {

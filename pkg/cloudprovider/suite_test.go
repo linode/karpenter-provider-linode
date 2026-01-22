@@ -80,9 +80,6 @@ var _ = BeforeSuite(func() {
 	linodeEnv = test.NewEnvironment(ctx)
 	fakeClock = clock.NewFakeClock(time.Now())
 	recorder = events.NewRecorder(&record.FakeRecorder{})
-	cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.InstanceProvider, recorder, env.Client)
-	cluster = state.NewCluster(fakeClock, env.Client, cloudProvider)
-	prov = provisioning.NewProvisioner(env.Client, recorder, cloudProvider, cluster, fakeClock)
 })
 
 var _ = AfterSuite(func() {
@@ -93,8 +90,6 @@ var _ = AfterSuite(func() {
 var _ = BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
-
-	cluster.Reset()
 	linodeEnv.Reset()
 })
 
@@ -107,7 +102,14 @@ var _ = Describe("CloudProvider", func() {
 	var nodePool *karpv1.NodePool
 	var nodeClaim *karpv1.NodeClaim
 	var _ = BeforeEach(func() {
-		nodeClass = test.LinodeNodeClass(
+		// Override context with instance mode for direct Linode instance tests
+		ctx = options.ToContext(ctx, test.Options(test.OptionsFields{Mode: lo.ToPtr("instance")}))
+		// Create CloudProvider with instance provider for this test suite
+		cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.InstanceProvider, recorder, env.Client)
+		cluster = state.NewCluster(fakeClock, env.Client, cloudProvider)
+		prov = provisioning.NewProvisioner(env.Client, recorder, cloudProvider, cluster, fakeClock)
+		// Use LinodeNodeClassWithoutLKE for direct Linode instance tests
+		nodeClass = test.LinodeNodeClassWithoutLKE(
 			v1.LinodeNodeClass{
 				Spec: v1.LinodeNodeClassSpec{
 					Image: "linode/ubuntu22.04",
@@ -316,6 +318,162 @@ var _ = Describe("CloudProvider", func() {
 			// This ensures that the pods are scheduled in 2 different nodes.
 			Expect(node1.Name).ToNot(Equal(node2.Name))
 			Expect(linodeEnv.LinodeAPI.CreateInstanceBehavior.Calls() == 2).To(BeTrue()) */
+		})
+	})
+})
+
+var _ = Describe("CloudProvider LKE Mode", func() {
+	var lkeNodeClass *v1.LinodeNodeClass
+	var lkeNodePool *karpv1.NodePool
+	var lkeNodeClaim *karpv1.NodeClaim
+	var _ = BeforeEach(func() {
+		// Override context with lke mode for LKE-managed mode tests
+		ctx = options.ToContext(ctx, test.Options(test.OptionsFields{Mode: lo.ToPtr("lke")}))
+		// Create CloudProvider with LKE provider for this test suite
+		cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.LKENodeProvider, recorder, env.Client)
+		cluster = state.NewCluster(fakeClock, env.Client, cloudProvider)
+		prov = provisioning.NewProvisioner(env.Client, recorder, cloudProvider, cluster, fakeClock)
+		// Use LinodeNodeClass for LKE-managed mode tests
+		lkeNodeClass = test.LinodeNodeClass()
+		lkeNodeClass.StatusConditions().SetTrue(opstatus.ConditionReady)
+		lkeNodePool = coretest.NodePool(karpv1.NodePool{
+			Spec: karpv1.NodePoolSpec{
+				Template: karpv1.NodeClaimTemplate{
+					Spec: karpv1.NodeClaimTemplateSpec{
+						NodeClassRef: &karpv1.NodeClassReference{
+							Group: object.GVK(lkeNodeClass).Group,
+							Kind:  object.GVK(lkeNodeClass).Kind,
+							Name:  lkeNodeClass.Name,
+						},
+						Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
+							{
+								NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+									Key:      karpv1.CapacityTypeLabelKey,
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{karpv1.CapacityTypeOnDemand},
+								}},
+						},
+					},
+				},
+			},
+		})
+		lkeNodeClaim = coretest.NodeClaim(karpv1.NodeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{karpv1.NodePoolLabelKey: lkeNodePool.Name},
+			},
+			Spec: karpv1.NodeClaimSpec{
+				NodeClassRef: &karpv1.NodeClassReference{
+					Group: object.GVK(lkeNodeClass).Group,
+					Kind:  object.GVK(lkeNodeClass).Kind,
+					Name:  lkeNodeClass.Name,
+				},
+				Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
+					{
+						NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+							Key:      karpv1.CapacityTypeLabelKey,
+							Operator: corev1.NodeSelectorOpIn,
+							Values:   []string{karpv1.CapacityTypeOnDemand},
+						},
+					},
+				},
+			},
+		})
+		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypes(ctx)).To(Succeed())
+		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeOfferings(ctx)).To(Succeed())
+	})
+
+	Context("Create", func() {
+		It("should create LKE node pool in LKE mode", func() {
+			ExpectApplied(ctx, env.Client, lkeNodePool, lkeNodeClass, lkeNodeClaim)
+			cloudProviderNodeClaim, err := cloudProvider.Create(ctx, lkeNodeClaim)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cloudProviderNodeClaim).ToNot(BeNil())
+			Expect(cloudProviderNodeClaim.Status.ProviderID).To(ContainSubstring("linode://"))
+		})
+
+		It("should set correct annotations on LKE nodeclaim", func() {
+			ExpectApplied(ctx, env.Client, lkeNodePool, lkeNodeClass, lkeNodeClaim)
+			cloudProviderNodeClaim, err := cloudProvider.Create(ctx, lkeNodeClaim)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cloudProviderNodeClaim).ToNot(BeNil())
+			Expect(lo.Keys(cloudProviderNodeClaim.Annotations)).To(ContainElements(
+				v1.AnnotationLinodeNodeClassHash,
+				v1.AnnotationLinodeNodeClassHashVersion,
+			))
+		})
+
+		It("should return NodeClassNotReady error when LKENodeClass is not ready", func() {
+			lkeNodeClass.StatusConditions().SetFalse(opstatus.ConditionReady, "NodeClassNotReady", "NodeClass not ready")
+			ExpectApplied(ctx, env.Client, lkeNodePool, lkeNodeClass, lkeNodeClaim)
+			_, err := cloudProvider.Create(ctx, lkeNodeClaim)
+			Expect(err).To(HaveOccurred())
+			Expect(corecloudprovider.IsNodeClassNotReadyError(err)).To(BeTrue())
+		})
+	})
+
+	Context("Get", func() {
+		It("should return LKE node when instance exists", func() {
+			ExpectApplied(ctx, env.Client, lkeNodePool, lkeNodeClass, lkeNodeClaim)
+			cloudProviderNodeClaim, err := cloudProvider.Create(ctx, lkeNodeClaim)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cloudProviderNodeClaim).ToNot(BeNil())
+
+			// Get the node by providerID
+			retrievedNodeClaim, err := cloudProvider.Get(ctx, cloudProviderNodeClaim.Status.ProviderID)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(retrievedNodeClaim).ToNot(BeNil())
+			Expect(retrievedNodeClaim.Status.ProviderID).To(Equal(cloudProviderNodeClaim.Status.ProviderID))
+		})
+	})
+
+	Context("List", func() {
+		It("should include LKE nodes in list results", func() {
+			ExpectApplied(ctx, env.Client, lkeNodePool, lkeNodeClass, lkeNodeClaim)
+			cloudProviderNodeClaim, err := cloudProvider.Create(ctx, lkeNodeClaim)
+			Expect(err).ToNot(HaveOccurred())
+
+			nodeClaims, err := cloudProvider.List(ctx)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(len(nodeClaims)).To(BeNumerically(">=", 1))
+
+			providerIDs := lo.Map(nodeClaims, func(nc *karpv1.NodeClaim, _ int) string {
+				return nc.Status.ProviderID
+			})
+			Expect(providerIDs).To(ContainElement(cloudProviderNodeClaim.Status.ProviderID))
+		})
+
+		It("should not return duplicates for LKE-managed instances", func() {
+			ExpectApplied(ctx, env.Client, lkeNodePool, lkeNodeClass, lkeNodeClaim)
+			cloudProviderNodeClaim, err := cloudProvider.Create(ctx, lkeNodeClaim)
+			Expect(err).ToNot(HaveOccurred())
+
+			nodeClaims, err := cloudProvider.List(ctx)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Count how many times this providerID appears
+			count := lo.CountBy(nodeClaims, func(nc *karpv1.NodeClaim) bool {
+				return nc.Status.ProviderID == cloudProviderNodeClaim.Status.ProviderID
+			})
+			Expect(count).To(Equal(1), "LKE node should appear exactly once in list")
+		})
+	})
+
+	Context("Delete", func() {
+		It("should delete LKE node pool via lkenodeProvider", func() {
+			ExpectApplied(ctx, env.Client, lkeNodePool, lkeNodeClass, lkeNodeClaim)
+			cloudProviderNodeClaim, err := cloudProvider.Create(ctx, lkeNodeClaim)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Update nodeClaim with providerID for delete
+			lkeNodeClaim.Status.ProviderID = cloudProviderNodeClaim.Status.ProviderID
+			ExpectApplied(ctx, env.Client, lkeNodeClaim)
+
+			err = cloudProvider.Delete(ctx, lkeNodeClaim)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Verify node is deleted
+			_, err = cloudProvider.Get(ctx, cloudProviderNodeClaim.Status.ProviderID)
+			Expect(err).To(HaveOccurred())
 		})
 	})
 })

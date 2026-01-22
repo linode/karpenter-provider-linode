@@ -28,9 +28,10 @@ import (
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
-	"github.com/linode/karpenter-provider-linode/pkg/providers/nodepool"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/lke"
 )
 
 func init() {
@@ -59,7 +60,16 @@ type Environment struct {
 	InstanceTypesProvider *instancetype.DefaultProvider
 	InstanceProvider      *instance.DefaultProvider
 	InstanceTypesResolver *instancetype.DefaultResolver
-	NodePoolProvider      *nodepool.DefaultProvider
+	LKENodeProvider       *lke.DefaultProvider
+}
+
+// NodeProvider returns the appropriate provider based on the mode in context.
+// For tests that need a specific provider, use InstanceProvider or LKENodeProvider directly.
+func (env *Environment) NodeProvider(ctx context.Context) instance.Provider {
+	if options.FromContext(ctx).Mode == "lke" {
+		return env.LKENodeProvider
+	}
+	return env.InstanceProvider
 }
 
 func NewEnvironment(ctx context.Context) *Environment {
@@ -102,8 +112,8 @@ func NewEnvironment(ctx context.Context) *Environment {
 		instanceCache,
 	)
 
-	nodePoolProvider := nodepool.NewDefaultProvider(
-		fake.DefaultClusterName,
+	lkeNodeProvider := lke.NewDefaultProvider(
+		fake.DefaultClusterID,
 		fake.DefaultRegion,
 		eventRecorder,
 		linodeClient,
@@ -128,7 +138,7 @@ func NewEnvironment(ctx context.Context) *Environment {
 
 		InstanceTypesProvider: instanceTypesProvider,
 		InstanceProvider:      instanceProvider,
-		NodePoolProvider:      nodePoolProvider,
+		LKENodeProvider:       lkeNodeProvider,
 	}
 }
 

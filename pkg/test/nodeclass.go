@@ -37,6 +37,18 @@ func LinodeNodeClass(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {
 	}
 }
 
+// LinodeNodeClassWithoutLKE creates a LinodeNodeClass configured for direct Linode instance tests.
+// The mode (LKE vs instance) is controlled by the startup flag, not this nodeclass.
+// This helper sets up appropriate defaults for instance mode testing (e.g., Image field).
+func LinodeNodeClassWithoutLKE(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {
+	nc := LinodeNodeClass(overrides...)
+	// Set default image for instance mode if not provided
+	if nc.Spec.Image == "" {
+		nc.Spec.Image = "linode/ubuntu22.04"
+	}
+	return nc
+}
+
 type TestNodeClass struct {
 	v1.LinodeNodeClass
 }

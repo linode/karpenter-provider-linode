@@ -59,11 +59,12 @@ func TestLinode(t *testing.T) {
 var _ = BeforeSuite(func() {
 	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(testv1alpha1.CRDs...))
 	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
+	ctx = options.ToContext(ctx, test.Options())
 	ctx, stop = context.WithCancel(ctx)
 	linodeEnv = test.NewEnvironment(ctx)
 	cloudProvider = cloudprovider.New(
 		linodeEnv.InstanceTypesProvider,
-		linodeEnv.InstanceProvider,
+		linodeEnv.NodeProvider(ctx),
 		events.NewRecorder(&record.FakeRecorder{}),
 		env.Client,
 	)

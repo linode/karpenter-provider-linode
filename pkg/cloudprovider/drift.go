@@ -23,6 +23,7 @@ import (
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 )
 
+// TODO: Implement drift detection
 func (c *CloudProvider) isNodeClassDrifted(ctx context.Context, nodeClaim *karpv1.NodeClaim, nodePool *karpv1.NodePool, nodeClass *v1.LinodeNodeClass) (cloudprovider.DriftReason, error) {
 	return "", nil
 }

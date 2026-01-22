@@ -344,6 +344,7 @@ func (l *LinodeClient) CreateLKENodePool(_ context.Context, clusterID int, opts 
 				Type:   params.Opts.Type,
 				Region: DefaultRegion,
 				Status: linodego.InstanceRunning,
+				Tags:   params.Opts.Tags,
 			}
 			l.Instances.Store(instance.ID, instance)
 
@@ -484,9 +485,12 @@ func (l *LinodeClient) UpdateLKENodePool(_ context.Context, clusterID, poolID in
 		// not immutable properties like region or type). In this fake implementation
 		// we intentionally only model updates to Count (scaling up/down) and ignore
 		// any other fields that might be present on the real update options.
-		// Handle count changes (scaling up/down)
+		// Handle count changes (scaling up/down) - only if Count > 0 (explicitly set).
+		// Rationale: tags-only updates omit Count (zero value). Without this guard we would
+		// zero pool.Count and pool.Linodes during a tags update, effectively deleting nodes
+		// in the fake and breaking list/get expectations.
 		nodes := pool.Linodes
-		if params.Opts.Count > pool.Count {
+		if params.Opts.Count > 0 && params.Opts.Count > pool.Count {
 			skipInstance := false
 			l.InsufficientCapacityPools.Range(func(capacityPool CapacityPool) bool {
 				if capacityPool.InstanceType == pool.Type &&
@@ -524,16 +528,16 @@ func (l *LinodeClient) UpdateLKENodePool(_ context.Context, clusterID, poolID in
 					Status:     linodego.LKELinodeReady,
 				})
 			}
-		} else if params.Opts.Count < pool.Count {
+			pool.Linodes = nodes
+			pool.Count = params.Opts.Count
+		} else if params.Opts.Count > 0 && params.Opts.Count < pool.Count {
 			// Scale down - remove excess instances
 			for i := params.Opts.Count; i < len(nodes); i++ {
 				l.Instances.Delete(nodes[i].InstanceID)
 			}
 			pool.Linodes = nodes[:params.Opts.Count]
+			pool.Count = params.Opts.Count
 		}
-
-		// Update the pool and instances
-		pool.Count = params.Opts.Count
 
 		// Update other optional fields
 		if params.Opts.Tags != nil {

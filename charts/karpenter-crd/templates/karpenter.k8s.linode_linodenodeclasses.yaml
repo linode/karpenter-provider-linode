@@ -453,6 +453,20 @@ spec:
                 description: labels is a map of Kubernetes node labels to apply to
                   the Node.
                 type: object
+              lkeK8sVersion:
+                description: |-
+                  lkeK8sVersion is the Kubernetes version for LKE node pools.
+                  Only used in LKE mode. Only available for Enterprise LKE clusters.
+                type: string
+              lkeUpdateStrategy:
+                description: |-
+                  lkeUpdateStrategy defines how nodes are updated when the LKE node pool is modified.
+                  Only used in LKE mode.
+                  Valid values are "rolling_update" and "on_recycle".
+                enum:
+                - rolling_update
+                - on_recycle
+                type: string
               osDisk:
                 description: |-
                   osDisk is a configuration for the root disk that includes the OS,

@@ -27,6 +27,7 @@ func (o *Options) Validate() error {
 		o.validateEndpoint(),
 		o.validateVMMemoryOverheadPercent(),
 		o.validateRequiredFields(),
+		o.validateMode(),
 	)
 }
 
@@ -53,6 +54,16 @@ func (o *Options) validateVMMemoryOverheadPercent() error {
 func (o *Options) validateRequiredFields() error {
 	if o.ClusterName == "" {
 		return fmt.Errorf("missing field, cluster-name")
+	}
+	if o.Mode == "lke" && o.ClusterID <= 0 {
+		return fmt.Errorf("missing or invalid field, cluster-id must be a positive integer when mode is 'lke'")
+	}
+	return nil
+}
+
+func (o *Options) validateMode() error {
+	if o.Mode != "lke" && o.Mode != "instance" {
+		return fmt.Errorf("invalid mode %q, must be either 'lke' or 'instance'", o.Mode)
 	}
 	return nil
 }

@@ -26,9 +26,11 @@ import (
 
 type OptionsFields struct {
 	ClusterName             *string
+	ClusterID               *int
 	ClusterEndpoint         *string
 	ClusterRegion           *string
 	VMMemoryOverheadPercent *float64
+	Mode                    *string
 }
 
 func Options(overrides ...OptionsFields) *options.Options {
@@ -40,8 +42,10 @@ func Options(overrides ...OptionsFields) *options.Options {
 	}
 	return &options.Options{
 		ClusterName:             lo.FromPtrOr(opts.ClusterName, "123456789012"),
+		ClusterID:               lo.FromPtrOr(opts.ClusterID, fake.DefaultClusterID),
 		ClusterEndpoint:         lo.FromPtrOr(opts.ClusterEndpoint, "https://test-cluster"),
 		ClusterRegion:           lo.FromPtrOr(opts.ClusterRegion, fake.DefaultRegion),
 		VMMemoryOverheadPercent: lo.FromPtrOr(opts.VMMemoryOverheadPercent, 0.075),
+		Mode:                    lo.FromPtrOr(opts.Mode, "lke"),
 	}
 }
