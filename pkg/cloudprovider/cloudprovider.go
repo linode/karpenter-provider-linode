@@ -245,8 +245,7 @@ func (c *CloudProvider) IsDrifted(ctx context.Context, nodeClaim *karpv1.NodeCla
 		return "", fmt.Errorf("resolving nodeclass, %w", err)
 	}
 
-	// TODO: Implement drift detection
-	return c.isNodeClassDrifted(ctx, nodeClaim, nodePool, nodeClass)
+	return c.isNodeClassDrifted(ctx, nodeClaim, nodePool, nodeClass), nil
 }
 
 // Name returns the CloudProvider implementation name.
