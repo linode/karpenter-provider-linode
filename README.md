@@ -57,6 +57,15 @@ Karpenter improves the efficiency and cost of running workloads on Kubernetes cl
 * **Provisioning** nodes that meet the requirements of the pods
 * **Removing** the nodes when the nodes are no longer needed
 
+## Provider Modes
+
+This provider supports two operating modes:
+
+1.  **LKE Mode (Default)**: Creates LKE Node Pools for each provisioned node. This is the simplest method and recommended for most users.
+2.  **Instance Mode**: Creates standard Linode Instances. This offers granular control over instance settings (SSH keys, placement groups, etc.) but requires more manual configuration. This is currently in **development and not yet fully functional**.
+
+See [Configuration Documentation](docs/CONFIGURATION.md) for full details on modes and available settings.
+
 ## Installation
 
 ### Install tools
@@ -75,7 +84,7 @@ This can be easily done in [Linode Cloud Manager](https://cloud.linode.com/) or 
 
 The Karpenter Helm chart requires specific configuration values to work with an LKE cluster.
 
-1. Create a Linode PAT if you don't already have a LINODE\_TOKEN env var set. Karpenter will use this for managing nodes in the LKE cluster.
+1. Create a Linode PAT if you don't already have a `LINODE_TOKEN` env var set. Karpenter will use this for managing nodes in the LKE cluster.
 2. Set the variables:
 
     ```bash
@@ -83,6 +92,9 @@ The Karpenter Helm chart requires specific configuration values to work with an 
     export LINODE_REGION=<region> # whatever region your LKE cluster is running in
     export KUBECONFIG=<path to your LKE kubeconfig>
     export KARPENTER_NAMESPACE=kube-system
+    export LINODE_TOKEN=<your api token>
+    # Optional: Set mode directly (default is lke)
+    # export KARPENTER_MODE=lke 
     ```
 
 ### Install Karpenter
