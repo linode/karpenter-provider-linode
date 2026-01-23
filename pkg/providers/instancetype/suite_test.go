@@ -150,10 +150,12 @@ var _ = Describe("InstanceTypeProvider", func() {
 			v1.LabelInstanceMemory:                  "4096",
 			v1.LabelInstanceTransfer:                "2000",
 			v1.LabelInstanceNetworkOut:              "1000",
-			v1.LabelInstanceGPUCount:                "0",
+			v1.LabelInstanceGPUCount:                "4",
 			v1.LabelInstanceAcceleratedDevicesCount: "0",
 			v1.LabelInstanceClass:                   "standard",
 			v1.LabelInstanceGeneration:              "6",
+			v1.LabelInstanceGPUName:                 "rtx6000",
+			v1.LabelInstanceDisk:                    "307200",
 		}
 
 		// Ensure that we're exercising all well-known labels

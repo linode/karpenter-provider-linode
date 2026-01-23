@@ -217,6 +217,7 @@ func computeRequirements(
 		scheduling.NewRequirement(v1.LabelInstanceClass, corev1.NodeSelectorOpIn, fmt.Sprint(info.Class)),
 		scheduling.NewRequirement(v1.LabelInstanceGPUCount, corev1.NodeSelectorOpIn, fmt.Sprint(info.GPUs)),
 		scheduling.NewRequirement(v1.LabelInstanceAcceleratedDevicesCount, corev1.NodeSelectorOpIn, fmt.Sprint(info.AcceleratedDevices)),
+		scheduling.NewRequirement(v1.LabelInstanceDisk, corev1.NodeSelectorOpIn, fmt.Sprint(info.Disk)),
 	)
 	// Linode instance types are generally formatted as <generation>-<class>-<memory>(-<cpu>), e.g. g6-standard-4, g8-dedicated-128-64
 	// Exceptions to this naming convention are GPU and accelerated plan types (e.g. g1-accelerated-netint-vpu-t1u1-m, g1-gpu-rtx6000-1)
@@ -226,6 +227,14 @@ func computeRequirements(
 		requirements.Add(
 			scheduling.NewRequirement(v1.LabelInstanceGeneration, corev1.NodeSelectorOpIn, strings.TrimPrefix(instanceTypeParts[0], "g")),
 		)
+		// if this is a gpu plan type, figure out what the gpu name is
+		// (e.g. g2-gpu-rtx4000a1-xl -> rtx4000a1, g1-gpu-rtx6000-1 -> rtx6000)
+		// TODO: do we want to strip out the a suffixes like 'a1'?
+		if instanceTypeParts[1] == "gpu" && len(instanceTypeParts) >= 3 {
+			requirements.Add(
+				scheduling.NewRequirement(v1.LabelInstanceGPUName, corev1.NodeSelectorOpIn, instanceTypeParts[2]),
+			)
+		}
 	}
 
 	return requirements

@@ -292,6 +292,13 @@ var _ = Describe("CloudProvider", func() {
 								},
 								{
 									NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+										Key:      v1.LabelInstanceClass,
+										Operator: corev1.NodeSelectorOpIn,
+										Values:   []string{"standard"},
+									},
+								},
+								{
+									NodeSelectorRequirement: corev1.NodeSelectorRequirement{
 										Key:      corev1.LabelInstanceTypeStable,
 										Operator: corev1.NodeSelectorOpIn,
 										Values:   instanceNames,
