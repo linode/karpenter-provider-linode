@@ -29,7 +29,6 @@ import (
 
 const (
 	DefaultRegion    = "us-east"
-	DefaultAccount   = "123456789"
 	DefaultClusterID = 12345
 )
 

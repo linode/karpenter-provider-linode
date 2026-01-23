@@ -17,6 +17,7 @@ package instancetype
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/linode/linodego"
@@ -34,7 +35,9 @@ import (
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype/offering"
+	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
 type NodeClass interface {
@@ -198,8 +201,16 @@ func (p *DefaultProvider) UpdateInstanceTypes(ctx context.Context) error {
 	// calls to Linode API when we could have just made one call.
 	p.muInstanceTypesInfo.Lock()
 	defer p.muInstanceTypesInfo.Unlock()
-
-	instanceTypes, err := p.client.ListTypes(ctx, &linodego.ListOptions{}) // TODO: filter by region (do we expect to support multiple regions?)
+	listFilter := utils.Filter{
+		AdditionalFilters: map[string]string{
+			"region": strings.Join(lo.Keys(p.allRegions), ","),
+		},
+	}
+	filter, err := listFilter.String()
+	if err != nil {
+		return err
+	}
+	instanceTypes, err := p.client.ListTypes(ctx, linodego.NewListOptions(0, filter))
 	if err != nil {
 		return fmt.Errorf("listing linode instance types, %w", err)
 	}
@@ -225,23 +236,17 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 	p.muInstanceTypesOfferings.Lock()
 	defer p.muInstanceTypesOfferings.Unlock()
 
-	// Get offerings from Linode API
-	instanceTypeOfferings := map[string]sets.Set[string]{}
-
-	// // TODO: filter by region for ListOptions (do we expect to support multiple regions?)
-	/* listFilter := utils.Filter{
-		AdditionalFilters: map[string]string{},
-	}
-	filter, err := listFilter.String()
+	filter, err := p.createFilter(ctx)
 	if err != nil {
-		return err
-	} */
-
-	regionAvail, err := p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{})
+		return fmt.Errorf("creating filter for region availability %w", err)
+	}
+	// Get offerings from Linode API
+	regionAvail, err := p.client.ListRegionsAvailability(ctx, linodego.NewListOptions(0, filter))
 	if err != nil {
 		return fmt.Errorf("listing region availability %w", err)
 	}
 
+	instanceTypeOfferings := map[string]sets.Set[string]{}
 	for _, offering := range regionAvail {
 		if _, ok := instanceTypeOfferings[offering.Plan]; !ok {
 			instanceTypeOfferings[offering.Plan] = sets.New[string]()
@@ -270,6 +275,19 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 	}
 	p.allRegions = allRegions
 	return nil
+}
+
+func (p *DefaultProvider) createFilter(ctx context.Context) (string, error) {
+	// if we're running in LKE mode, we only want to get offerings for the cluster region
+	if options.FromContext(ctx).Mode == "lke" && options.FromContext(ctx).ClusterRegion != "" {
+		listFilter := utils.Filter{
+			AdditionalFilters: map[string]string{
+				"region": options.FromContext(ctx).ClusterRegion,
+			},
+		}
+		return listFilter.String()
+	}
+	return "", nil
 }
 
 func (p *DefaultProvider) UpdateInstanceTypeCapacityFromNode(ctx context.Context, node *corev1.Node, nodeClass NodeClass) error {
