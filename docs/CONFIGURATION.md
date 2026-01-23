@@ -8,7 +8,7 @@ This guide details the configuration options for the Karpenter Provider for Lino
 |----------|-------------|-----------|---------|
 | `LINODE_TOKEN` | Your Linode API Personal Access Token. | **Yes** | - |
 | `CLUSTER_NAME` | The name of your LKE cluster. Used to discover the cluster ID in `lke` mode. | **Yes** (in `lke` mode) | - |
-| `LINODE_REGION` | The Linode region code (e.g., `us-east`, `eu-west`). | No | `us-east` |
+| `LINODE_REGION` | The Linode region code. See [available regions](https://www.linode.com/global-infrastructure/availability/). | No | `us-east` |
 | `CLUSTER_ENDPOINT` | The external Kubernetes cluster endpoint. Discovered automatically if not provided. | No | - |
 | `KARPENTER_MODE` | Operating mode: `lke` or `instance`. See [Modes](#modes) below. | No | `lke` |
 | `LINODE_CLIENT_TIMEOUT` | Timeout in seconds for Linode API client requests. | No | - |
