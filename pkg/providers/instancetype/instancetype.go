@@ -17,7 +17,6 @@ package instancetype
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/linode/linodego"
@@ -35,9 +34,7 @@ import (
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
-	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype/offering"
-	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
 type NodeClass interface {
@@ -201,16 +198,12 @@ func (p *DefaultProvider) UpdateInstanceTypes(ctx context.Context) error {
 	// calls to Linode API when we could have just made one call.
 	p.muInstanceTypesInfo.Lock()
 	defer p.muInstanceTypesInfo.Unlock()
-	listFilter := utils.Filter{
-		AdditionalFilters: map[string]string{
-			"region": strings.Join(lo.Keys(p.allRegions), ","),
-		},
-	}
-	filter, err := listFilter.String()
-	if err != nil {
-		return err
-	}
-	instanceTypes, err := p.client.ListTypes(ctx, linodego.NewListOptions(0, filter))
+
+	// NOTE: region filtering is not supported for list options and will throw a 400 error if attempted.
+	// There's no clean way to filter instance types by region client-side either
+	// since we'd need to assume if an instance type doesn't have a region price,
+	// then it's not available in that region.
+	instanceTypes, err := p.client.ListTypes(ctx, &linodego.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing linode instance types, %w", err)
 	}
@@ -236,12 +229,8 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 	p.muInstanceTypesOfferings.Lock()
 	defer p.muInstanceTypesOfferings.Unlock()
 
-	filter, err := p.createFilter(ctx)
-	if err != nil {
-		return fmt.Errorf("creating filter for region availability %w", err)
-	}
-	// Get offerings from Linode API
-	regionAvail, err := p.client.ListRegionsAvailability(ctx, linodego.NewListOptions(0, filter))
+	// NOTE: region filtering is not supported and will throw a 400 error if attempted
+	regionAvail, err := p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing region availability %w", err)
 	}
@@ -275,19 +264,6 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 	}
 	p.allRegions = allRegions
 	return nil
-}
-
-func (p *DefaultProvider) createFilter(ctx context.Context) (string, error) {
-	// if we're running in LKE mode, we only want to get offerings for the cluster region
-	if options.FromContext(ctx).Mode == "lke" && options.FromContext(ctx).ClusterRegion != "" {
-		listFilter := utils.Filter{
-			AdditionalFilters: map[string]string{
-				"region": options.FromContext(ctx).ClusterRegion,
-			},
-		}
-		return listFilter.String()
-	}
-	return "", nil
 }
 
 func (p *DefaultProvider) UpdateInstanceTypeCapacityFromNode(ctx context.Context, node *corev1.Node, nodeClass NodeClass) error {
