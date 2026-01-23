@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/controllers/nodeoverlay"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"

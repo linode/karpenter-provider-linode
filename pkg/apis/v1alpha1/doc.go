@@ -16,7 +16,7 @@ limitations under the License.
 // +k8s:deepcopy-gen=package,register
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=karpenter.k8s.linode
-package v1 // doc.go is discovered by codegen
+package v1alpha1 // doc.go is discovered by codegen
 
 import (
 	corev1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,7 +27,7 @@ import (
 )
 
 func init() {
-	gv := schema.GroupVersion{Group: apis.Group, Version: "v1"}
+	gv := schema.GroupVersion{Group: apis.Group, Version: "v1alpha1"}
 	corev1.AddToGroupVersion(scheme.Scheme, gv)
 	scheme.Scheme.AddKnownTypes(gv,
 		&LinodeNodeClass{},
