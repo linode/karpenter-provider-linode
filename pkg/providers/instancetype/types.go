@@ -215,17 +215,9 @@ func computeRequirements(
 		scheduling.NewRequirement(v1.LabelInstanceTransfer, corev1.NodeSelectorOpIn, fmt.Sprint(info.Transfer)),
 		scheduling.NewRequirement(v1.LabelInstanceNetworkOut, corev1.NodeSelectorOpIn, fmt.Sprint(info.NetworkOut)),
 		scheduling.NewRequirement(v1.LabelInstanceClass, corev1.NodeSelectorOpIn, fmt.Sprint(info.Class)),
+		scheduling.NewRequirement(v1.LabelInstanceGPUCount, corev1.NodeSelectorOpIn, fmt.Sprint(info.GPUs)),
+		scheduling.NewRequirement(v1.LabelInstanceAcceleratedDevicesCount, corev1.NodeSelectorOpIn, fmt.Sprint(info.AcceleratedDevices)),
 	)
-	if info.GPUs > 0 {
-		requirements.Add(
-			scheduling.NewRequirement(v1.LabelInstanceGPUCount, corev1.NodeSelectorOpIn, fmt.Sprint(info.GPUs)),
-		)
-	}
-	if info.AcceleratedDevices > 0 {
-		requirements.Add(
-			scheduling.NewRequirement(v1.LabelInstanceAcceleratedDevicesCount, corev1.NodeSelectorOpIn, fmt.Sprint(info.AcceleratedDevices)),
-		)
-	}
 	// Linode instance types are generally formatted as <generation>-<class>-<memory>(-<cpu>), e.g. g6-standard-4, g8-dedicated-128-64
 	// Exceptions to this naming convention are GPU and accelerated plan types (e.g. g1-accelerated-netint-vpu-t1u1-m, g1-gpu-rtx6000-1)
 	// For generation, we can safely assume it's the first part of the instance type ID
