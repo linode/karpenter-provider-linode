@@ -75,15 +75,18 @@ This can be easily done in [Linode Cloud Manager](https://cloud.linode.com/) or 
 
 The Karpenter Helm chart requires specific configuration values to work with an LKE cluster.
 
-1. Create a Linode PAT if you don't already have a LINODE\_TOKEN env var set. Karpenter will use this for managing nodes in the LKE cluster.
+1. Create a Linode PAT if you don't already have a LINODE_TOKEN env var set. Karpenter will use this for managing nodes in the LKE cluster.
 2. Set the variables:
 
     ```bash
     export CLUSTER_NAME=<cluster name>
-    export LINODE_REGION=<region> # whatever region your LKE cluster is running in
     export KUBECONFIG=<path to your LKE kubeconfig>
     export KARPENTER_NAMESPACE=kube-system
+    # Optional: specify region explicitly (auto-discovered in LKE mode if not set)
+    # export LINODE_REGION=<region>
     ```
+
+**Note**: In LKE mode (default), Karpenter automatically discovers the cluster region from the Linode API using the cluster name. You can optionally set `LINODE_REGION` to override this behavior.
 
 ### Install Karpenter
 
@@ -92,11 +95,24 @@ Use the configured environment variables to install Karpenter using Helm:
 ```bash
 helm upgrade --install --namespace "${KARPENTER_NAMESPACE}" --create-namespace karpenter-crd charts/karpenter-crd
 helm upgrade --install --namespace "${KARPENTER_NAMESPACE}" --create-namespace karpenter charts/karpenter \
-		--set region=${LINODE_REGION} \
 		--set settings.clusterName=${CLUSTER_NAME} \
 		--set apiToken=${LINODE_TOKEN} \
         --wait
 ```
+
+**Optional Configuration:**
+
+- **Region**: Specify the region explicitly (only required for `instance` mode):
+  ```bash
+  --set region=${LINODE_REGION}
+  ```
+
+- **Mode**: Choose the operating mode (default is `lke`):
+  - `lke`: Provisions nodes using LKE NodePools (recommended for LKE clusters)
+  - `instance`: Provisions nodes as direct Linode instances
+  ```bash
+  --set settings.mode=lke
+  ```
 
 Check karpenter deployed successfully:
 
