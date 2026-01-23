@@ -33,6 +33,7 @@ var (
 	defaultLinodeTypeList = []linodego.LinodeType{
 		{
 			ID:                 "g6-standard-2",
+			Class:              "standard",
 			Label:              "Linode 4GB",
 			Memory:             4096,
 			VCPUs:              2,
@@ -40,10 +41,12 @@ var (
 			AcceleratedDevices: 0,
 			Disk:               81920,
 			Transfer:           1000,
+			NetworkOut:         1000,
 			Price:              &linodego.LinodePrice{Monthly: 20.0, Hourly: 0.03},
 		},
 		{
 			ID:                 "g6-standard-4",
+			Class:              "standard",
 			Label:              "Linode 8GB",
 			Memory:             8192,
 			VCPUs:              4,
@@ -51,10 +54,12 @@ var (
 			AcceleratedDevices: 0,
 			Disk:               163840,
 			Transfer:           2000,
+			NetworkOut:         2000,
 			Price:              &linodego.LinodePrice{Monthly: 40.0, Hourly: 0.06},
 		},
 		{
 			ID:                 "g6-dedicated-4",
+			Class:              "standard",
 			Label:              "Linode Dedicated 8GB",
 			Memory:             8192,
 			VCPUs:              4,
@@ -62,6 +67,7 @@ var (
 			AcceleratedDevices: 0,
 			Disk:               163840,
 			Transfer:           2000,
+			NetworkOut:         2000,
 			Price:              &linodego.LinodePrice{Monthly: 60.0, Hourly: 0.09},
 		},
 	}

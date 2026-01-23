@@ -47,7 +47,8 @@ var (
 	LinodeWellKnownLabels = sets.New(
 		LabelInstanceCPU,
 		LabelInstanceMemory,
-		LabelInstanceNetworkBandwidth,
+		LabelInstanceTransfer,
+		LabelInstanceNetworkOut,
 		LabelInstanceGPUCount,
 		LabelInstanceAcceleratedDevicesCount,
 		LabelInstanceClass,
@@ -61,7 +62,8 @@ var (
 	LabelNodeClass                           = apis.Group + "/linodenodeclass"
 	AnnotationLinodeNodeClassHash            = apis.Group + "/linodenodeclass-hash"
 	AnnotationLinodeNodeClassHashVersion     = apis.Group + "/linodenodeclass-hash-version"
-	LabelInstanceNetworkBandwidth            = apis.Group + "/instance-network-bandwidth"
+	LabelInstanceTransfer                    = apis.Group + "/instance-transfer"
+	LabelInstanceNetworkOut                  = apis.Group + "/instance-network-out"
 	LabelInstanceCPU                         = apis.Group + "/instance-cpu"
 	LabelInstanceGPUCount                    = apis.Group + "/instance-gpu-count"
 	LabelInstanceAcceleratedDevicesCount     = apis.Group + "/instance-accelerated-devices-count"

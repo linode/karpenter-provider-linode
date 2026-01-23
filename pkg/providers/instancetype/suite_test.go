@@ -148,7 +148,8 @@ var _ = Describe("InstanceTypeProvider", func() {
 			// Well Known to Linode
 			v1.LabelInstanceCPU:                     "2",
 			v1.LabelInstanceMemory:                  "4096",
-			v1.LabelInstanceNetworkBandwidth:        "1000",
+			v1.LabelInstanceTransfer:                "2000",
+			v1.LabelInstanceNetworkOut:              "1000",
 			v1.LabelInstanceGPUCount:                "0",
 			v1.LabelInstanceAcceleratedDevicesCount: "0",
 			v1.LabelInstanceClass:                   "standard",

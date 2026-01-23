@@ -212,7 +212,9 @@ func computeRequirements(
 		// Well Known to Linode
 		scheduling.NewRequirement(v1.LabelInstanceCPU, corev1.NodeSelectorOpIn, fmt.Sprint(info.VCPUs)),
 		scheduling.NewRequirement(v1.LabelInstanceMemory, corev1.NodeSelectorOpIn, fmt.Sprint(info.Memory)),
-		scheduling.NewRequirement(v1.LabelInstanceNetworkBandwidth, corev1.NodeSelectorOpIn, fmt.Sprint(info.Transfer)),
+		scheduling.NewRequirement(v1.LabelInstanceTransfer, corev1.NodeSelectorOpIn, fmt.Sprint(info.Transfer)),
+		scheduling.NewRequirement(v1.LabelInstanceNetworkOut, corev1.NodeSelectorOpIn, fmt.Sprint(info.NetworkOut)),
+		scheduling.NewRequirement(v1.LabelInstanceClass, corev1.NodeSelectorOpIn, fmt.Sprint(info.Class)),
 	)
 	if info.GPUs > 0 {
 		requirements.Add(
