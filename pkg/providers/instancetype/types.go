@@ -230,7 +230,7 @@ func computeRequirements(
 	instanceTypeParts := strings.Split(info.ID, "-")
 	if len(instanceTypeParts) >= 2 {
 		requirements.Add(
-			scheduling.NewRequirement(v1.LabelInstanceGeneration, corev1.NodeSelectorOpIn, instanceTypeParts[0]),
+			scheduling.NewRequirement(v1.LabelInstanceGeneration, corev1.NodeSelectorOpIn, strings.TrimPrefix(instanceTypeParts[0], "g")),
 		)
 	}
 

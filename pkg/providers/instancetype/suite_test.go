@@ -152,7 +152,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 			v1.LabelInstanceGPUCount:                "0",
 			v1.LabelInstanceAcceleratedDevicesCount: "0",
 			v1.LabelInstanceClass:                   "standard",
-			v1.LabelInstanceGeneration:              "g6",
+			v1.LabelInstanceGeneration:              "6",
 		}
 
 		// Ensure that we're exercising all well-known labels
