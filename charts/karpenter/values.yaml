@@ -1,6 +1,8 @@
 apiToken: ""
 apiURL: "https://api.linode.com"
 apiVersion: "v4beta"
+# -- The Linode region where the cluster is deployed.
+# Optional in 'lke' mode (auto-discovered from LKE API), required in 'instance' mode.
 region: ""
 
 # -- Overrides the chart's name.

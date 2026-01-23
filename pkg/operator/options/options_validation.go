@@ -55,6 +55,9 @@ func (o *Options) validateRequiredFields() error {
 	if o.ClusterName == "" {
 		return fmt.Errorf("missing field, cluster-name")
 	}
+	if o.Mode == "instance" && o.ClusterRegion == "" {
+		return fmt.Errorf("missing field, cluster-region")
+	}
 	return nil
 }
 

@@ -89,13 +89,16 @@ The Karpenter Helm chart requires specific configuration values to work with an 
 
     ```bash
     export CLUSTER_NAME=<cluster name>
-    export LINODE_REGION=<region> # whatever region your LKE cluster is running in
     export KUBECONFIG=<path to your LKE kubeconfig>
     export KARPENTER_NAMESPACE=kube-system
     export LINODE_TOKEN=<your api token>
+    # Optional: specify region explicitly (auto-discovered in LKE mode if not set)
+    # export LINODE_REGION=<region>
     # Optional: Set mode directly (default is lke)
-    # export KARPENTER_MODE=lke 
+    # export KARPENTER_MODE=lke
     ```
+
+**Note**: In LKE mode (default), Karpenter automatically discovers the cluster region from the Linode API using the cluster name. You can optionally set `LINODE_REGION` to override this behavior.
 
 ### Install Karpenter
 
@@ -104,11 +107,24 @@ Use the configured environment variables to install Karpenter using Helm:
 ```bash
 helm upgrade --install --namespace "${KARPENTER_NAMESPACE}" --create-namespace karpenter-crd charts/karpenter-crd
 helm upgrade --install --namespace "${KARPENTER_NAMESPACE}" --create-namespace karpenter charts/karpenter \
-		--set region=${LINODE_REGION} \
 		--set settings.clusterName=${CLUSTER_NAME} \
 		--set apiToken=${LINODE_TOKEN} \
         --wait
 ```
+
+**Optional Configuration:**
+
+- **Region**: Specify the region explicitly (only required for `instance` mode):
+  ```bash
+  --set region=${LINODE_REGION}
+  ```
+
+- **Mode**: Choose the operating mode (default is `lke`):
+  - `lke`: Provisions nodes using LKE NodePools (recommended for LKE clusters)
+  - `instance`: Provisions nodes as direct Linode instances
+  ```bash
+  --set settings.mode=lke
+  ```
 
 Check karpenter deployed successfully:
 

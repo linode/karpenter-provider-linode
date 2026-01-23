@@ -61,19 +61,6 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClientC
 	}
 	validationCache := cache.New(linodecache.ValidationTTL, linodecache.DefaultCleanupInterval)
 
-	instanceTypeProvider := instancetype.NewDefaultProvider(
-		linodeClient,
-		instancetype.NewDefaultResolver(options.FromContext(ctx).ClusterRegion),
-		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
-		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
-		cache.New(linodecache.DiscoveredCapacityCacheTTL, linodecache.DefaultCleanupInterval),
-		unavailableOfferingsCache,
-	)
-	// Ensure we're able to hydrate instance types before starting any reliant controllers.
-	// Instance type updates are hydrated asynchronously after this by controllers.
-	lo.Must0(instanceTypeProvider.UpdateInstanceTypes(ctx))
-	lo.Must0(instanceTypeProvider.UpdateInstanceTypeOfferings(ctx))
-
 	opts := options.FromContext(ctx)
 	var nodeProvider instance.Provider
 
@@ -97,6 +84,11 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClientC
 			return nil, nil, fmt.Errorf("could not determine LKE cluster with name: %s", opts.ClusterName)
 		}
 
+		if opts.ClusterRegion == "" {
+			opts.ClusterRegion = clusterList[0].Region
+			log.FromContext(ctx).WithValues("region", opts.ClusterRegion).Info("discovered LKE cluster region")
+		}
+
 		nodeProvider = lke.NewDefaultProvider(
 			clusterList[0].ID,
 			opts.ClusterRegion,
@@ -115,6 +107,19 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClientC
 			cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
 		)
 	}
+
+	instanceTypeProvider := instancetype.NewDefaultProvider(
+		linodeClient,
+		instancetype.NewDefaultResolver(opts.ClusterRegion),
+		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
+		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
+		cache.New(linodecache.DiscoveredCapacityCacheTTL, linodecache.DefaultCleanupInterval),
+		unavailableOfferingsCache,
+	)
+	// Ensure we're able to hydrate instance types before starting any reliant controllers.
+	// Instance type updates are hydrated asynchronously after this by controllers.
+	lo.Must0(instanceTypeProvider.UpdateInstanceTypes(ctx))
+	lo.Must0(instanceTypeProvider.UpdateInstanceTypeOfferings(ctx))
 
 	return ctx, &Operator{
 		Operator:                  operator,
