@@ -35,7 +35,7 @@ import (
 
 	"github.com/linode/linodego"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	instancefilter "github.com/linode/karpenter-provider-linode/pkg/providers/instance/filter"
 )

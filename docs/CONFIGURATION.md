@@ -67,7 +67,7 @@ It is important to distinguish between Karpenter configuration and Linode-specif
 ### Example: LKE Mode
 
 ```yaml
-apiVersion: karpenter.k8s.linode/v1
+apiVersion: karpenter.k8s.linode/v1alpha1
 kind: LinodeNodeClass
 metadata:
   name: default
@@ -81,7 +81,7 @@ spec:
 ### Example: Instance Mode
 
 ```yaml
-apiVersion: karpenter.k8s.linode/v1
+apiVersion: karpenter.k8s.linode/v1alpha1
 kind: LinodeNodeClass
 metadata:
   name: custom-instance
