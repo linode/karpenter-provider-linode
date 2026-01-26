@@ -100,11 +100,6 @@ func (u *UnavailableOfferings) MarkUnavailable(ctx context.Context, unavailableR
 	u.offeringCacheSeqNumMu.Unlock()
 }
 
-func (u *UnavailableOfferings) MarkCapacityTypeUnavailable(capacityType string) {
-	u.capacityTypeCache.SetDefault(capacityType, struct{}{})
-	u.capacityTypeCacheSeqNum.Add(1)
-}
-
 func (u *UnavailableOfferings) MarkRegionUnavailable(region string) {
 	u.regionCache.SetDefault(region, struct{}{})
 	u.regionCacheSeqNum.Add(1)

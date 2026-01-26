@@ -18,6 +18,9 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
+	"strconv"
+	"time"
 
 	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
@@ -49,8 +52,11 @@ type Operator struct {
 	LinodeClient              sdk.LinodeAPI
 }
 
-func NewOperator(ctx context.Context, operator *operator.Operator, linodeClientConfig sdk.ClientConfig) (context.Context, *Operator, error) {
-	linodeClient := lo.Must(sdk.CreateLinodeClient(linodeClientConfig))
+// allow passing a custom Linode client for testing
+func NewOperator(ctx context.Context, operator *operator.Operator, linodeClient sdk.LinodeAPI) (context.Context, *Operator, error) {
+	if linodeClient == nil {
+		linodeClient = lo.Must(sdk.CreateLinodeClient(lo.Must(CreateLinodeClientConfig(ctx))))
+	}
 	unavailableOfferingsCache := linodecache.NewUnavailableOfferings()
 	kubeDNSIP, err := KubeDNSIP(ctx, operator.KubernetesInterface)
 	if err != nil {
@@ -144,4 +150,22 @@ func KubeDNSIP(ctx context.Context, kubernetesInterface kubernetes.Interface) (n
 		return nil, fmt.Errorf("parsing cluster IP")
 	}
 	return kubeDNSIP, nil
+}
+
+func CreateLinodeClientConfig(ctx context.Context) (sdk.ClientConfig, error) {
+	linodeToken := os.Getenv("LINODE_TOKEN")
+	if linodeToken == "" {
+		err := fmt.Errorf("LINODE_TOKEN environment variable is not set")
+		log.FromContext(ctx).Error(err, "cannot start provider")
+		return sdk.ClientConfig{}, err
+	}
+	linodeConfig := sdk.ClientConfig{Token: linodeToken}
+	if raw, ok := os.LookupEnv("LINODE_CLIENT_TIMEOUT"); ok {
+		if timeout, err := strconv.Atoi(raw); timeout > 0 && err == nil {
+			linodeConfig.Timeout = time.Duration(timeout) * time.Second
+		} else {
+			log.FromContext(ctx).Info("LINODE_CLIENT_TIMEOUT environment variable is invalid, using default timeout")
+		}
+	}
+	return linodeConfig, nil
 }

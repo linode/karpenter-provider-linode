@@ -21,9 +21,14 @@ import (
 	"testing"
 
 	"github.com/samber/lo"
+	coreoperator "sigs.k8s.io/karpenter/pkg/operator"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
+	coretest "sigs.k8s.io/karpenter/pkg/test"
 
+	"github.com/linode/karpenter-provider-linode/pkg/operator"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/lke"
 	"github.com/linode/karpenter-provider-linode/pkg/test"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -32,12 +37,25 @@ import (
 )
 
 var ctx context.Context
+var linodeEnv *test.Environment
+var stop context.CancelFunc
 
 func TestAPIs(t *testing.T) {
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Options")
 }
+
+var _ = BeforeSuite(func() {
+	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
+	ctx = options.ToContext(ctx, test.Options())
+	ctx, stop = context.WithCancel(ctx)
+	linodeEnv = test.NewEnvironment(ctx)
+})
+
+var _ = AfterSuite(func() {
+	stop()
+})
 
 var _ = Describe("Options", func() {
 	var fs *coreoptions.FlagSet
@@ -48,6 +66,7 @@ var _ = Describe("Options", func() {
 			FlagSet: flag.NewFlagSet("karpenter", flag.ContinueOnError),
 		}
 		opts = &options.Options{}
+		linodeEnv.Reset()
 	})
 	AfterEach(func() {
 		os.Clearenv()
@@ -68,12 +87,42 @@ var _ = Describe("Options", func() {
 			VMMemoryOverheadPercent: lo.ToPtr[float64](0.1),
 		}))
 	})
+	It("should use lke provider if mode is not set", func() {
+		Expect(os.Setenv("LINODE_TOKEN", "fake-token")).To(Succeed())
+		Expect(os.Setenv("LINODE_CLIENT_TIMEOUT", "10")).To(Succeed())
+
+		os.Args = os.Args[:1] // Clear any existing args for the test
+
+		ctx := options.ToContext(context.Background(), test.Options(test.OptionsFields{
+			ClusterName: lo.ToPtr("env-cluster"),
+		}))
+		_, op, err := operator.NewOperator(ctx, &coreoperator.Operator{}, linodeEnv.LinodeAPI)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(op.NodeProvider).To(BeAssignableToTypeOf(&lke.DefaultProvider{}))
+	})
+	It("should use instance provider if in instance mode", func() {
+		Expect(os.Setenv("LINODE_TOKEN", "fake-token")).To(Succeed())
+		Expect(os.Setenv("LINODE_CLIENT_TIMEOUT", "10")).To(Succeed())
+
+		os.Args = os.Args[:1] // Clear any existing args for the test
+
+		ctx := options.ToContext(context.Background(), test.Options(test.OptionsFields{
+			Mode:                    lo.ToPtr("instance"),
+			ClusterName:             lo.ToPtr("env-cluster"),
+			ClusterEndpoint:         lo.ToPtr("https://env-cluster"),
+			ClusterRegion:           lo.ToPtr("us-west"),
+			VMMemoryOverheadPercent: lo.ToPtr[float64](0.1),
+		}))
+		_, op, err := operator.NewOperator(ctx, &coreoperator.Operator{}, linodeEnv.LinodeAPI)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(op.NodeProvider).To(BeAssignableToTypeOf(&instance.DefaultProvider{}))
+	})
 	It("should correctly fallback to env vars when CLI flags aren't set", func() {
-		os.Setenv("CLUSTER_NAME", "env-cluster")
-		os.Setenv("CLUSTER_ID", "12345")
-		os.Setenv("CLUSTER_REGION", "us-west")
-		os.Setenv("CLUSTER_ENDPOINT", "https://env-cluster")
-		os.Setenv("VM_MEMORY_OVERHEAD_PERCENT", "0.1")
+		Expect(os.Setenv("CLUSTER_NAME", "env-cluster"))
+		Expect(os.Setenv("CLUSTER_ID", "12345"))
+		Expect(os.Setenv("CLUSTER_REGION", "us-west"))
+		Expect(os.Setenv("CLUSTER_ENDPOINT", "https://env-cluster"))
+		Expect(os.Setenv("VM_MEMORY_OVERHEAD_PERCENT", "0.1"))
 
 		// Add flags after we set the environment variables so that the parsing logic correctly refers
 		// to the new environment variable values
