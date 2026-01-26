@@ -29,7 +29,7 @@ import (
 
 	"github.com/linode/linodego"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
@@ -113,7 +113,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		p.unavailableOfferings,
 	)
 	if err != nil {
-		return nil, cloudprovider.NewCreateError(err, "NodePoolCreationFailed", "Failed to create LKE node pool")
+		return nil, cloudprovider.NewCreateError(err, "NodePoolCreationFailed", fmt.Sprintf("Failed to create LKE node pool: %s", err.Error()))
 	}
 
 	// Use the first node for the NodeClaim

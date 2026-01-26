@@ -42,7 +42,7 @@ import (
 	testv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
@@ -288,6 +288,13 @@ var _ = Describe("CloudProvider", func() {
 										Key:      karpv1.CapacityTypeLabelKey,
 										Operator: corev1.NodeSelectorOpIn,
 										Values:   []string{karpv1.CapacityTypeOnDemand},
+									},
+								},
+								{
+									NodeSelectorRequirement: corev1.NodeSelectorRequirement{
+										Key:      v1.LabelInstanceClass,
+										Operator: corev1.NodeSelectorOpIn,
+										Values:   []string{"standard"},
 									},
 								},
 								{

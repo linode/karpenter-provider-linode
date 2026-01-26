@@ -21,7 +21,7 @@ import (
 
 	"sigs.k8s.io/karpenter/pkg/events"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 

@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/events"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
@@ -139,7 +139,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		p.unavailableOfferings,
 	)
 	if err != nil {
-		return nil, cloudprovider.NewCreateError(err, "InstanceCreationFailed", "Failed to create Linode instance")
+		return nil, cloudprovider.NewCreateError(err, "InstanceCreationFailed", fmt.Sprintf("Failed to create Linode instance: %s", err.Error()))
 	}
 
 	return NewInstance(ctx, *instance), nil
@@ -197,7 +197,7 @@ func (p *DefaultProvider) List(ctx context.Context) ([]*Instance, error) {
 	if err != nil {
 		return nil, err
 	}
-	linodeInstances, err := p.client.ListInstances(ctx, linodego.NewListOptions(1, filter))
+	linodeInstances, err := p.client.ListInstances(ctx, linodego.NewListOptions(0, filter))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list linode instances, %w", err)
 	}

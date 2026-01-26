@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/utils/pretty"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype/offering"
@@ -199,7 +199,11 @@ func (p *DefaultProvider) UpdateInstanceTypes(ctx context.Context) error {
 	p.muInstanceTypesInfo.Lock()
 	defer p.muInstanceTypesInfo.Unlock()
 
-	instanceTypes, err := p.client.ListTypes(ctx, &linodego.ListOptions{}) // TODO: filter by region (do we expect to support multiple regions?)
+	// NOTE: region filtering is not supported for list options and will throw a 400 error if attempted.
+	// There's no clean way to filter instance types by region client-side either
+	// since we'd need to assume if an instance type doesn't have a region price,
+	// then it's not available in that region.
+	instanceTypes, err := p.client.ListTypes(ctx, &linodego.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing linode instance types, %w", err)
 	}
@@ -225,23 +229,13 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 	p.muInstanceTypesOfferings.Lock()
 	defer p.muInstanceTypesOfferings.Unlock()
 
-	// Get offerings from Linode API
-	instanceTypeOfferings := map[string]sets.Set[string]{}
-
-	// // TODO: filter by region for ListOptions (do we expect to support multiple regions?)
-	/* listFilter := utils.Filter{
-		AdditionalFilters: map[string]string{},
-	}
-	filter, err := listFilter.String()
-	if err != nil {
-		return err
-	} */
-
+	// NOTE: region filtering is not supported and will throw a 400 error if attempted
 	regionAvail, err := p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("listing region availability %w", err)
 	}
 
+	instanceTypeOfferings := map[string]sets.Set[string]{}
 	for _, offering := range regionAvail {
 		if _, ok := instanceTypeOfferings[offering.Plan]; !ok {
 			instanceTypeOfferings[offering.Plan] = sets.New[string]()

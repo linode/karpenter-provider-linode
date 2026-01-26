@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
@@ -146,10 +146,16 @@ var _ = Describe("InstanceTypeProvider", func() {
 			corev1.LabelArchStable:         "amd64",
 			karpv1.CapacityTypeLabelKey:    karpv1.CapacityTypeOnDemand,
 			// Well Known to Linode
-			v1.LabelInstanceCPU:              "2",
-			v1.LabelInstanceMemory:           "4096",
-			v1.LabelInstanceNetworkBandwidth: "1000",
-			v1.LabelInstanceGPUCount:         "0",
+			v1.LabelInstanceCPU:                     "2",
+			v1.LabelInstanceMemory:                  "4096",
+			v1.LabelInstanceTransfer:                "2000",
+			v1.LabelInstanceNetworkOut:              "1000",
+			v1.LabelInstanceGPUCount:                "4",
+			v1.LabelInstanceAcceleratedDevicesCount: "0",
+			v1.LabelInstanceClass:                   "standard",
+			v1.LabelInstanceGeneration:              "6",
+			v1.LabelInstanceGPUName:                 "rtx6000",
+			v1.LabelInstanceDisk:                    "307200",
 		}
 
 		// Ensure that we're exercising all well-known labels
