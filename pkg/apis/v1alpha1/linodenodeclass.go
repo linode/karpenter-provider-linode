@@ -12,7 +12,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1
+package v1alpha1
 
 import (
 	"fmt"
@@ -510,7 +510,7 @@ type LinodeNodeClass struct {
 // 1. A field changes its default value for an existing field that is already hashed
 // 2. A field is added to the hash calculation with an already-set value
 // 3. A field is removed from the hash calculations
-const LinodeNodeClassHashVersion = "v1"
+const LinodeNodeClassHashVersion = "v1alpha1"
 
 func (in *LinodeNodeClass) Hash() string {
 	return fmt.Sprint(lo.Must(hashstructure.Hash([]interface{}{

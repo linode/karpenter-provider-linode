@@ -70,6 +70,32 @@ var (
 			NetworkOut:         2000,
 			Price:              &linodego.LinodePrice{Monthly: 60.0, Hourly: 0.09},
 		},
+		{
+			ID:                 "g1-gpu-rtx6000-4",
+			Class:              "gpu",
+			Label:              "Dedicated 128GB + RTX6000 GPU x4",
+			Memory:             131072,
+			VCPUs:              24,
+			GPUs:               4,
+			AcceleratedDevices: 0,
+			Disk:               2621440,
+			Transfer:           20000,
+			NetworkOut:         10000,
+			Price:              &linodego.LinodePrice{Monthly: 4000.0, Hourly: 6.0},
+		},
+		{
+			ID:                 "g1-accelerated-netint-vpu-t1u2-s",
+			Class:              "accelerated",
+			Label:              "NETINT Quadra T1U x2 Small",
+			Memory:             24576,
+			VCPUs:              12,
+			GPUs:               0,
+			AcceleratedDevices: 2,
+			Disk:               307200,
+			Transfer:           0,
+			NetworkOut:         16000,
+			Price:              &linodego.LinodePrice{Monthly: 488.0, Hourly: 0.73},
+		},
 	}
 )
 

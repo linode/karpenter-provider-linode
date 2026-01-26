@@ -151,7 +151,7 @@ Note: This NodePool will create capacity as long as the sum of all created capac
 ```bash
 cat <<EOF | kubectl apply -f -
 ---
-apiVersion: karpenter.k8s.linode/v1
+apiVersion: karpenter.k8s.linode/v1alpha1
 kind: LinodeNodeClass
 metadata:
   name: default

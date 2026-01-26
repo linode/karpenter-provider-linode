@@ -12,7 +12,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1_test
+package v1alpha1_test
 
 import (
 	"context"

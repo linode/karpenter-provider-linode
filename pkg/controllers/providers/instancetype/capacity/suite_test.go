@@ -35,7 +35,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/utils/resources"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
 	controllersinstancetypecapacity "github.com/linode/karpenter-provider-linode/pkg/controllers/providers/instancetype/capacity"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
