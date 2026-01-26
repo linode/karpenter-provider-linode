@@ -95,3 +95,59 @@ spec:
   swapSize: 512
   diskEncryption: "enabled"
 ```
+
+## Selecting nodes
+
+With `nodeSelector` you can ask for a node that matches selected key-value pairs.
+This can include well-known labels or custom labels you create yourself.
+
+You can use `affinity` to define more complicated constraints, see [Node Affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity) for the complete specification.
+
+### Labels
+Well-known labels may be specified as NodePool requirements or pod scheduling constraints. You can also define your own custom labels by specifying `requirements` or `labels` on your NodePool and select them using `nodeAffinity` or `nodeSelectors` on your Pods.
+
+#### Well-Known Labels
+
+| Label                                                          | Example     | Description                                                                                                                                                     |
+| -------------------------------------------------------------- | ----------  | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| topology.kubernetes.io/region                                  | us-east     | Regions are defined by your cloud provider ([linode](https://www.linode.com/global-infrastructure/availability/))                     |
+| node.kubernetes.io/instance-type                               | g6-dedicated-16| Instance types are defined by your cloud provider ([linode](https://techdocs.akamai.com/cloud-computing/docs/compute-instance-plan-types))                                                           |
+| kubernetes.io/os                                               | linux       | Operating systems are defined by [GOOS values](https://github.com/golang/go/blob/master/src/go/build/syslist.go#L10) on the instance                            |
+| kubernetes.io/arch                                             | amd64       | Architectures are defined by [GOARCH values](https://github.com/golang/go/blob/master/src/go/build/syslist.go#L50) on the instance                              |
+| karpenter.sh/capacity-type                                     | on-demand   | Capacity types include `on-demand`                                                                                                                              |
+| karpenter.k8s.linode/instance-generation                       | 6           | [Linode Specific] Instance type generation number                                                                                                               |
+| karpenter.k8s.linode/instance-cpu                              | 32          | [Linode Specific] Number of CPUs on the instance                                                                                                                |
+| karpenter.k8s.linode/instance-memory                           | 32768       | [Linode Specific] Number of megabytes of memory on the instance                                                                                                 |
+| karpenter.k8s.linode/instance-disk                             | 655360      | [Linode Specific] Number of megabytes of storage on the instance                                                                                                 |
+| karpenter.k8s.linode/instance-gpu-name                         | gtx6000     | [Linode Specific] Name of the GPU on the instance, if available                                                                                                 |
+| karpenter.k8s.linode/instance-gpu-count                        | 1           | [Linode Specific] Number of GPUs on the instance                                                                                                                |
+| karpenter.k8s.linode/instance-transfer                         | 16000       | [Linode Specific] Number of gigabytes for network transfer                                                                                                      |
+| karpenter.k8s.linode/instance-network-out                      | 10000       | [Linode Specific] Number of megabits per second for network outbound bandwidth                                                                                  |
+| karpenter.k8s.linode/instance-accelerated-devices-count        | 1           | [Linode Specific] Number of accelerated devices on the instance                                                                                                 |
+| karpenter.k8s.linode/instance-class                            | dedicated   | [Linode Specific] Instance class types include `nanode`, `standard`, `dedicated`, `highmem`, and `gpu`                                                          |
+
+#### User-Defined Labels
+
+Karpenter is aware of several well-known labels, deriving them from instance type details. If you specify a `nodeSelector` or a required `nodeAffinity` using a label that is not well-known to Karpenter, it will not launch nodes with these labels and pods will remain pending. For Karpenter to become aware that it can schedule for these labels, you must specify the label in the NodePool requirements with the `Exists` operator:
+
+```yaml
+requirements:
+  - key: user.defined.label/type
+    operator: Exists
+```
+
+#### Node selectors
+
+Here is an example of a `nodeSelector` for selecting nodes:
+
+```yaml
+nodeSelector:
+  topology.kubernetes.io/region: us-east
+  karpenter.sh/capacity-type: dedicated
+```
+This example features a well-known label (`topology.kubernetes.io/region`) and a label that is well known to Karpenter (`karpenter.sh/capacity-type`).
+
+If you want to create a custom label, you should do that at the NodePool level.
+Then the pod can declare that custom label.
+
+See [nodeSelector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector) in the Kubernetes documentation for details.
