@@ -7,7 +7,11 @@
   ],
   "shell": {
     "init_hook": [
-      "echo 'Welcome to devbox!' > /dev/null"
+      "echo 'Welcome to devbox!' > /dev/null",
+      "echo 'https://github.com/NixOS/nixpkgs/issues/355486' > /dev/null",
+      "echo 'https://github.com/jetify-com/devbox/issues/2566' > /dev/null",
+      "echo 'https://github.com/NixOS/nixpkgs/issues/358795#issuecomment-2598552176' > /dev/null",
+      "unset DEVELOPER_DIR"
     ],
     "scripts": {
       "test": [
