@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/awslabs/operatorpkg/status"
+	"github.com/linode/linodego"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -28,9 +29,10 @@ import (
 )
 
 const (
-	DefaultRegion    = "us-east"
-	DefaultAccount   = "123456789"
-	DefaultClusterID = 12345
+	DefaultRegion      = "us-east"
+	DefaultAccount     = "123456789"
+	DefaultClusterID   = 12345
+	DefaultClusterTier = linodego.LKEVersionStandard
 )
 
 var _ corecloudprovider.CloudProvider = (*CloudProvider)(nil)

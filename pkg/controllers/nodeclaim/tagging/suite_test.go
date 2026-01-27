@@ -182,7 +182,6 @@ var _ = Describe("TaggingController", func() {
 
 			expectedTags := []string{
 				v1.NameTagKey + ":" + nodeClaim.Status.NodeName,
-				v1.NodeClaimTagKey + ":" + nodeClaim.Name,
 				v1.LKEClusterNameTagKey + ":" + options.FromContext(ctx).ClusterName,
 			}
 			linodeInstance := lo.Must(linodeEnv.LinodeAPI.Instances.Load(linodeInstance.ID)).(linodego.Instance)

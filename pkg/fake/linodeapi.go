@@ -674,5 +674,5 @@ func (l *LinodeClient) GetLKENodePoolNode(_ context.Context, clusterID int, node
 
 func (l *LinodeClient) ListLKEClusters(_ context.Context, _ *linodego.ListOptions) ([]linodego.LKECluster, error) {
 	// For simplicity, return a canned response
-	return []linodego.LKECluster{{ID: DefaultClusterID}}, nil
+	return []linodego.LKECluster{{ID: DefaultClusterID, Tier: string(DefaultClusterTier)}}, nil
 }

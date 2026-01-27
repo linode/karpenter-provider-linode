@@ -37,6 +37,7 @@ import (
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
+	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	instancefilter "github.com/linode/karpenter-provider-linode/pkg/providers/instance/filter"
 )
 
@@ -112,6 +113,7 @@ func GetTagsForLKE(nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, c
 	staticTags := map[string]string{
 		fmt.Sprintf("kubernetes.io/cluster/%s", clusterName): "owned",
 		karpv1.NodePoolLabelKey:                              nodeClaim.Labels[karpv1.NodePoolLabelKey],
+		v1.NodeClaimTagKey:                                   nodeClaim.Name,
 		v1.LKEClusterNameTagKey:                              clusterName,
 		v1.LabelNodeClass:                                    nodeClass.Name,
 		v1.LabelLKEManaged:                                   "true",
@@ -198,6 +200,41 @@ func (f Filter) String() (string, error) {
 	}
 
 	return string(p), nil
+}
+
+// LookupInstanceByTag returns the single Linode instance matching the provided tag.
+func LookupInstanceByTag(ctx context.Context, client sdk.LinodeAPI, tag string) (*linodego.Instance, error) {
+	listFilter := Filter{Tags: []string{tag}}
+	filter, err := listFilter.String()
+	if err != nil {
+		return nil, err
+	}
+	instances, err := client.ListInstances(ctx, linodego.NewListOptions(1, filter))
+	if err != nil {
+		return nil, err
+	}
+	if len(instances) == 0 {
+		return nil, nil
+	}
+	if len(instances) > 1 {
+		return nil, fmt.Errorf("found multiple instances for tag %q. This should never happen.", tag)
+	}
+	return &instances[0], nil
+}
+
+func IsRetryableError(err error) bool {
+	if linodego.ErrHasStatus(err, http.StatusTooManyRequests) {
+		return true
+	}
+	if linodego.ErrHasStatus(err,
+		http.StatusBadGateway,
+		http.StatusGatewayTimeout,
+		http.StatusInternalServerError,
+		http.StatusServiceUnavailable) {
+		return true
+	}
+
+	return false
 }
 
 // FilterInstanceTypes applies common filters to available instance types.
