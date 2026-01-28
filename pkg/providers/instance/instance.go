@@ -90,7 +90,6 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	if err != nil {
 		return nil, err
 	}
-	capacityType := getCapacityType(nodeClaim, instanceTypes)
 	// Merge tags from NodeClaim and LinodeNodeClass
 	tagList := nodeClass.Spec.Tags
 	for k, v := range tags {
@@ -133,7 +132,6 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	utils.UpdateUnavailableOfferingsCache(
 		ctx,
 		err,
-		capacityType,
 		p.region,
 		cheapestType,
 		p.unavailableOfferings,
@@ -143,12 +141,6 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	}
 
 	return NewInstance(ctx, *instance), nil
-}
-
-// getCapacityType selects the capacity type based on the flexibility of the NodeClaim and the available offerings.
-// Only on-demand is currently supported for Linode, so this will always return "on-demand".
-func getCapacityType(_ *karpv1.NodeClaim, _ []*cloudprovider.InstanceType) string {
-	return karpv1.CapacityTypeOnDemand
 }
 
 func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...Options) (*Instance, error) {

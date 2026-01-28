@@ -24,7 +24,6 @@ import (
 	"github.com/patrickmn/go-cache"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
-	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
 
@@ -116,11 +115,9 @@ func (p *DefaultProvider) createOfferings(
 			offering := &cloudprovider.Offering{
 				Requirements: scheduling.NewRequirements(
 					scheduling.NewRequirement(corev1.LabelTopologyRegion, corev1.NodeSelectorOpIn, region),
-					// For now, we only support on-demand capacity types
-					scheduling.NewRequirement(karpv1.CapacityTypeLabelKey, corev1.NodeSelectorOpIn, karpv1.CapacityTypeOnDemand),
 				),
 				Price:     price,
-				Available: !p.unavailableOfferings.IsUnavailable(it.Name, region, karpv1.CapacityTypeOnDemand),
+				Available: !p.unavailableOfferings.IsUnavailable(it.Name, region),
 			}
 			cachedOfferings = append(cachedOfferings, offering)
 		}
@@ -146,15 +143,9 @@ func (p *DefaultProvider) cacheKeyFromInstanceType(it *cloudprovider.InstanceTyp
 		hashstructure.FormatV2,
 		&hashstructure.HashOptions{SlicesAsSets: true},
 	)
-	capacityTypesHash, _ := hashstructure.Hash(
-		it.Requirements.Get(karpv1.CapacityTypeLabelKey).Values(),
-		hashstructure.FormatV2,
-		&hashstructure.HashOptions{SlicesAsSets: true},
-	)
 	return fmt.Sprintf(
-		"%s-%016x-%016x",
+		"%s-%016x",
 		it.Name,
 		regionsHash,
-		capacityTypesHash,
 	)
 }

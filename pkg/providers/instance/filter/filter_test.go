@@ -23,7 +23,6 @@ import (
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
 
@@ -194,11 +193,6 @@ func makeOffering(available bool, opts ...mockOfferingOptions) *cloudprovider.Of
 	if offering.Requirements == nil {
 		offering.Requirements = scheduling.NewRequirements()
 	}
-	offering.Requirements.Add(scheduling.NewRequirement(
-		karpv1.CapacityTypeLabelKey,
-		corev1.NodeSelectorOpIn,
-		karpv1.CapacityTypeOnDemand,
-	))
 	offering.Available = available
 	return offering
 }

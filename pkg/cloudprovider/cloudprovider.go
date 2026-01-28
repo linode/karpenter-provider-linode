@@ -357,9 +357,7 @@ func (c *CloudProvider) instanceToNodeClaim(i *instance.Instance, instanceType *
 		for key, req := range instanceType.Requirements {
 			// We only want to add a label based on the instance type requirements if there is a single value for that
 			// requirement. For example, we can't add a label for region based on this if the requirement is compatible with
-			// three. Capacity reservation IDs are a special case since we don't have a way to represent that the label may or
-			// may not exist. Since this requirement will be present regardless of the capacity type, we can't insert it here.
-			// Otherwise, you may end up with spot and on-demand NodeClaims with a reservation ID label.
+			// three.
 			if req.Len() == 1 && !lo.Contains([]string{
 				cloudprovider.ReservationIDLabel,
 			}, req.Key) {
