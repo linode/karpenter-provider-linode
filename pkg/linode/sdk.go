@@ -44,7 +44,7 @@ type LinodeAPI interface {
 	GetLKENodePool(ctx context.Context, clusterID, poolID int) (*linodego.LKENodePool, error)
 	UpdateLKENodePool(ctx context.Context, clusterID, poolID int, opts linodego.LKENodePoolUpdateOptions) (*linodego.LKENodePool, error)
 	DeleteLKENodePool(ctx context.Context, clusterID, poolID int) error
-	GetLKENodePoolNode(ctx context.Context, clusterID int, nodeID string) (*linodego.LKENodePoolLinode, error)
+	// GetLKENodePoolNode(ctx context.Context, clusterID int, nodeID string) (*linodego.LKENodePoolLinode, error)
 }
 
 const (

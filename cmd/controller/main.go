@@ -15,10 +15,7 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"os"
-	"strconv"
-	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider/metrics"
@@ -29,17 +26,15 @@ import (
 
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
 	"github.com/linode/karpenter-provider-linode/pkg/controllers"
-	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/operator"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 )
 
 func main() {
-	ctx1, op1 := coreoperator.NewOperator()
-	linodeClientConfig := validateEnvironment(ctx1)
-	ctx, op, err := operator.NewOperator(ctx1, op1, linodeClientConfig)
+	ctx, coreOp := coreoperator.NewOperator()
+	op, err := operator.NewOperator(ctx, coreOp, nil)
 	if err != nil {
-		log.FromContext(ctx1).Error(err, "Failed to create Linode operator")
+		log.FromContext(ctx).Error(err, "Failed to create Linode operator")
 		os.Exit(1)
 	}
 
@@ -78,21 +73,4 @@ func main() {
 			op.InstanceTypesProvider,
 		)...).
 		Start(ctx)
-}
-
-func validateEnvironment(ctx context.Context) (linodeConfig sdk.ClientConfig) {
-	linodeToken := os.Getenv("LINODE_TOKEN")
-	if linodeToken == "" {
-		log.FromContext(ctx).Error(nil, "LINODE_TOKEN environment variable is not set, cannot start provider")
-		os.Exit(1)
-	}
-	linodeConfig = sdk.ClientConfig{Token: linodeToken}
-	if raw, ok := os.LookupEnv("LINODE_CLIENT_TIMEOUT"); ok {
-		if timeout, err := strconv.Atoi(raw); timeout > 0 && err == nil {
-			linodeConfig.Timeout = time.Duration(timeout) * time.Second
-		} else {
-			log.FromContext(ctx).Info("LINODE_CLIENT_TIMEOUT environment variable is invalid, using default timeout")
-		}
-	}
-	return linodeConfig
 }
