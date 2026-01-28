@@ -217,7 +217,7 @@ func LookupInstanceByTag(ctx context.Context, client sdk.LinodeAPI, tag string) 
 		return nil, nil
 	}
 	if len(instances) > 1 {
-		return nil, fmt.Errorf("found multiple instances for tag %q. This should never happen.", tag)
+		return nil, fmt.Errorf("found multiple instances for tag %q. This should never happen", tag)
 	}
 	return &instances[0], nil
 }

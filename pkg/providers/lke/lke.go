@@ -333,7 +333,7 @@ func (p *DefaultProvider) findPoolByNodeClaimTag(ctx context.Context, nodeClaimN
 	}
 	// multiple node pools found, we should fail. This should never happen.
 	if len(filtered) > 1 {
-		return nil, fmt.Errorf("found multiple node pools for nodeclaim %q. This should never happen.", nodeClaimName)
+		return nil, fmt.Errorf("found multiple node pools for nodeclaim %q. This should never happen", nodeClaimName)
 	}
 	return &filtered[0], nil
 }
