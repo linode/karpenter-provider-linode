@@ -114,6 +114,7 @@ func NewEnvironment(ctx context.Context) *Environment {
 
 	lkeNodeProvider := lke.NewDefaultProvider(
 		fake.DefaultClusterID,
+		fake.DefaultClusterTier,
 		fake.DefaultRegion,
 		eventRecorder,
 		linodeClient,

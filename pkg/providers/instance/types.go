@@ -37,8 +37,6 @@ type Instance struct {
 	Labels              map[string]string
 	Taints              []linodego.LKENodePoolTaint
 	PoolID              int
-	NodeID              string
-	LKEStatus           linodego.LKELinodeStatus
 	PlacementGroup      *linodego.InstancePlacementGroup
 	DiskEncryption      linodego.InstanceDiskEncryption
 	InterfaceGeneration linodego.InterfaceGeneration
@@ -71,15 +69,13 @@ func NewLKEInstance(pool *linodego.LKENodePool, node linodego.LKENodePoolLinode,
 	// This is important for GC's 30-second grace period to work correctly.
 	now := time.Now()
 	return &Instance{
-		ID:        node.InstanceID,
-		Created:   &now,
-		Region:    region,
-		Type:      pool.Type,
-		Tags:      pool.Tags,
-		Labels:    pool.Labels,
-		Taints:    pool.Taints,
-		PoolID:    pool.ID,
-		NodeID:    node.ID,
-		LKEStatus: node.Status,
+		ID:      node.InstanceID,
+		Created: &now,
+		Region:  region,
+		Type:    pool.Type,
+		Tags:    pool.Tags,
+		Labels:  pool.Labels,
+		Taints:  pool.Taints,
+		PoolID:  pool.ID,
 	}
 }

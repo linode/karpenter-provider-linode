@@ -101,7 +101,6 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 func (c *Controller) tagInstance(ctx context.Context, nc *karpv1.NodeClaim, id string) error {
 	tags := map[string]string{
 		v1.NameTagKey:           nc.Status.NodeName,
-		v1.NodeClaimTagKey:      nc.Name,
 		v1.LKEClusterNameTagKey: options.FromContext(ctx).ClusterName,
 	}
 
