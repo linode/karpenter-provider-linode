@@ -47,6 +47,7 @@ Table of contents:
   - [Delete Karpenter nodes manually](#delete-karpenter-nodes-manually)
 - [Cleanup](#cleanup)
   - [Delete the cluster](#delete-the-cluster)
+- [Known issues](#known-issues)
 
 ## Features Overview
 The LKE Karpenter Provider enables node autoprovisioning using [Karpenter](https://karpenter.sh/) on your LKE cluster.
@@ -252,6 +253,19 @@ To avoid additional charges, remove the demo infrastructure from your Linode acc
 ```bash
 helm uninstall karpenter --namespace "${KARPENTER_NAMESPACE}"
 linode-cli lke cluster-delete --label "${CLUSTER_NAME}"
+```
+
+## Known issues
+
+A duplicate LKENodePool is temporarily provisioned until Karpenter detects the original was able to register the original successfully. The duplicate LKENodePool does get cleaned up after about a minute when Karpenter realizes it's not needed. You will see something like this in the Karpenter controller logs:
+
+```
+{"level":"INFO","time":"2026-01-26T19:42:55.639Z","logger":"controller","message":"found provisionable pod(s)","commit":"237f3a9","controller":"provisioner","namespace":"","name":"","reconcileID":"aee4f6fd-867e-4221-a261-fdb49b9ff126","Pods":"default/inflate-7bb66b64f-ks9ll, default/inflate-7bb66b64f-5hfbb, default/inflate-7bb66b64f-dlnbm, default/inflate-7bb66b64f-lf7tb, default/inflate-7bb66b64f-9t27c","duration":"8.03501261s"}
+{"level":"INFO","time":"2026-01-26T19:42:55.642Z","logger":"controller","message":"computed new nodeclaim(s) to fit pod(s)","commit":"237f3a9","controller":"provisioner","namespace":"","name":"","reconcileID":"aee4f6fd-867e-4221-a261-fdb49b9ff126","nodeclaims":1,"pods":5}
+{"level":"INFO","time":"2026-01-26T19:42:55.656Z","logger":"controller","message":"created nodeclaim","commit":"237f3a9","controller":"provisioner","namespace":"","name":"","reconcileID":"aee4f6fd-867e-4221-a261-fdb49b9ff126","NodePool":{"name":"default"},"NodeClaim":{"name":"default-v2blg"},"requests":{"cpu":"5250m","pods":"8"},"instance-types":"g1-accelerated-netint-vpu-t1u1-m, g1-accelerated-netint-vpu-t1u1-s, g1-accelerated-netint-vpu-t1u2-s, g1-gpu-rtx6000-1, g1-gpu-rtx6000-2 and 49 other(s)"}
+{"level":"INFO","time":"2026-01-26T19:42:57.156Z","logger":"controller","message":"launched nodeclaim","commit":"237f3a9","controller":"nodeclaim.lifecycle","controllerGroup":"karpenter.sh","controllerKind":"NodeClaim","NodeClaim":{"name":"default-v2blg"},"namespace":"","name":"default-v2blg","reconcileID":"e85e6c72-8da1-4fea-af26-1fb0e676d502","provider-id":"linode://90601036","instance-type":"g6-standard-6","zone":"","capacity-type":"on-demand","allocatable":{"cpu":"5915m","memory":"13590Mi","pods":"110"}}
+{"level":"ERROR","time":"2026-01-26T19:44:22.686Z","logger":"controller","message":"node claim registration error","commit":"237f3a9","controller":"nodeclaim.lifecycle","controllerGroup":"karpenter.sh","controllerKind":"NodeClaim","NodeClaim":{"name":"default-v2blg"},"namespace":"","name":"default-v2blg","reconcileID":"e3ab7681-c8fb-489a-9f6b-63036fa52090","provider-id":"linode://90601036","taint":"karpenter.sh/unregistered","error":"missing taint prevents registration-related race conditions on Karpenter-managed nodes"}
+{"level":"INFO","time":"2026-01-26T19:44:22.705Z","logger":"controller","message":"registered nodeclaim","commit":"237f3a9","controller":"nodeclaim.lifecycle","controllerGroup":"karpenter.sh","controllerKind":"NodeClaim","NodeClaim":{"name":"default-v2blg"},"namespace":"","name":"default-v2blg","reconcileID":"e3ab7681-c8fb-489a-9f6b-63036fa52090","provider-id":"linode://90601036","Node":{"name":"lke561146-819072-4a8e5fd50000"}}
 ```
 
 ---
