@@ -96,7 +96,7 @@ var _ = Describe("Options", func() {
 		ctx := options.ToContext(context.Background(), test.Options(test.OptionsFields{
 			ClusterName: lo.ToPtr("env-cluster"),
 		}))
-		_, op, err := operator.NewOperator(ctx, &coreoperator.Operator{}, linodeEnv.LinodeAPI)
+		op, err := operator.NewOperator(ctx, &coreoperator.Operator{}, linodeEnv.LinodeAPI)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(op.NodeProvider).To(BeAssignableToTypeOf(&lke.DefaultProvider{}))
 	})
@@ -113,7 +113,7 @@ var _ = Describe("Options", func() {
 			ClusterRegion:           lo.ToPtr("us-west"),
 			VMMemoryOverheadPercent: lo.ToPtr[float64](0.1),
 		}))
-		_, op, err := operator.NewOperator(ctx, &coreoperator.Operator{}, linodeEnv.LinodeAPI)
+		op, err := operator.NewOperator(ctx, &coreoperator.Operator{}, linodeEnv.LinodeAPI)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(op.NodeProvider).To(BeAssignableToTypeOf(&instance.DefaultProvider{}))
 	})

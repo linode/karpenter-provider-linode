@@ -53,7 +53,7 @@ type Operator struct {
 }
 
 // allow passing a custom Linode client for testing
-func NewOperator(ctx context.Context, operator *operator.Operator, linodeClient sdk.LinodeAPI) (context.Context, *Operator, error) {
+func NewOperator(ctx context.Context, operator *operator.Operator, linodeClient sdk.LinodeAPI) (*Operator, error) {
 	if linodeClient == nil {
 		linodeClient = lo.Must(sdk.CreateLinodeClient(lo.Must(CreateLinodeClientConfig(ctx))))
 	}
@@ -77,17 +77,17 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClient 
 		listFilter := utils.Filter{Label: opts.ClusterName}
 		filter, err := listFilter.String()
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		// Get cluster ID from the cluster name (label)
 		clusterList, err := linodeClient.ListLKEClusters(ctx, &linodego.ListOptions{
 			Filter: filter,
 		})
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if len(clusterList) != 1 {
-			return nil, nil, fmt.Errorf("could not determine LKE cluster with name: %s", opts.ClusterName)
+			return nil, fmt.Errorf("could not determine LKE cluster with name: %s", opts.ClusterName)
 		}
 
 		if opts.ClusterRegion == "" {
@@ -127,7 +127,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClient 
 	lo.Must0(instanceTypeProvider.UpdateInstanceTypes(ctx))
 	lo.Must0(instanceTypeProvider.UpdateInstanceTypeOfferings(ctx))
 
-	return ctx, &Operator{
+	return &Operator{
 		Operator:                  operator,
 		UnavailableOfferingsCache: unavailableOfferingsCache,
 		ValidationCache:           validationCache,

@@ -31,8 +31,8 @@ import (
 )
 
 func main() {
-	coreCtx, coreOp := coreoperator.NewOperator()
-	ctx, op, err := operator.NewOperator(coreCtx, coreOp, nil)
+	ctx, coreOp := coreoperator.NewOperator()
+	op, err := operator.NewOperator(ctx, coreOp, nil)
 	if err != nil {
 		log.FromContext(ctx).Error(err, "Failed to create Linode operator")
 		os.Exit(1)
