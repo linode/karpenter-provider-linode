@@ -108,13 +108,6 @@ var _ = Describe("InstanceTypeProvider", func() {
 						Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
 							{
 								NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-									Key:      karpv1.CapacityTypeLabelKey,
-									Operator: corev1.NodeSelectorOpIn,
-									Values:   []string{karpv1.CapacityTypeOnDemand},
-								},
-							},
-							{
-								NodeSelectorRequirement: corev1.NodeSelectorRequirement{
 									Key:      corev1.LabelTopologyRegion,
 									Operator: corev1.NodeSelectorOpIn,
 									Values:   []string{fake.DefaultRegion},
@@ -144,7 +137,6 @@ var _ = Describe("InstanceTypeProvider", func() {
 			corev1.LabelInstanceTypeStable: "g6-standard-2",
 			corev1.LabelOSStable:           "linux",
 			corev1.LabelArchStable:         "amd64",
-			karpv1.CapacityTypeLabelKey:    karpv1.CapacityTypeOnDemand,
 			// Well Known to Linode
 			v1.LabelInstanceCPU:                     "2",
 			v1.LabelInstanceMemory:                  "4096",
