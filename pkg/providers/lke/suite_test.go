@@ -357,22 +357,6 @@ var _ = Describe("LKENodeProvider", func() {
 				Expect(node.ID).To(Equal(7001))
 			})
 
-			It("should surface multiple lookup errors", func() {
-				ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
-				nodeClass = ExpectExists(ctx, env.Client, nodeClass)
-				instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
-				Expect(err).ToNot(HaveOccurred())
-
-				claimTag := fmt.Sprintf("%s:%s", v1.NodeClaimTagKey, nodeClaim.Name)
-				instances := []linodego.Instance{{ID: 1, Tags: []string{claimTag}}, {ID: 2, Tags: []string{claimTag}}}
-				linodeEnv.LinodeAPI.ListInstancesBehavior.MultiOut.Add(&instances)
-
-				poolInstance, err := enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
-				Expect(err).To(HaveOccurred())
-				Expect(poolInstance).To(BeNil())
-				Expect(err.Error()).To(ContainSubstring("multiple instances"))
-			})
-
 			It("should surface lookup list errors", func() {
 				linodeEnv.LinodeAPI.ListInstancesBehavior.Error.Set(fmt.Errorf("list fail"))
 

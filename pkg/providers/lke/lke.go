@@ -16,6 +16,7 @@ package lke
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -84,8 +85,8 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	tagList = append(tagList, utils.MapToTagList(tags)...)
 	tagList = utils.DedupeTags(tagList)
 
-	// Check if a node pool already exists for this nodeclaim
-	if pool, err := p.findPoolByNodeClaimTag(ctx, nodeClaim.Name); err != nil {
+	// Check if a LKENodePool already exists for this nodeclaim
+	if pool, err := p.findLKENodePoolByNodeClaimTag(ctx, nodeClaim.Name); err != nil {
 		return nil, fmt.Errorf("finding existing node pool for nodeclaim %s, %w", nodeClaim.Name, err)
 	} else if pool != nil {
 		// Pool was found. We don't need to create a new one.
@@ -162,6 +163,9 @@ func (p *DefaultProvider) instanceFromPoolEnterprise(ctx context.Context, pool *
 	nodeClaimTag := fmt.Sprintf("%s:%s", v1.NodeClaimTagKey, nodeClaimName)
 	linodeInstance, err := utils.LookupInstanceByTag(ctx, p.client, nodeClaimTag)
 	if err != nil {
+		if errors.Is(err, utils.ErrInstanceNotFound) {
+			return nil, cloudprovider.NewCreateError(fmt.Errorf("waiting for instance tagged %q", nodeClaimTag), "NodePoolProvisioning", "Waiting for LKE instance to be tagged")
+		}
 		return nil, err
 	}
 	if linodeInstance == nil {
@@ -315,7 +319,7 @@ func findNodeInPool(pool *linodego.LKENodePool, id string) (*linodego.LKENodePoo
 	return nil, fmt.Errorf("instance %d not found in pool %d", instanceID, pool.ID)
 }
 
-func (p *DefaultProvider) findPoolByNodeClaimTag(ctx context.Context, nodeClaimName string) (*linodego.LKENodePool, error) {
+func (p *DefaultProvider) findLKENodePoolByNodeClaimTag(ctx context.Context, nodeClaimName string) (*linodego.LKENodePool, error) {
 	pools, err := p.client.ListLKENodePools(ctx, p.clusterID, nil)
 	if err != nil {
 		return nil, err

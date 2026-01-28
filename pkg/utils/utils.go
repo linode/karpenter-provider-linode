@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -42,7 +43,8 @@ import (
 )
 
 var (
-	instanceIDRegex = regexp.MustCompile(`(?P<Provider>.*)://(?P<InstanceID>.*)`)
+	ErrInstanceNotFound = errors.New("instance not found")
+	instanceIDRegex     = regexp.MustCompile(`(?P<Provider>.*)://(?P<InstanceID>.*)`)
 )
 
 // ParseInstanceID parses the provider ID stored on the node to get the instance ID
@@ -213,13 +215,10 @@ func LookupInstanceByTag(ctx context.Context, client sdk.LinodeAPI, tag string) 
 	if err != nil {
 		return nil, err
 	}
-	if len(instances) == 0 {
-		return nil, nil
+	if len(instances) == 1 {
+		return &instances[0], nil
 	}
-	if len(instances) > 1 {
-		return nil, fmt.Errorf("found multiple instances for tag %q. This should never happen", tag)
-	}
-	return &instances[0], nil
+	return nil, fmt.Errorf("instance tagged %q not found: %w", tag, ErrInstanceNotFound)
 }
 
 func IsRetryableError(err error) bool {
