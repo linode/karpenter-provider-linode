@@ -693,5 +693,5 @@ func (l *LinodeClient) DeleteLKENodePool(_ context.Context, clusterID, poolID in
 
 func (l *LinodeClient) ListLKEClusters(_ context.Context, _ *linodego.ListOptions) ([]linodego.LKECluster, error) {
 	// For simplicity, return a canned response
-	return []linodego.LKECluster{{ID: DefaultClusterID, Region: DefaultRegion}}, nil
+	return []linodego.LKECluster{{ID: DefaultClusterID, Tier: string(DefaultClusterTier)}}, nil
 }
