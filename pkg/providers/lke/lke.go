@@ -16,7 +16,6 @@ package lke
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -163,9 +162,6 @@ func (p *DefaultProvider) instanceFromPoolEnterprise(ctx context.Context, pool *
 	nodeClaimTag := fmt.Sprintf("%s:%s", v1.NodeClaimTagKey, nodeClaimName)
 	linodeInstance, err := utils.LookupInstanceByTag(ctx, p.client, nodeClaimTag)
 	if err != nil {
-		if errors.Is(err, utils.ErrInstanceNotFound) {
-			return nil, cloudprovider.NewCreateError(fmt.Errorf("waiting for instance tagged %q", nodeClaimTag), "NodePoolProvisioning", "Waiting for LKE instance to be tagged")
-		}
 		return nil, err
 	}
 	if linodeInstance == nil {
