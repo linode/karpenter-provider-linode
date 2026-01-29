@@ -127,7 +127,7 @@ var _ = Describe("LKENodeProvider", func() {
 		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 
 		linodeEnv.LinodeAPI.InsufficientCapacityPools.Set([]fake.CapacityPool{
-			{CapacityType: karpv1.CapacityTypeOnDemand, InstanceType: dedicated8GB, Region: fake.DefaultRegion},
+			{InstanceType: dedicated8GB, Region: fake.DefaultRegion},
 		})
 
 		instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
@@ -139,22 +139,11 @@ var _ = Describe("LKENodeProvider", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(poolInstance).To(BeNil())
 
-		Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(dedicated8GB, fake.DefaultRegion, karpv1.CapacityTypeOnDemand)).To(BeTrue())
-		Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(standard8GB, fake.DefaultRegion, karpv1.CapacityTypeOnDemand)).To(BeFalse())
+		Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(dedicated8GB, fake.DefaultRegion)).To(BeTrue())
+		Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(standard8GB, fake.DefaultRegion)).To(BeFalse())
 	})
 
-	It("should create a dedicated nodepool instance", func() {
-		nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
-			{
-				NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-					Key:      karpv1.CapacityTypeLabelKey,
-					Operator: corev1.NodeSelectorOpIn,
-					Values: []string{
-						karpv1.CapacityTypeOnDemand,
-					},
-				},
-			},
-		}
+	It("should create a nodepool instance", func() {
 		ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 

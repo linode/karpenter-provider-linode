@@ -21,8 +21,6 @@ import (
 	"sync"
 	"time"
 
-	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
-
 	"github.com/linode/linodego"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/karpenter/pkg/utils/atomic"
@@ -100,7 +98,6 @@ var (
 )
 
 type CapacityPool struct {
-	CapacityType string
 	InstanceType string
 	Region       string
 }
@@ -233,8 +230,7 @@ func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceC
 		skipInstance := false
 		l.InsufficientCapacityPools.Range(func(pool CapacityPool) bool {
 			if pool.InstanceType == opts.Type &&
-				pool.Region == opts.Region &&
-				pool.CapacityType == karpv1.CapacityTypeOnDemand {
+				pool.Region == opts.Region {
 				icedPools = append(icedPools, pool)
 				skipInstance = true
 				return false
@@ -336,8 +332,7 @@ func (l *LinodeClient) CreateLKENodePool(_ context.Context, clusterID int, opts 
 		skipInstance := false
 		l.InsufficientCapacityPools.Range(func(pool CapacityPool) bool {
 			if pool.InstanceType == params.Opts.Type &&
-				pool.Region == DefaultRegion &&
-				pool.CapacityType == karpv1.CapacityTypeOnDemand {
+				pool.Region == DefaultRegion {
 				skipInstance = true
 				return false
 			}
@@ -519,8 +514,7 @@ func (l *LinodeClient) UpdateLKENodePool(_ context.Context, clusterID, poolID in
 			skipInstance := false
 			l.InsufficientCapacityPools.Range(func(capacityPool CapacityPool) bool {
 				if capacityPool.InstanceType == pool.Type &&
-					capacityPool.Region == DefaultRegion &&
-					capacityPool.CapacityType == karpv1.CapacityTypeOnDemand {
+					capacityPool.Region == DefaultRegion {
 					skipInstance = true
 					return false
 				}

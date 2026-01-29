@@ -27,27 +27,13 @@ const (
 	// UnavailableOfferingsTTL is the time before offerings that were marked as unavailable
 	// are removed from the cache and are available for launch again
 	UnavailableOfferingsTTL = 3 * time.Minute
-	// CapacityReservationAvailabilityTTL is the time we will persist cached capacity availability. Nominally, this is
-	// updated every minute, but we want to persist the data longer in the event of an EC2 API outage. 24 hours was the
-	// compormise made for API outage reseliency and gargage collecting entries for orphaned reservations.
-	CapacityReservationAvailabilityTTL = 24 * time.Hour
 	// InstanceTypesZonesAndOfferingsTTL is the time before we refresh instance types, zones, and offerings at EC2
 	InstanceTypesZonesAndOfferingsTTL = 5 * time.Minute
-	// InstanceProfileTTL is the time before we refresh checking instance profile existence at IAM
-	InstanceProfileTTL = 15 * time.Minute
-	// AvailableIPAddressTTL is time to drop AvailableIPAddress data if it is not updated within the TTL
-	AvailableIPAddressTTL = 5 * time.Minute
-	// AvailableIPAddressTTL is time to drop AssociatePublicIPAddressTTL data if it is not updated within the TTL
-	AssociatePublicIPAddressTTL = 5 * time.Minute
 	// DiscoveredCapacityCacheTTL is the time to drop discovered resource capacity data per-instance type
 	// if it is not updated by a node creation event or refreshed during controller reconciliation
 	DiscoveredCapacityCacheTTL = 60 * 24 * time.Hour
 	// ValidationTTL is time to check authorization errors with validation controller
 	ValidationTTL = 30 * time.Minute
-	// RecreationTTL is the duration to suppress instance profile recreation for the same role to avoid duplicates
-	RecreationTTL = 1 * time.Minute
-	// ProtectedProfilesTTL is the duration to keep profiles as protected before nodeclass garbagecollector considers deletion
-	ProtectedProfilesTTL = 1 * time.Hour
 )
 
 const (
