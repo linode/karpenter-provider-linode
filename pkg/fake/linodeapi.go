@@ -21,8 +21,6 @@ import (
 	"sync"
 	"time"
 
-	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
-
 	"github.com/linode/linodego"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/karpenter/pkg/utils/atomic"
@@ -100,7 +98,6 @@ var (
 )
 
 type CapacityPool struct {
-	CapacityType string
 	InstanceType string
 	Region       string
 }
@@ -118,7 +115,6 @@ type LinodeAPIBehavior struct {
 	ListInstancesBehavior           MockedFunction[linodego.ListOptions, []linodego.Instance]
 	CreateTagsBehavior              MockedFunction[linodego.TagCreateOptions, linodego.Tag]
 	ListTypesBehavior               MockedFunction[linodego.ListOptions, []linodego.LinodeType]
-	NextError                       AtomicError
 	Instances                       sync.Map
 	InsufficientCapacityPools       atomic.Slice[CapacityPool]
 	// NodePool storage and behaviors
@@ -141,10 +137,10 @@ type LinodeAPIBehavior struct {
 		ClusterName int
 		PoolID      int
 	}, error]
-	GetLKENodePoolNodeBehavior MockedFunction[struct {
+	/* GetLKENodePoolNodeBehavior MockedFunction[struct {
 		ClusterName int
 		NodeID      string
-	}, *linodego.LKENodePoolLinode]
+	}, *linodego.LKENodePoolLinode] */
 }
 
 type LinodeClient struct {
@@ -171,10 +167,6 @@ func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.Lino
 }
 
 func (l *LinodeClient) ListRegionsAvailability(_ context.Context, _ *linodego.ListOptions) ([]linodego.RegionAvailability, error) {
-	if !l.NextError.IsNil() {
-		defer l.NextError.Reset()
-		return nil, l.NextError.Get()
-	}
 	if !l.ListRegionsAvailabilityOutput.IsNil() {
 		return *l.ListRegionsAvailabilityOutput.Clone(), nil
 	}
@@ -214,7 +206,6 @@ func (l *LinodeClient) Reset() {
 	l.ListInstancesBehavior.Reset()
 	l.CreateTagsBehavior.Reset()
 	l.ListTypesBehavior.Reset()
-	l.NextError.Reset()
 	l.Instances.Range(func(k, v any) bool {
 		l.Instances.Delete(k)
 		return true
@@ -230,7 +221,7 @@ func (l *LinodeClient) Reset() {
 	l.GetLKENodePoolBehavior.Reset()
 	l.UpdateLKENodePoolBehavior.Reset()
 	l.DeleteLKENodePoolBehavior.Reset()
-	l.GetLKENodePoolNodeBehavior.Reset()
+	// l.GetLKENodePoolNodeBehavior.Reset()
 }
 
 func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceCreateOptions) (*linodego.Instance, error) {
@@ -239,8 +230,7 @@ func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceC
 		skipInstance := false
 		l.InsufficientCapacityPools.Range(func(pool CapacityPool) bool {
 			if pool.InstanceType == opts.Type &&
-				pool.Region == opts.Region &&
-				pool.CapacityType == karpv1.CapacityTypeOnDemand {
+				pool.Region == opts.Region {
 				icedPools = append(icedPools, pool)
 				skipInstance = true
 				return false
@@ -320,10 +310,6 @@ func (l *LinodeClient) CreateTag(_ context.Context, opts linodego.TagCreateOptio
 }
 
 func (l *LinodeClient) ListTypes(_ context.Context, _ *linodego.ListOptions) ([]linodego.LinodeType, error) {
-	if !l.NextError.IsNil() {
-		defer l.NextError.Reset()
-		return nil, l.NextError.Get()
-	}
 	if !l.ListTypesOutput.IsNil() {
 		return *l.ListTypesOutput.Clone(), nil
 	}
@@ -346,8 +332,7 @@ func (l *LinodeClient) CreateLKENodePool(_ context.Context, clusterID int, opts 
 		skipInstance := false
 		l.InsufficientCapacityPools.Range(func(pool CapacityPool) bool {
 			if pool.InstanceType == params.Opts.Type &&
-				pool.Region == DefaultRegion &&
-				pool.CapacityType == karpv1.CapacityTypeOnDemand {
+				pool.Region == DefaultRegion {
 				skipInstance = true
 				return false
 			}
@@ -529,8 +514,7 @@ func (l *LinodeClient) UpdateLKENodePool(_ context.Context, clusterID, poolID in
 			skipInstance := false
 			l.InsufficientCapacityPools.Range(func(capacityPool CapacityPool) bool {
 				if capacityPool.InstanceType == pool.Type &&
-					capacityPool.Region == DefaultRegion &&
-					capacityPool.CapacityType == karpv1.CapacityTypeOnDemand {
+					capacityPool.Region == DefaultRegion {
 					skipInstance = true
 					return false
 				}
@@ -645,7 +629,7 @@ func (l *LinodeClient) DeleteLKENodePool(_ context.Context, clusterID, poolID in
 	return err
 }
 
-func (l *LinodeClient) GetLKENodePoolNode(_ context.Context, clusterID int, nodeID string) (*linodego.LKENodePoolLinode, error) {
+/* func (l *LinodeClient) GetLKENodePoolNode(_ context.Context, clusterID int, nodeID string) (*linodego.LKENodePoolLinode, error) {
 	params := struct {
 		ClusterName int
 		NodeID      string
@@ -705,7 +689,7 @@ func (l *LinodeClient) GetLKENodePoolNode(_ context.Context, clusterID int, node
 		return nil, err
 	}
 	return *node, err
-}
+} */
 
 func (l *LinodeClient) ListLKEClusters(_ context.Context, _ *linodego.ListOptions) ([]linodego.LKECluster, error) {
 	// For simplicity, return a canned response

@@ -130,7 +130,7 @@ var _ = Describe("LKENodeProvider", func() {
 			nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 
 			linodeEnv.LinodeAPI.InsufficientCapacityPools.Set([]fake.CapacityPool{
-				{CapacityType: karpv1.CapacityTypeOnDemand, InstanceType: dedicated8GB, Region: fake.DefaultRegion},
+				{InstanceType: dedicated8GB, Region: fake.DefaultRegion},
 			})
 
 			instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
@@ -142,8 +142,8 @@ var _ = Describe("LKENodeProvider", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(poolInstance).To(BeNil())
 
-			Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(dedicated8GB, fake.DefaultRegion, karpv1.CapacityTypeOnDemand)).To(BeTrue())
-			Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(standard8GB, fake.DefaultRegion, karpv1.CapacityTypeOnDemand)).To(BeFalse())
+			Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(dedicated8GB, fake.DefaultRegion)).To(BeTrue())
+			Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(standard8GB, fake.DefaultRegion)).To(BeFalse())
 		})
 
 		It("should create a dedicated nodepool instance", func() {
@@ -341,17 +341,10 @@ var _ = Describe("LKENodeProvider", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				claimTag := fmt.Sprintf("%s:%s", v1.NodeClaimTagKey, nodeClaim.Name)
-				emptyList := []linodego.Instance{}
-				resolvedList := []linodego.Instance{{ID: 7001, Tags: []string{claimTag}}}
-				linodeEnv.LinodeAPI.ListInstancesBehavior.MultiOut.Add(&resolvedList)
-				linodeEnv.LinodeAPI.ListInstancesBehavior.MultiOut.Add(&emptyList)
+				instanceWithTag := []linodego.Instance{{ID: 7001, Tags: []string{claimTag}}}
+				linodeEnv.LinodeAPI.ListInstancesBehavior.MultiOut.Add(&instanceWithTag)
 
 				node, err := enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
-				Expect(err).To(HaveOccurred())
-				Expect(node).To(BeNil())
-				Expect(err.Error()).To(ContainSubstring("waiting for instance tagged"))
-
-				node, err = enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(node).ToNot(BeNil())
 				Expect(node.ID).To(Equal(7001))

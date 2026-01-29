@@ -77,7 +77,6 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		return nil, err
 	}
 	nodeType := cheapestType.Name
-	capacityType := karpv1.CapacityTypeOnDemand // we only support on-demand for now
 
 	// Merge tags from NodeClass + NodeClaim tags map into the Linode tag format key:value.
 	tagList := append([]string{}, nodeClass.Spec.Tags...)
@@ -123,7 +122,6 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	utils.UpdateUnavailableOfferingsCache(
 		ctx,
 		err,
-		capacityType,
 		p.region,
 		cheapestType,
 		p.unavailableOfferings,

@@ -130,14 +130,6 @@ var _ = Describe("CloudProvider", func() {
 							Kind:  object.GVK(nodeClass).Kind,
 							Name:  nodeClass.Name,
 						},
-						Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
-							{
-								NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-									Key:      karpv1.CapacityTypeLabelKey,
-									Operator: corev1.NodeSelectorOpIn,
-									Values:   []string{karpv1.CapacityTypeOnDemand},
-								}},
-						},
 					},
 				},
 			},
@@ -151,15 +143,6 @@ var _ = Describe("CloudProvider", func() {
 					Group: object.GVK(nodeClass).Group,
 					Kind:  object.GVK(nodeClass).Kind,
 					Name:  nodeClass.Name,
-				},
-				Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
-					{
-						NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-							Key:      karpv1.CapacityTypeLabelKey,
-							Operator: corev1.NodeSelectorOpIn,
-							Values:   []string{karpv1.CapacityTypeOnDemand},
-						},
-					},
 				},
 			},
 		})
@@ -283,13 +266,6 @@ var _ = Describe("CloudProvider", func() {
 								Name:  nodeClass.Name,
 							},
 							Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
-								{
-									NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-										Key:      karpv1.CapacityTypeLabelKey,
-										Operator: corev1.NodeSelectorOpIn,
-										Values:   []string{karpv1.CapacityTypeOnDemand},
-									},
-								},
 								{
 									NodeSelectorRequirement: corev1.NodeSelectorRequirement{
 										Key:      v1.LabelInstanceClass,
@@ -505,14 +481,6 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 							Kind:  object.GVK(lkeNodeClass).Kind,
 							Name:  lkeNodeClass.Name,
 						},
-						Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
-							{
-								NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-									Key:      karpv1.CapacityTypeLabelKey,
-									Operator: corev1.NodeSelectorOpIn,
-									Values:   []string{karpv1.CapacityTypeOnDemand},
-								}},
-						},
 					},
 				},
 			},
@@ -526,15 +494,6 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 					Group: object.GVK(lkeNodeClass).Group,
 					Kind:  object.GVK(lkeNodeClass).Kind,
 					Name:  lkeNodeClass.Name,
-				},
-				Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
-					{
-						NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-							Key:      karpv1.CapacityTypeLabelKey,
-							Operator: corev1.NodeSelectorOpIn,
-							Values:   []string{karpv1.CapacityTypeOnDemand},
-						},
-					},
 				},
 			},
 		})

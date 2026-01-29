@@ -27,6 +27,9 @@ categories:
   - title: 📦 Dependency Updates
     labels:
       - dependencies
+  - title: 🧹 Cleanup
+    labels:
+      - cleanup
   - title: Other Changes
     labels:
       - "*"
@@ -59,6 +62,9 @@ autolabeler:
   - label: 'dependencies'
     title:
       - '/.*\[deps\].+/'
+  - label: 'cleanup'
+    title:
+      - '/.*\[cleanup\].+/'
 
 change-template: '- $TITLE by @$AUTHOR in #$NUMBER'
 no-changes-template: "- No changes"

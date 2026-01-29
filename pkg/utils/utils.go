@@ -275,7 +275,6 @@ func CheapestInstanceType(instanceTypes []*cloudprovider.InstanceType) (*cloudpr
 func UpdateUnavailableOfferingsCache(
 	ctx context.Context,
 	err error,
-	capacityType string,
 	region string,
 	instanceType *cloudprovider.InstanceType,
 	unavailableOfferings *linodecache.UnavailableOfferings,
@@ -283,7 +282,7 @@ func UpdateUnavailableOfferingsCache(
 ) {
 	switch {
 	case linodego.ErrHasStatus(err, http.StatusBadRequest):
-		unavailableOfferings.MarkUnavailable(ctx, err.Error(), instanceType.Name, region, capacityType)
+		unavailableOfferings.MarkUnavailable(ctx, err.Error(), instanceType.Name, region)
 	case linodego.ErrHasStatus(err,
 		http.StatusBadGateway,
 		http.StatusGatewayTimeout,

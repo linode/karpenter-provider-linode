@@ -20,7 +20,6 @@ import (
 
 	"github.com/awslabs/operatorpkg/object"
 	"github.com/samber/lo"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -124,7 +123,7 @@ var _ = Describe("InstanceProvider", func() {
 		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 		// Mark dedicated8GB as insufficient capacity
 		linodeEnv.LinodeAPI.InsufficientCapacityPools.Set([]fake.CapacityPool{
-			{CapacityType: karpv1.CapacityTypeOnDemand, InstanceType: dedicated8GB, Region: fake.DefaultRegion},
+			{InstanceType: dedicated8GB, Region: fake.DefaultRegion},
 		})
 		instanceTypes, err := cloudProvider.GetInstanceTypes(ctx, nodePool)
 		Expect(err).ToNot(HaveOccurred())
@@ -137,21 +136,10 @@ var _ = Describe("InstanceProvider", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(instance).To(BeNil())
 
-		Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(dedicated8GB, fake.DefaultRegion, karpv1.CapacityTypeOnDemand)).To(BeTrue())
-		Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(standard8GB, fake.DefaultRegion, karpv1.CapacityTypeOnDemand)).To(BeFalse())
+		Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(dedicated8GB, fake.DefaultRegion)).To(BeTrue())
+		Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(standard8GB, fake.DefaultRegion)).To(BeFalse())
 	})
-	It("should create a dedicated instance", func() {
-		nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
-			{
-				NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-					Key:      karpv1.CapacityTypeLabelKey,
-					Operator: corev1.NodeSelectorOpIn,
-					Values: []string{
-						karpv1.CapacityTypeOnDemand,
-					},
-				},
-			},
-		}
+	It("should create an instance", func() {
 		ExpectApplied(ctx, env.Client, nodeClaim, nodePool, nodeClass)
 		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 		instanceTypes, err := cloudProvider.GetInstanceTypes(ctx, nodePool)
