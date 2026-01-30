@@ -376,9 +376,14 @@ func (c *CloudProvider) instanceToNodeClaim(i *instance.Instance, instanceType *
 		nodeClaim.Status.Allocatable = lo.PickBy(instanceType.Allocatable(), resourceFilter)
 	}
 
+	// NOTE: These two labels are required on the nodeclaim for karpenter to properly consolidate nodes
+	// when scaling down because of decreased demand.
+	labels[corev1.LabelTopologyZone] = i.Region
+	labels[karpv1.CapacityTypeLabelKey] = "on-demand" // Linode does not have spot instances
+
 	nodeClaim.Labels = labels
 	nodeClaim.Annotations = annotations
-	if i != nil && i.Created != nil {
+	if i.Created != nil {
 		nodeClaim.CreationTimestamp = metav1.Time{Time: *i.Created}
 	}
 	// Set the deletionTimestamp to be the current time if the instance is currently terminating
