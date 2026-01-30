@@ -1,0 +1,113 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: minimal-lke-standard
+  # Label to trigger the test on every PR
+  labels:
+    all:
+spec:
+  steps:
+    - name: Make sure there are no lingering NodeClaims
+      try:
+      - script:
+          content: kubectl get nodeclaim -o json
+          check:
+            ($error): ~
+            (json_parse($stdout).items | length(@)): 0
+
+    - name: Create 10-replica inflate deployment (can't schedule)
+      try:
+      - apply:
+          file: ../common/inflate.yaml
+
+    - name: Wait for NodeClaim with the correct plan to be ready
+      try:
+      - assert:
+          timeout: 5m
+          resource:
+            apiVersion: karpenter.sh/v1
+            kind: NodeClaim
+            metadata:
+              labels:
+                node.kubernetes.io/instance-type: g6-dedicated-8
+            status:
+              (conditions[?type == 'Ready']):
+              - status: 'True'
+
+    - name: Check inflate pods are all scheduled
+      try:
+      - assert:
+          resource:
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: inflate
+              namespace: default
+            status:
+              replicas: 10
+              availableReplicas: 10
+
+    - name: Scale down inflate deployment to 5
+      try:
+      - script:
+          content: |
+            kubectl -n default scale deployment inflate --replicas 5
+          check:
+            ($error): ~
+
+    - name: Wait for NodeClaim with the correct plan to be ready
+      try:
+      - assert:
+          timeout: 5m
+          resource:
+            apiVersion: karpenter.sh/v1
+            kind: NodeClaim
+            metadata:
+              labels:
+                node.kubernetes.io/instance-type: g6-standard-4
+            status:
+              (conditions[?type == 'Ready']):
+              - status: 'True'
+
+    - name: Check inflate pods are all scheduled
+      try:
+      - assert:
+          resource:
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: inflate
+              namespace: default
+            status:
+              replicas: 5
+              availableReplicas: 5
+
+    - name: Wait for old NodeClaim to be deleted
+      try:
+      - wait:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+          timeout: 5m
+          selector: node.kubernetes.io/instance-type=g6-dedicated-8
+          for:
+            deletion: {}
+
+    - name: Scale inflate deployment to zero
+      try:
+      - script:
+          content: |
+            kubectl scale deployment inflate --replicas 0
+          check:
+            ($error): ~
+
+    - name: Wait for NodeClaim to be deleted
+      try:
+      - wait:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+          timeout: 5m
+          selector: node.kubernetes.io/instance-type=g6-standard-4
+          for:
+            deletion: {}
