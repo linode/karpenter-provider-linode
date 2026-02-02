@@ -49,7 +49,7 @@ Table of contents:
   - [Delete the cluster](#delete-the-cluster)
 - [Known issues](#known-issues)
 
-## Features Overview
+## Features Overview test
 The LKE Karpenter Provider enables node autoprovisioning using [Karpenter](https://karpenter.sh/) on your LKE cluster.
 Karpenter improves the efficiency and cost of running workloads on Kubernetes clusters by:
 
