@@ -16,7 +16,7 @@ This document summarizes the core assumptions, invariants, and high-level flow f
 ## Core model and invariants
 - **Pool mapping:** exactly 1 LKE pool per `(Karpenter NodePool name, instanceType)`.
 - **Pool discovery:** always list pools and filter client-side (server-side tag filtering is unreliable for LKE pools).
-- **Determinism:** if multiple claimable instances exist, claim the lowest `instanceID`.
+- **Determinism:** if multiple claimable instances exist, claim the first `instanceID` in the list.
 - **Tag ownership:**
   - `karpenter.sh/nodeclaim:<nodeClaimName>` is **instance-scoped only**.
   - `karpenter.sh/nodeclaim` is the authoritative orchestration signal for claim ownership: instances without any `karpenter.sh/nodeclaim:*` tag are treated as unclaimed and can only be claimed by writing `karpenter.sh/nodeclaim:<nodeClaimName>`.
