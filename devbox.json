@@ -8,7 +8,8 @@
     "kubectl@latest",
     "kubernetes-helm@latest",
     "kyverno-chainsaw@latest",
-    "tilt@latest"
+    "tilt@latest",
+    "linode-cli@5.56.2"
   ],
   "shell": {
     "init_hook": [
