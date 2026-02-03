@@ -102,7 +102,7 @@ verify: tidy download controller-gen golangci-lint ## Verify code. Includes depe
 	go generate ./...
 	hack/boilerplate.sh
 	cp  $(KARPENTER_CORE_DIR)/pkg/apis/crds/* pkg/apis/crds
-	# cp pkg/apis/crds/* charts/karpenter-crd/templates
+	cp pkg/apis/crds/* charts/karpenter-crd/templates
 	$(foreach dir,$(MOD_DIRS),cd $(dir) && golangci-lint run $(newline))
 	@git diff --quiet ||\
 		{ echo "New file modification detected in the Git working tree. Please check in before commit."; git --no-pager diff --name-only | uniq | awk '{print "  - " $$0}'; \
