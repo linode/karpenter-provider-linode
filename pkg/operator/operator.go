@@ -98,6 +98,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClient 
 		nodeProvider = lke.NewDefaultProvider(
 			clusterList[0].ID,
 			linodego.LKEVersionTier(clusterList[0].Tier),
+			opts.ClusterName,
 			opts.ClusterRegion,
 			operator.EventRecorder,
 			linodeClient,

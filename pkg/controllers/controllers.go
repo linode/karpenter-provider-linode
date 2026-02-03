@@ -50,7 +50,7 @@ func NewControllers(
 	nodeProvider instance.Provider,
 	instanceTypeProvider *instancetype.DefaultProvider,
 ) []controller.Controller {
-	controllers := []controller.Controller{
+	return []controller.Controller{
 		nodeclass.NewController(
 			kubeClient,
 			cloudProvider,
@@ -68,5 +68,4 @@ func NewControllers(
 		status.NewController[*v1.LinodeNodeClass](kubeClient, mgr.GetEventRecorderFor("karpenter"), status.EmitDeprecatedMetrics),
 		metrics.NewController(kubeClient, cloudProvider),
 	}
-	return controllers
 }

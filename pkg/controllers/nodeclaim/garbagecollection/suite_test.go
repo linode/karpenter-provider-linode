@@ -345,3 +345,186 @@ var _ = Describe("GarbageCollection", func() {
 		wg.Wait()
 	})
 })
+
+var _ = Describe("GarbageCollection LKE Mode", func() {
+	var nodeClass *v1.LinodeNodeClass
+	var nodePoolObj *karpv1.NodePool
+	var lkeCloudProvider *cloudprovider.CloudProvider
+	var lkeGCController *garbagecollection.Controller
+
+	BeforeEach(func() {
+		nodeClass = test.LinodeNodeClass()
+		nodePoolObj = coretest.NodePool(karpv1.NodePool{
+			Spec: karpv1.NodePoolSpec{
+				Template: karpv1.NodeClaimTemplate{
+					Spec: karpv1.NodeClaimTemplateSpec{
+						NodeClassRef: &karpv1.NodeClassReference{
+							Group: object.GVK(nodeClass).Group,
+							Kind:  object.GVK(nodeClass).Kind,
+							Name:  nodeClass.Name,
+						},
+					},
+				},
+			},
+		})
+		lkeCloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.LKENodeProvider, events.NewRecorder(&record.FakeRecorder{}),
+			env.Client)
+		lkeGCController = garbagecollection.NewController(env.Client, lkeCloudProvider)
+	})
+
+	AfterEach(func() {
+		ExpectCleanedUp(ctx, env.Client)
+	})
+
+	It("should delete an LKE node if there is no NodeClaim owner", func() {
+		poolID := 501
+		instanceID := 6001
+		providerID := fake.ProviderID(instanceID)
+		poolTags := []string{
+			fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+			fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+		}
+		pool := &linodego.LKENodePool{
+			ID:      poolID,
+			Type:    "g6-standard-2",
+			Tags:    poolTags,
+			Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID, ID: "node-6001"}},
+		}
+		linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+
+		now := time.Now().Add(-time.Minute)
+		instTags := append(poolTags, fmt.Sprintf("%s:%d", v1.PoolIDTagKey, poolID))
+		inst := linodego.Instance{ID: instanceID, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags}
+		linodeEnv.LinodeAPI.Instances.Store(instanceID, inst)
+
+		ExpectSingletonReconciled(ctx, lkeGCController)
+
+		_, err := lkeCloudProvider.Get(ctx, providerID)
+		Expect(err).To(HaveOccurred())
+		Expect(karpcloudprovider.IsNodeClaimNotFoundError(err)).To(BeTrue())
+		Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Calls()).To(Equal(1))
+	})
+
+	It("should delete individual LKE node when pool has multiple nodes and no NodeClaim owner", func() {
+		poolID := 502
+		instanceID1 := 6002
+		instanceID2 := 6003
+		providerID1 := fake.ProviderID(instanceID1)
+		poolTags := []string{
+			fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+			fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+		}
+		pool := &linodego.LKENodePool{
+			ID:   poolID,
+			Type: "g6-standard-2",
+			Tags: poolTags,
+			Linodes: []linodego.LKENodePoolLinode{
+				{InstanceID: instanceID1, ID: "node-6002"},
+				{InstanceID: instanceID2, ID: "node-6003"},
+			},
+		}
+		linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+
+		now := time.Now().Add(-time.Minute)
+		instTags := append(poolTags, fmt.Sprintf("%s:%d", v1.PoolIDTagKey, poolID))
+		inst1 := linodego.Instance{ID: instanceID1, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags}
+		inst2 := linodego.Instance{ID: instanceID2, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags}
+		linodeEnv.LinodeAPI.Instances.Store(instanceID1, inst1)
+		linodeEnv.LinodeAPI.Instances.Store(instanceID2, inst2)
+
+		nodeClaim := coretest.NodeClaim(karpv1.NodeClaim{
+			Spec: karpv1.NodeClaimSpec{
+				NodeClassRef: &karpv1.NodeClassReference{
+					Group: object.GVK(nodeClass).Group,
+					Kind:  object.GVK(nodeClass).Kind,
+					Name:  nodeClass.Name,
+				},
+			},
+			Status: karpv1.NodeClaimStatus{
+				ProviderID: fake.ProviderID(instanceID2),
+			},
+		})
+		ExpectApplied(ctx, env.Client, nodeClaim)
+
+		ExpectSingletonReconciled(ctx, lkeGCController)
+
+		_, err := lkeCloudProvider.Get(ctx, providerID1)
+		Expect(err).To(HaveOccurred())
+		Expect(karpcloudprovider.IsNodeClaimNotFoundError(err)).To(BeTrue())
+
+		Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Calls()).To(Equal(1))
+		Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Calls()).To(Equal(0))
+	})
+
+	It("should not delete LKE nodes if they have NodeClaim owners", func() {
+		poolID := 503
+		instanceID := 6004
+		providerID := fake.ProviderID(instanceID)
+		poolTags := []string{
+			fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+			fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+		}
+		pool := &linodego.LKENodePool{
+			ID:      poolID,
+			Type:    "g6-standard-2",
+			Tags:    poolTags,
+			Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID, ID: "node-6004"}},
+		}
+		linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+
+		now := time.Now().Add(-time.Minute)
+		instTags := append(poolTags, fmt.Sprintf("%s:%d", v1.PoolIDTagKey, poolID))
+		inst := linodego.Instance{ID: instanceID, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags}
+		linodeEnv.LinodeAPI.Instances.Store(instanceID, inst)
+
+		nodeClaim := coretest.NodeClaim(karpv1.NodeClaim{
+			Spec: karpv1.NodeClaimSpec{
+				NodeClassRef: &karpv1.NodeClassReference{
+					Group: object.GVK(nodeClass).Group,
+					Kind:  object.GVK(nodeClass).Kind,
+					Name:  nodeClass.Name,
+				},
+			},
+			Status: karpv1.NodeClaimStatus{
+				ProviderID: providerID,
+			},
+		})
+		ExpectApplied(ctx, env.Client, nodeClaim)
+
+		ExpectSingletonReconciled(ctx, lkeGCController)
+
+		_, err := lkeCloudProvider.Get(ctx, providerID)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Calls()).To(Equal(0))
+		Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Calls()).To(Equal(0))
+	})
+
+	It("should not delete LKE nodes within the resolution window", func() {
+		poolID := 504
+		instanceID := 6005
+		providerID := fake.ProviderID(instanceID)
+		poolTags := []string{
+			fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+			fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+		}
+		pool := &linodego.LKENodePool{
+			ID:      poolID,
+			Type:    "g6-standard-2",
+			Tags:    poolTags,
+			Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID, ID: "node-6005"}},
+		}
+		linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+
+		now := time.Now()
+		instTags := append(poolTags, fmt.Sprintf("%s:%d", v1.PoolIDTagKey, poolID))
+		inst := linodego.Instance{ID: instanceID, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags}
+		linodeEnv.LinodeAPI.Instances.Store(instanceID, inst)
+
+		ExpectSingletonReconciled(ctx, lkeGCController)
+
+		_, err := lkeCloudProvider.Get(ctx, providerID)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Calls()).To(Equal(0))
+		Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Calls()).To(Equal(0))
+	})
+})

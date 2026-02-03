@@ -77,6 +77,7 @@ var (
 	LKEClusterNameTagKey                     = "lke-cluster-name"
 	NodePoolTagKey                           = karpv1.NodePoolLabelKey
 	NodeClassTagKey                          = LabelNodeClass
+	PoolIDTagKey                             = apis.Group + "/lke-pool-id"
 	AnnotationClusterNameTaggedCompatability = apis.CompatibilityGroup + "/cluster-name-tagged"
 	// LKE managed mode label - indicates the node is managed by LKE NodePool APIs
 	LabelLKEManaged = apis.Group + "/lke-managed"
