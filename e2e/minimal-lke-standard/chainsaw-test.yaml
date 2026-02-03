@@ -35,6 +35,16 @@ spec:
             status:
               (conditions[?type == 'Ready']):
               - status: 'True'
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - events:
+          namespace: default
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 250
 
     - name: Check inflate pods are all scheduled
       try:
@@ -70,6 +80,16 @@ spec:
             status:
               (conditions[?type == 'Ready']):
               - status: 'True'
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - events:
+          namespace: default
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 250
 
     - name: Check inflate pods are all scheduled
       try:
@@ -93,12 +113,22 @@ spec:
           selector: node.kubernetes.io/instance-type=g6-dedicated-8
           for:
             deletion: {}
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - events:
+          namespace: default
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 250
 
     - name: Scale inflate deployment to zero
       try:
       - script:
           content: |
-            kubectl scale deployment inflate --replicas 0
+            kubectl scale -n default deployment inflate --replicas 0
           check:
             ($error): ~
 
@@ -111,3 +141,13 @@ spec:
           selector: node.kubernetes.io/instance-type=g6-standard-4
           for:
             deletion: {}
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - events:
+          namespace: default
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 250
