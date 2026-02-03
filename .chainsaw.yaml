@@ -1,0 +1,9 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Configuration
+metadata:
+  name: local-config
+spec:
+  testFile: chainsaw-test.yaml
+  skipDelete: false
+  failFast: false
+  parallel: 2

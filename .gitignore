@@ -19,3 +19,6 @@ go.work.sum
 karpenter-provider-aws-*
 
 bin/
+
+# kubeconfigs for e2e tests
+*-kubeconfig

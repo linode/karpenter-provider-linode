@@ -1,9 +1,15 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
   "packages": [
-    "ko@latest",
-    "golangci-lint@latest",
-    "go@1.25"
+    "go@1.25",
+    "just@1.43.1",
+    "kubectl@latest",
+    "linode-cli@5.56.2",
+    "kyverno-chainsaw@0.2.14",
+    "kubernetes-helm@3.19.1",
+    "tilt@0.36.0",
+    "golangci-lint@2.8.0",
+    "ko@0.18.1"
   ],
   "shell": {
     "init_hook": [
@@ -14,8 +20,32 @@
       "unset DEVELOPER_DIR"
     ],
     "scripts": {
-      "test": [
-        "echo \"Error: no test specified\" && exit 1"
+      "setup-and-test-e2e": [
+        "just setup-and-test-e2e"
+      ],
+      "create-lke-cluster": [
+        "just create-lke-cluster"
+      ],
+      "init-lke-cluster": [
+        "just init-lke-cluster"
+      ],
+      "run-tilt-lke": [
+        "just run-tilt-lke"
+      ],
+      "cleanup-tilt-lke": [
+        "just cleanup-tilt-lke"
+      ],
+      "run-e2e": [
+        "just run-e2e"
+      ],
+      "configure-lke-cluster": [
+        "just configure-lke-cluster"
+      ],
+      "destroy-lke-cluster": [
+        "just destroy-lke-cluster \"$@\""
+      ],
+      "get-lke-cluster-id": [
+        "just get-lke-cluster-id"
       ]
     }
   }
