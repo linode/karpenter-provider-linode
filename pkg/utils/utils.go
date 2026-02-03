@@ -115,13 +115,18 @@ func GetTagsForLKE(nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, c
 	staticTags := map[string]string{
 		fmt.Sprintf("kubernetes.io/cluster/%s", clusterName): "owned",
 		karpv1.NodePoolLabelKey:                              nodeClaim.Labels[karpv1.NodePoolLabelKey],
-		v1.NodeClaimTagKey:                                   nodeClaim.Name,
 		v1.LKEClusterNameTagKey:                              clusterName,
 		v1.LabelNodeClass:                                    nodeClass.Name,
 		v1.LabelLKEManaged:                                   "true",
 	}
 
 	return lo.Assign(TagListToMap(nodeClass.Spec.Tags), staticTags)
+}
+
+func GetInstanceTagsForLKE(nodeClaimName string) map[string]string {
+	return map[string]string{
+		v1.NodeClaimTagKey: nodeClaimName,
+	}
 }
 
 func GetNodeClassHash(nodeClass *v1.LinodeNodeClass) string {
@@ -292,4 +297,16 @@ func UpdateUnavailableOfferingsCache(
 	case err != nil:
 		log.FromContext(ctx).Error(err, "unexpected error during instance creation")
 	}
+}
+
+// GetTagValue searches through a slice of tags and returns the value for the first tag
+// that matches the key prefix format "key:value". If no matching tag is found,
+// it returns an empty string and an error.
+func GetTagValue(tags []string, key string) (string, error) {
+	for _, tag := range tags {
+		if strings.HasPrefix(tag, key+":") {
+			return strings.TrimPrefix(tag, key+":"), nil
+		}
+	}
+	return "", fmt.Errorf("tag %s not found", key)
 }
