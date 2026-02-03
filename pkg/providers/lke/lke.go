@@ -44,6 +44,8 @@ const (
 	DefaultTagVerificationTimeout = 5 * time.Second
 )
 
+var ErrNodesProvisioning = errors.New("nodes provisioning")
+
 type DefaultProvider struct {
 	clusterID            int
 	clusterTier          linodego.LKEVersionTier
@@ -124,6 +126,10 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 		claimableInstance, nodeID, err := p.findClaimableInstance(ctx, pool)
 		if err != nil {
 			p.poolMutex.Unlock(poolKey)
+			if errors.Is(err, ErrNodesProvisioning) {
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
 			return nil, err
 		}
 
@@ -246,9 +252,12 @@ func (p *DefaultProvider) findClaimableInstanceStandard(ctx context.Context, poo
 		return nil, "", fmt.Errorf("getting node pool %d: %w", pool.ID, err)
 	}
 
+	nodesProvisioning := false
 	for _, node := range freshPool.Linodes {
 		if node.InstanceID == 0 {
+			nodesProvisioning = true
 			continue
+			// Don't return early - we need to check all nodes for claimable instances first
 		}
 
 		linodeInstance, err := p.client.GetInstance(ctx, node.InstanceID)
@@ -265,6 +274,10 @@ func (p *DefaultProvider) findClaimableInstanceStandard(ctx context.Context, poo
 		if _, exists := tags[v1alpha1.NodeClaimTagKey]; !exists {
 			return linodeInstance, node.ID, nil
 		}
+	}
+
+	if nodesProvisioning {
+		return nil, "", ErrNodesProvisioning
 	}
 
 	return nil, "", nil

@@ -116,7 +116,7 @@ var _ = Describe("NodeClass Termination", func() {
 			nodeClaims = append(nodeClaims, nc)
 		}
 
-		controllerutil.AddFinalizer(nodeClass, v1.TerminationFinalizer)
+		controllerutil.AddFinalizer(nodeClass, karpv1.TerminationFinalizer)
 		ExpectApplied(ctx, env.Client, nodeClass)
 		ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
 

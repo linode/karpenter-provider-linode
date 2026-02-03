@@ -770,7 +770,7 @@ func (l *LinodeClient) DeleteLKENodePoolNode(_ context.Context, clusterID int, n
 	}) (*error, error) {
 		var foundPoolKey string
 		var foundPool *linodego.LKENodePool
-		var nodeIndex int = -1
+		var nodeIndex = -1
 		var nodeInstanceID int
 
 		l.NodePools.Range(func(k, v any) bool {
