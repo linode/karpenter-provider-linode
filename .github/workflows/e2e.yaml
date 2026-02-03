@@ -63,6 +63,9 @@ jobs:
 
       - name: Install devbox
         uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: 'true'
+          refresh-cli: 'false'
 
       - name: Run E2E
         run: |
@@ -90,6 +93,9 @@ jobs:
 
       - name: Install devbox
         uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: 'true'
+          refresh-cli: 'false'
 
       - name: Delete LKE cluster for this PR
         run: devbox run destroy-lke-cluster $(devbox run get-lke-cluster-id)
