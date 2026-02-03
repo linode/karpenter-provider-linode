@@ -21,11 +21,11 @@ import (
 
 	"sigs.k8s.io/karpenter/pkg/events"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
-func WaitingOnNodeClaimTerminationEvent(nodeClass *v1.LinodeNodeClass, names []string) events.Event {
+func WaitingOnNodeClaimTerminationEvent(nodeClass *v1alpha1.LinodeNodeClass, names []string) events.Event {
 	return events.Event{
 		InvolvedObject: nodeClass,
 		Type:           corev1.EventTypeNormal,

@@ -36,7 +36,7 @@ import (
 
 	"github.com/linode/linodego"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	instancefilter "github.com/linode/karpenter-provider-linode/pkg/providers/instance/filter"
@@ -92,7 +92,7 @@ func WithDefaultFloat64(key string, def float64) float64 {
 	return f
 }
 
-func GetTags(nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, clusterName string) map[string]string {
+func GetTags(nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, clusterName string) map[string]string {
 	// TODO: Validate tags
 	// var invalidTags []string
 	// if len(invalidTags) != 0 {
@@ -104,20 +104,20 @@ func GetTags(nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, cluster
 	staticTags := map[string]string{
 		fmt.Sprintf("kubernetes.io/cluster/%s", clusterName): "owned",
 		karpv1.NodePoolLabelKey:                              nodeClaim.Labels[karpv1.NodePoolLabelKey],
-		v1.LKEClusterNameTagKey:                              clusterName,
-		v1.LabelNodeClass:                                    nodeClass.Name,
+		v1alpha1.LKEClusterNameTagKey:                        clusterName,
+		v1alpha1.LabelNodeClass:                              nodeClass.Name,
 	}
 
 	return lo.Assign(TagListToMap(nodeClass.Spec.Tags), staticTags)
 }
 
-func GetTagsForLKE(nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, clusterName string) map[string]string {
+func GetTagsForLKE(nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, clusterName string) map[string]string {
 	staticTags := map[string]string{
 		fmt.Sprintf("kubernetes.io/cluster/%s", clusterName): "owned",
 		karpv1.NodePoolLabelKey:                              nodeClaim.Labels[karpv1.NodePoolLabelKey],
-		v1.LKEClusterNameTagKey:                              clusterName,
-		v1.LabelNodeClass:                                    nodeClass.Name,
-		v1.LabelLKEManaged:                                   "true",
+		v1alpha1.LKEClusterNameTagKey:                        clusterName,
+		v1alpha1.LabelNodeClass:                              nodeClass.Name,
+		v1alpha1.LabelLKEManaged:                             "true",
 	}
 
 	return lo.Assign(TagListToMap(nodeClass.Spec.Tags), staticTags)
@@ -125,11 +125,11 @@ func GetTagsForLKE(nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, c
 
 func GetInstanceTagsForLKE(nodeClaimName string) map[string]string {
 	return map[string]string{
-		v1.NodeClaimTagKey: nodeClaimName,
+		v1alpha1.NodeClaimTagKey: nodeClaimName,
 	}
 }
 
-func GetNodeClassHash(nodeClass *v1.LinodeNodeClass) string {
+func GetNodeClassHash(nodeClass *v1alpha1.LinodeNodeClass) string {
 	return fmt.Sprintf("%s-%d", nodeClass.UID, nodeClass.Generation)
 }
 
