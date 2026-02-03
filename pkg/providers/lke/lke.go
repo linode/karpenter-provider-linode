@@ -513,49 +513,14 @@ func isKarpenterManagedPool(pool *linodego.LKENodePool) bool {
 }
 
 func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
-	instanceID, err := strconv.Atoi(id)
-	if err != nil {
-		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("parsing instance ID: %w", err))
-	}
 
-	linodeInstance, err := p.client.GetInstance(ctx, instanceID)
+	lkePool, err := p.findLKENodePoolFromLinodeInstanceID(ctx, id)
 	if err != nil {
-		if linodego.IsNotFound(err) {
-			p.nodeCache.Delete(id)
-			return cloudprovider.NewNodeClaimNotFoundError(err)
-		}
-		return err
-	}
-
-	poolIDTag, err := utils.GetTagValue(linodeInstance.Tags, v1alpha1.PoolIDTagKey)
-	if err != nil {
-		p.nodeCache.Delete(id)
-		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("getting pool ID tag for instance %d: %w", instanceID, err))
-	}
-	poolID, err := strconv.Atoi(poolIDTag)
-	if err != nil {
-		p.nodeCache.Delete(id)
-		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("parsing pool ID tag for instance %d: %w", instanceID, err))
-	}
-
-	tags := utils.TagListToMap(linodeInstance.Tags)
-	karpenterNodePoolName := tags[karpv1.NodePoolLabelKey]
-	poolKey := makePoolKey(karpenterNodePoolName, linodeInstance.Type)
-
-	p.poolMutex.Lock(poolKey)
-	defer p.poolMutex.Unlock(poolKey)
-
-	lkePool, err := p.client.GetLKENodePool(ctx, p.clusterID, poolID)
-	if err != nil {
-		if linodego.IsNotFound(err) {
-			p.nodeCache.Delete(id)
-			return cloudprovider.NewNodeClaimNotFoundError(err)
-		}
-		return err
+		return cloudprovider.NewNodeClaimNotFoundError(err)
 	}
 
 	if len(lkePool.Linodes) <= 1 {
-		if err := p.client.DeleteLKENodePool(ctx, p.clusterID, poolID); err != nil {
+		if err := p.client.DeleteLKENodePool(ctx, p.clusterID, lkePool.ID); err != nil {
 			if linodego.IsNotFound(err) {
 				p.nodeCache.Delete(id)
 				return cloudprovider.NewNodeClaimNotFoundError(err)
@@ -566,22 +531,13 @@ func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
 		return nil
 	}
 
-	nodeID := ""
-	for _, node := range lkePool.Linodes {
-		if node.InstanceID == instanceID {
-			nodeID = node.ID
-			break
-		}
-	}
-	if nodeID == "" && p.clusterTier == linodego.LKEVersionEnterprise {
-		nodeID = linodeInstance.Label
-	}
-	if nodeID == "" {
+	poolNode, err := findNodeInPool(lkePool, id)
+	if err != nil {
 		p.nodeCache.Delete(id)
-		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("node not found in pool %d for instance %d", poolID, instanceID))
+		return cloudprovider.NewNodeClaimNotFoundError(err)
 	}
 
-	if err := p.client.DeleteLKENodePoolNode(ctx, p.clusterID, nodeID); err != nil {
+	if err := p.client.DeleteLKENodePoolNode(ctx, p.clusterID, poolNode.ID); err != nil {
 		if linodego.IsNotFound(err) {
 			p.nodeCache.Delete(id)
 			return cloudprovider.NewNodeClaimNotFoundError(err)
