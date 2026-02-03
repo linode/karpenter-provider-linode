@@ -20,7 +20,7 @@ spec:
         fsGroup: 2000
       containers:
       - name: inflate
-        image: public.ecr.aws/eks-distro/kubernetes/pause:3.7
+        image: mirror.registry.linodelke.net/k8s/pause:3.9
         resources:
           requests:
             cpu: 1
