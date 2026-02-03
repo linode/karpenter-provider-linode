@@ -1,15 +1,15 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
   "packages": [
-    "ko@latest",
-    "golangci-lint@latest",
     "go@1.25",
     "just@1.43.1",
     "kubectl@latest",
-    "kubernetes-helm@latest",
-    "kyverno-chainsaw@latest",
-    "tilt@latest",
-    "linode-cli@5.56.2"
+    "linode-cli@5.56.2",
+    "kyverno-chainsaw@0.2.14",
+    "kubernetes-helm@3.19.1",
+    "tilt@0.36.0",
+    "golangci-lint@2.8.0",
+    "ko@0.18.1"
   ],
   "shell": {
     "init_hook": [

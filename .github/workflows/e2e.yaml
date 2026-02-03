@@ -48,7 +48,7 @@ jobs:
       LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
       LINODE_CLI_TOKEN: ${{ secrets.LINODE_TOKEN }}
       LINODE_REGION: us-sea
-      CLUSTER_NAME: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || format('manual-{0}', github.run_id) }}
+      CLUSTER_NAME: karpl-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || format('manual-{0}', github.run_id) }}
       KUBECONFIG: ${{ github.event.pull_request.number && format('pr-{0}-kubeconfig', github.event.pull_request.number) || format('manual-{0}-kubeconfig', github.run_id) }}
 
     steps:
@@ -79,7 +79,7 @@ jobs:
     env:
       LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
       LINODE_CLI_TOKEN: ${{ secrets.LINODE_TOKEN }}
-      CLUSTER_NAME: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || format('manual-{0}', github.run_id) }}
+      CLUSTER_NAME: karpl-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || format('manual-{0}', github.run_id) }}
 
     steps:
       - name: Checkout code
