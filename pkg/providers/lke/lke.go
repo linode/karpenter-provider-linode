@@ -177,7 +177,7 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 			claimedInstance, err := p.claimInstance(ctx, claimableInstance, nodeClaim, pool)
 			if err != nil {
 				logger.Error(err, "failed to claim instance", "instanceID", claimableInstance.ID)
-				return nil, fmt.Errorf("%w: %v", ErrClaimFailed, err)
+				return nil, fmt.Errorf("%w: %w", ErrClaimFailed, err)
 			}
 			inst := instance.NewLKEInstance(claimedInstance.ID, pool.Type, claimedInstance.Tags, p.region, claimedInstance.Created)
 			p.cacheNode(inst)
@@ -191,7 +191,7 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 		_, err = p.client.UpdateLKENodePool(ctx, p.clusterID, pool.ID, linodego.LKENodePoolUpdateOptions{Count: pool.Count + 1})
 		if err != nil {
 			logger.Error(err, "failed to scale pool", "poolID", pool.ID)
-			return nil, fmt.Errorf("%w: %v", ErrPoolScaleFailed, err)
+			return nil, fmt.Errorf("%w: %w", ErrPoolScaleFailed, err)
 		}
 		*scaledOnce = true
 		return nil, ErrNoClaimableInstance
