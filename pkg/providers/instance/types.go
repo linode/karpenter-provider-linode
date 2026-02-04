@@ -25,7 +25,6 @@ import (
 // It contains all the common data that is needed to inject into the Machine from this responses
 type Instance struct {
 	ID                  int
-	NodeID              string
 	Created             *time.Time
 	Region              string
 	Image               string
@@ -35,9 +34,6 @@ type Instance struct {
 	Status              linodego.InstanceStatus
 	WatchdogEnabled     bool
 	Tags                []string
-	Labels              map[string]string
-	Taints              []linodego.LKENodePoolTaint
-	PoolID              int
 	PlacementGroup      *linodego.InstancePlacementGroup
 	DiskEncryption      linodego.InstanceDiskEncryption
 	InterfaceGeneration linodego.InterfaceGeneration
@@ -64,16 +60,12 @@ func NewInstance(_ context.Context, instance linodego.Instance) *Instance {
 	}
 }
 
-func NewLKEInstance(pool *linodego.LKENodePool, node linodego.LKENodePoolLinode, region string, created *time.Time) *Instance {
+func NewLKEInstance(instanceID int, instanceType string, tags []string, region string, created *time.Time) *Instance {
 	return &Instance{
-		ID:      node.InstanceID,
-		NodeID:  node.ID,
+		ID:      instanceID,
 		Created: created,
 		Region:  region,
-		Type:    pool.Type,
-		Tags:    pool.Tags,
-		Labels:  pool.Labels,
-		Taints:  pool.Taints,
-		PoolID:  pool.ID,
+		Type:    instanceType,
+		Tags:    tags,
 	}
 }

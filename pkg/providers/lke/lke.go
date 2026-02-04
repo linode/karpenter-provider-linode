@@ -125,7 +125,8 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 			return nil, cloudprovider.NewCreateError(err, "NodePoolCreationFailed", fmt.Sprintf("Failed to find or create LKE node pool: %s", err.Error()))
 		}
 
-		claimableInstance, nodeID, err := p.findClaimableInstance(ctx, pool)
+		// TODO: remove the nodeID returned field
+		claimableInstance, _, err := p.findClaimableInstance(ctx, pool)
 		if err != nil {
 			p.poolMutex.Unlock(poolKey)
 			if errors.Is(err, ErrNodesProvisioning) {
@@ -145,13 +146,9 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 
 			inst := &instance.Instance{
 				ID:     claimedInstance.ID,
-				NodeID: p.resolveNodeID(nodeID, claimedInstance.Label),
 				Region: p.region,
 				Type:   pool.Type,
 				Tags:   claimedInstance.Tags,
-				Labels: pool.Labels,
-				Taints: pool.Taints,
-				PoolID: pool.ID,
 			}
 			if claimedInstance.Created != nil {
 				inst.Created = claimedInstance.Created
@@ -368,38 +365,24 @@ func (p *DefaultProvider) verifyTagsApplied(ctx context.Context, instanceID int,
 	return nil, fmt.Errorf("timed out verifying tags on instance %d", instanceID)
 }
 
-func (p *DefaultProvider) hydrateInstanceFromLinode(ctx context.Context, linodeInstance *linodego.Instance) (*instance.Instance, error) {
+func (p *DefaultProvider) hydrateInstanceFromLinode(_ context.Context, linodeInstance *linodego.Instance) (*instance.Instance, error) {
 	linodeInstanceID := strconv.Itoa(linodeInstance.ID)
 	if cached, found := p.nodeCache.Get(linodeInstanceID); found {
 		return cached.(*instance.Instance), nil
 	}
 
-	pool, err := p.findLKENodePoolFromLinodeInstanceID(ctx, linodeInstanceID)
-	if err != nil {
-		return nil, err
-	}
-
-	node, err := findNodeInPool(pool, linodeInstanceID)
-	if err != nil {
-		return nil, err
-	}
-
 	inst := &instance.Instance{
 		ID:      linodeInstance.ID,
-		NodeID:  p.resolveNodeID(node.ID, linodeInstance.Label),
 		Created: linodeInstance.Created,
 		Region:  p.region,
-		Type:    pool.Type,
+		Type:    linodeInstance.Type,
 		Tags:    linodeInstance.Tags,
-		Labels:  pool.Labels,
-		Taints:  pool.Taints,
-		PoolID:  pool.ID,
 	}
 	p.cacheNode(inst)
 	return inst, nil
 }
 
-func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...instance.Options) (*instance.Instance, error) {
+func (p *DefaultProvider) Get(_ context.Context, id string, opts ...instance.Options) (*instance.Instance, error) {
 	options := option.Resolve(opts...)
 	cacheKey := id
 	if !options.SkipCache {
@@ -411,35 +394,22 @@ func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...instance.O
 	if err != nil {
 		return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("parsing instance ID: %w", err))
 	}
-	linodeInstance, err := p.client.GetInstance(ctx, instanceID)
-	if err != nil {
-		return nil, cloudprovider.NewNodeClaimNotFoundError(err)
-	}
-	pool, err := p.resolvePoolForInstance(ctx, linodeInstance)
-	if err != nil {
-		return nil, err
-	}
-	node, err := findNodeInPool(pool, id)
+	linodeInstance, err := p.client.GetInstance(context.Background(), instanceID)
 	if err != nil {
 		return nil, cloudprovider.NewNodeClaimNotFoundError(err)
 	}
 	inst := &instance.Instance{
 		ID:      linodeInstance.ID,
-		NodeID:  p.resolveNodeID(node.ID, linodeInstance.Label),
 		Created: linodeInstance.Created,
 		Region:  p.region,
-		Type:    pool.Type,
+		Type:    linodeInstance.Type,
 		Tags:    linodeInstance.Tags,
-		Labels:  pool.Labels,
-		Taints:  pool.Taints,
-		PoolID:  pool.ID,
 	}
 	p.cacheNode(inst)
 	return inst, nil
 }
 
 func (p *DefaultProvider) List(ctx context.Context) ([]*instance.Instance, error) {
-	logger := log.FromContext(ctx)
 	filter := linodego.Filter{}
 	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%s:%s", v1alpha1.LabelLKEManaged, "true"))
 	if p.clusterTier == linodego.LKEVersionEnterprise {
@@ -454,70 +424,21 @@ func (p *DefaultProvider) List(ctx context.Context) ([]*instance.Instance, error
 		return nil, err
 	}
 	var result []*instance.Instance
-	var errs []error
 	for _, linodeInstance := range instances {
 		if p.clusterID != linodeInstance.LKEClusterID {
 			continue
 		}
-		pool, err := p.resolvePoolForInstance(ctx, &linodeInstance)
-		if err != nil {
-			logger.V(3).Info("resolving pool for instance during list", "instanceID", linodeInstance.ID, "error", err)
-			errs = append(errs, err)
-			continue
-		}
-		nodeID := ""
-		if p.clusterTier == linodego.LKEVersionEnterprise {
-			nodeID = p.resolveNodeID("", linodeInstance.Label)
-		} else {
-			node, err := findNodeInPool(pool, strconv.Itoa(linodeInstance.ID))
-			if err != nil {
-				logger.V(3).Info("node not found", "error", err)
-				errs = append(errs, err)
-				continue
-			}
-			nodeID = node.ID
-		}
 		inst := &instance.Instance{
 			ID:      linodeInstance.ID,
-			NodeID:  p.resolveNodeID(nodeID, linodeInstance.Label),
 			Created: linodeInstance.Created,
 			Region:  p.region,
-			Type:    pool.Type,
+			Type:    linodeInstance.Type,
 			Tags:    linodeInstance.Tags,
-			Labels:  pool.Labels,
-			Taints:  pool.Taints,
-			PoolID:  pool.ID,
 		}
 		result = append(result, inst)
 		p.cacheNode(inst)
 	}
-	if len(errs) > 0 {
-		return result, fmt.Errorf("encountered %d errors during list: %w", len(errs), errors.Join(errs...))
-	}
 	return result, nil
-}
-
-func (p *DefaultProvider) resolvePoolForInstance(ctx context.Context, linodeInstance *linodego.Instance) (*linodego.LKENodePool, error) {
-	if p.clusterTier == linodego.LKEVersionEnterprise {
-		poolIDTag, err := utils.GetTagValue(linodeInstance.Tags, v1alpha1.LKENodePoolTagKey)
-		if err != nil {
-			return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("getting nodepool tag from instance %d: %w", linodeInstance.ID, err))
-		}
-		poolID, err := strconv.Atoi(poolIDTag)
-		if err != nil {
-			return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("parsing nodepool tag for instance %d: %w", linodeInstance.ID, err))
-		}
-		pool, err := p.client.GetLKENodePool(ctx, p.clusterID, poolID)
-		if err != nil {
-			return nil, cloudprovider.NewNodeClaimNotFoundError(err)
-		}
-		return pool, nil
-	}
-	pool, err := p.findLKENodePoolFromLinodeInstanceID(ctx, strconv.Itoa(linodeInstance.ID))
-	if err != nil {
-		return nil, cloudprovider.NewNodeClaimNotFoundError(err)
-	}
-	return pool, nil
 }
 
 func isKarpenterManagedPool(pool *linodego.LKENodePool) bool {
@@ -599,19 +520,6 @@ func convertToLkeTaints(taints []corev1.Taint) []linodego.LKENodePoolTaint {
 func (p *DefaultProvider) cacheNode(n *instance.Instance) {
 	id := strconv.Itoa(n.ID)
 	p.nodeCache.SetDefault(id, n)
-}
-
-// resolveNodeID returns the nodeID, preferring the explicit nodeID if available,
-// falling back to instance label for Enterprise tier where label == nodeID.
-func (p *DefaultProvider) resolveNodeID(nodeID, instanceLabel string) string {
-	if nodeID != "" {
-		return nodeID
-	}
-	// For Enterprise tier, instance label is the node ID
-	if p.clusterTier == linodego.LKEVersionEnterprise {
-		return instanceLabel
-	}
-	return ""
 }
 
 func (p *DefaultProvider) findLKENodePoolFromLinodeInstanceID(ctx context.Context, id string) (*linodego.LKENodePool, error) {

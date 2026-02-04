@@ -42,6 +42,7 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclaim/garbagecollection"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
+	"github.com/linode/karpenter-provider-linode/pkg/providers/lke"
 	"github.com/linode/karpenter-provider-linode/pkg/test"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -526,5 +527,190 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Calls()).To(Equal(0))
 		Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Calls()).To(Equal(0))
+	})
+
+	Context("Enterprise tier", func() {
+		var enterpriseProvider *lke.DefaultProvider
+		var enterpriseCloudProvider *cloudprovider.CloudProvider
+		var enterpriseGCController *garbagecollection.Controller
+
+		BeforeEach(func() {
+			recorder := events.NewRecorder(&record.FakeRecorder{})
+			enterpriseProvider = lke.NewDefaultProvider(
+				fake.DefaultClusterID,
+				linodego.LKEVersionEnterprise,
+				fake.DefaultClusterName,
+				fake.DefaultRegion,
+				recorder,
+				linodeEnv.LinodeAPI,
+				linodeEnv.UnavailableOfferingsCache,
+				linodeEnv.NodePoolCache,
+			)
+			enterpriseCloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, enterpriseProvider, recorder, env.Client)
+			enterpriseGCController = garbagecollection.NewController(env.Client, enterpriseCloudProvider)
+		})
+
+		It("should delete an LKE node if there is no NodeClaim owner", func() {
+			poolID := 601
+			instanceID := 7001
+			providerID := fake.ProviderID(instanceID)
+			poolTags := []string{
+				fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+				fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+			}
+			pool := &linodego.LKENodePool{
+				ID:      poolID,
+				Type:    "g6-standard-2",
+				Tags:    poolTags,
+				Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID, ID: "node-7001"}},
+			}
+			linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+
+			now := time.Now().Add(-time.Minute)
+			instTags := append(poolTags,
+				fmt.Sprintf("%s=%d", v1.LKENodePoolTagKey, poolID),
+				fmt.Sprintf("lke%d", fake.DefaultClusterID),
+			)
+			inst := linodego.Instance{ID: instanceID, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags, LKEClusterID: fake.DefaultClusterID, Label: "node-7001"}
+			linodeEnv.LinodeAPI.Instances.Store(instanceID, inst)
+
+			ExpectSingletonReconciled(ctx, enterpriseGCController)
+
+			_, err := enterpriseCloudProvider.Get(ctx, providerID)
+			Expect(err).To(HaveOccurred())
+			Expect(karpcloudprovider.IsNodeClaimNotFoundError(err)).To(BeTrue())
+			Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Calls()).To(Equal(1))
+		})
+
+		It("should delete individual LKE node when pool has multiple nodes and no NodeClaim owner", func() {
+			poolID := 602
+			instanceID1 := 7002
+			instanceID2 := 7003
+			providerID1 := fake.ProviderID(instanceID1)
+			poolTags := []string{
+				fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+				fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+			}
+			pool := &linodego.LKENodePool{
+				ID:   poolID,
+				Type: "g6-standard-2",
+				Tags: poolTags,
+				Linodes: []linodego.LKENodePoolLinode{
+					{InstanceID: instanceID1, ID: "node-7002"},
+					{InstanceID: instanceID2, ID: "node-7003"},
+				},
+			}
+			linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+
+			now := time.Now().Add(-time.Minute)
+			instTags := append(poolTags,
+				fmt.Sprintf("%s=%d", v1.LKENodePoolTagKey, poolID),
+				fmt.Sprintf("lke%d", fake.DefaultClusterID),
+			)
+			inst1 := linodego.Instance{ID: instanceID1, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags, LKEClusterID: fake.DefaultClusterID, Label: "node-7002"}
+			inst2 := linodego.Instance{ID: instanceID2, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags, LKEClusterID: fake.DefaultClusterID, Label: "node-7003"}
+			linodeEnv.LinodeAPI.Instances.Store(instanceID1, inst1)
+			linodeEnv.LinodeAPI.Instances.Store(instanceID2, inst2)
+
+			nodeClaim := coretest.NodeClaim(karpv1.NodeClaim{
+				Spec: karpv1.NodeClaimSpec{
+					NodeClassRef: &karpv1.NodeClassReference{
+						Group: object.GVK(nodeClass).Group,
+						Kind:  object.GVK(nodeClass).Kind,
+						Name:  nodeClass.Name,
+					},
+				},
+				Status: karpv1.NodeClaimStatus{
+					ProviderID: fake.ProviderID(instanceID2),
+				},
+			})
+			ExpectApplied(ctx, env.Client, nodeClaim)
+
+			ExpectSingletonReconciled(ctx, enterpriseGCController)
+
+			_, err := enterpriseCloudProvider.Get(ctx, providerID1)
+			Expect(err).To(HaveOccurred())
+			Expect(karpcloudprovider.IsNodeClaimNotFoundError(err)).To(BeTrue())
+			Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Calls()).To(Equal(1))
+			Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Calls()).To(Equal(0))
+		})
+
+		It("should not delete LKE nodes if they have NodeClaim owners", func() {
+			poolID := 603
+			instanceID := 7004
+			providerID := fake.ProviderID(instanceID)
+			poolTags := []string{
+				fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+				fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+			}
+			pool := &linodego.LKENodePool{
+				ID:      poolID,
+				Type:    "g6-standard-2",
+				Tags:    poolTags,
+				Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID, ID: "node-7004"}},
+			}
+			linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+
+			now := time.Now().Add(-time.Minute)
+			instTags := append(poolTags,
+				fmt.Sprintf("%s=%d", v1.LKENodePoolTagKey, poolID),
+				fmt.Sprintf("lke%d", fake.DefaultClusterID),
+			)
+			inst := linodego.Instance{ID: instanceID, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags, LKEClusterID: fake.DefaultClusterID, Label: "node-7004"}
+			linodeEnv.LinodeAPI.Instances.Store(instanceID, inst)
+
+			nodeClaim := coretest.NodeClaim(karpv1.NodeClaim{
+				Spec: karpv1.NodeClaimSpec{
+					NodeClassRef: &karpv1.NodeClassReference{
+						Group: object.GVK(nodeClass).Group,
+						Kind:  object.GVK(nodeClass).Kind,
+						Name:  nodeClass.Name,
+					},
+				},
+				Status: karpv1.NodeClaimStatus{
+					ProviderID: providerID,
+				},
+			})
+			ExpectApplied(ctx, env.Client, nodeClaim)
+
+			ExpectSingletonReconciled(ctx, enterpriseGCController)
+
+			_, err := enterpriseCloudProvider.Get(ctx, providerID)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Calls()).To(Equal(0))
+			Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Calls()).To(Equal(0))
+		})
+
+		It("should not delete LKE nodes within the resolution window", func() {
+			poolID := 604
+			instanceID := 7005
+			providerID := fake.ProviderID(instanceID)
+			poolTags := []string{
+				fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+				fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+			}
+			pool := &linodego.LKENodePool{
+				ID:      poolID,
+				Type:    "g6-standard-2",
+				Tags:    poolTags,
+				Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID, ID: "node-7005"}},
+			}
+			linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+
+			now := time.Now()
+			instTags := append(poolTags,
+				fmt.Sprintf("%s=%d", v1.LKENodePoolTagKey, poolID),
+				fmt.Sprintf("lke%d", fake.DefaultClusterID),
+			)
+			inst := linodego.Instance{ID: instanceID, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags, LKEClusterID: fake.DefaultClusterID, Label: "node-7005"}
+			linodeEnv.LinodeAPI.Instances.Store(instanceID, inst)
+
+			ExpectSingletonReconciled(ctx, enterpriseGCController)
+
+			_, err := enterpriseCloudProvider.Get(ctx, providerID)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Calls()).To(Equal(0))
+			Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Calls()).To(Equal(0))
+		})
 	})
 })

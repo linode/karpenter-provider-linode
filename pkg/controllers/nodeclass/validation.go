@@ -25,7 +25,6 @@ import (
 	"github.com/samber/lo"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 
@@ -97,9 +96,9 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 		return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
 	}
 
-	nodeClaim := &karpv1.NodeClaim{
-		Spec: karpv1.NodeClaimSpec{
-			NodeClassRef: &karpv1.NodeClassReference{
+	nodeClaim := &v1.NodeClaim{
+		Spec: v1.NodeClaimSpec{
+			NodeClassRef: &v1.NodeClassReference{
 				Name: nodeClass.Name,
 			},
 		},
