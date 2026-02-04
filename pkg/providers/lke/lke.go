@@ -40,11 +40,14 @@ import (
 )
 
 const (
-	DefaultCreateDeadline         = 20 * time.Second
-	DefaultTagVerificationTimeout = 5 * time.Second
+	DefaultCreateDeadline         = 10 * time.Second
+	DefaultTagVerificationTimeout = 4 * time.Second
 )
 
 var ErrNodesProvisioning = errors.New("nodes provisioning")
+var ErrNoClaimableInstance = errors.New("no claimable instance")
+var ErrClaimFailed = errors.New("claim failed")
+var ErrPoolScaleFailed = errors.New("pool scale failed")
 
 type DefaultProvider struct {
 	clusterID            int
@@ -82,18 +85,60 @@ func NewDefaultProvider(
 }
 
 func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*instance.Instance, error) {
+	cheapestType, instanceType, err := p.resolveCreateInstanceType(ctx, instanceTypes, nodeClaim)
+	if err != nil {
+		return nil, err
+	}
+
+	existingInstance, err := p.lookupExistingInstance(ctx, nodeClaim)
+	if err != nil {
+		return nil, err
+	}
+	if existingInstance != nil {
+		return existingInstance, nil
+	}
+
+	poolKey := makePoolKey(nodeClaim.Labels[karpv1.NodePoolLabelKey], instanceType)
+	scaledOnce := false
+	createdPool := false
+	deadline := time.Now().Add(DefaultCreateDeadline)
+	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		inst, err := p.attemptCreate(ctx, nodeClass, nodeClaim, tags, cheapestType, instanceType, poolKey, &createdPool, &scaledOnce)
+		if err != nil {
+			if errors.Is(err, ErrNodesProvisioning) || errors.Is(err, ErrNoClaimableInstance) || errors.Is(err, ErrClaimFailed) || errors.Is(err, ErrPoolScaleFailed) {
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			return nil, err
+		}
+		return inst, nil
+	}
+
+	return nil, cloudprovider.NewCreateError(
+		fmt.Errorf("timed out waiting for claimable instance for nodeclaim %s", nodeClaim.Name),
+		"NodePoolProvisioning",
+		"Timed out waiting for LKE instance to become available",
+	)
+}
+
+func (p *DefaultProvider) resolveCreateInstanceType(ctx context.Context, instanceTypes []*cloudprovider.InstanceType, nodeClaim *karpv1.NodeClaim) (*cloudprovider.InstanceType, string, error) {
+	filteredInstanceTypes, err := utils.FilterInstanceTypes(ctx, instanceTypes, nodeClaim)
+	if err != nil {
+		return nil, "", err
+	}
+	cheapestType, err := utils.CheapestInstanceType(filteredInstanceTypes)
+	if err != nil {
+		return nil, "", err
+	}
+	return cheapestType, cheapestType.Name, nil
+}
+
+func (p *DefaultProvider) lookupExistingInstance(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*instance.Instance, error) {
 	logger := log.FromContext(ctx)
-
-	instanceTypes, err := utils.FilterInstanceTypes(ctx, instanceTypes, nodeClaim)
-	if err != nil {
-		return nil, err
-	}
-	cheapestType, err := utils.CheapestInstanceType(instanceTypes)
-	if err != nil {
-		return nil, err
-	}
-	instanceType := cheapestType.Name
-
 	nodeClaimTag := fmt.Sprintf("%s:%s", v1alpha1.NodeClaimTagKey, nodeClaim.Name)
 	existingInstance, err := utils.LookupInstanceByTag(ctx, p.client, nodeClaimTag)
 	if err == nil && existingInstance != nil {
@@ -107,79 +152,56 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 			fmt.Sprintf("Failed to lookup existing instance for nodeclaim %s", nodeClaim.Name),
 		)
 	}
+	return nil, nil
+}
 
-	poolKey := makePoolKey(nodeClaim.Labels[karpv1.NodePoolLabelKey], instanceType)
-	scaledOnce := false
-	createdPool := false
-	deadline := time.Now().Add(DefaultCreateDeadline)
-	for time.Now().Before(deadline) {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-
-		p.poolMutex.Lock(poolKey)
-		pool, err := p.findOrCreatePool(ctx, nodeClass, nodeClaim, tags, instanceType, &createdPool)
+func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, cheapestType *cloudprovider.InstanceType, instanceType string, poolKey string, createdPool *bool, scaledOnce *bool) (*instance.Instance, error) {
+	logger := log.FromContext(ctx)
+	return p.withPoolLock(poolKey, func() (*instance.Instance, error) {
+		pool, err := p.findOrCreatePool(ctx, nodeClass, nodeClaim, tags, instanceType, createdPool)
 		if err != nil {
-			p.poolMutex.Unlock(poolKey)
 			utils.UpdateUnavailableOfferingsCache(ctx, err, p.region, cheapestType, p.unavailableOfferings)
 			return nil, cloudprovider.NewCreateError(err, "NodePoolCreationFailed", fmt.Sprintf("Failed to find or create LKE node pool: %s", err.Error()))
 		}
 
-		// TODO: remove the nodeID returned field
-		claimableInstance, _, err := p.findClaimableInstance(ctx, pool)
+		claimableInstance, err := p.findClaimableInstance(ctx, pool)
 		if err != nil {
-			p.poolMutex.Unlock(poolKey)
-			if errors.Is(err, ErrNodesProvisioning) {
-				time.Sleep(500 * time.Millisecond)
-				continue
+			if errors.Is(err, ErrNoClaimableInstance) {
+				claimableInstance = nil
+			} else {
+				return nil, err
 			}
-			return nil, err
 		}
 
 		if claimableInstance != nil {
 			claimedInstance, err := p.claimInstance(ctx, claimableInstance, nodeClaim, pool)
 			if err != nil {
 				logger.Error(err, "failed to claim instance", "instanceID", claimableInstance.ID)
-				p.poolMutex.Unlock(poolKey)
-				continue
+				return nil, fmt.Errorf("%w: %v", ErrClaimFailed, err)
 			}
-
-			inst := &instance.Instance{
-				ID:     claimedInstance.ID,
-				Region: p.region,
-				Type:   pool.Type,
-				Tags:   claimedInstance.Tags,
-			}
-			if claimedInstance.Created != nil {
-				inst.Created = claimedInstance.Created
-			}
+			inst := instance.NewLKEInstance(claimedInstance.ID, pool.Type, claimedInstance.Tags, p.region, claimedInstance.Created)
 			p.cacheNode(inst)
-			p.poolMutex.Unlock(poolKey)
 			return inst, nil
 		}
 
-		if createdPool || scaledOnce {
-			p.poolMutex.Unlock(poolKey)
-			time.Sleep(200 * time.Millisecond)
-			continue
+		if *createdPool || *scaledOnce {
+			return nil, ErrNoClaimableInstance
 		}
-		newCount := pool.Count + 1
-		_, err = p.client.UpdateLKENodePool(ctx, p.clusterID, pool.ID, linodego.LKENodePoolUpdateOptions{Count: newCount})
+
+		_, err = p.client.UpdateLKENodePool(ctx, p.clusterID, pool.ID, linodego.LKENodePoolUpdateOptions{Count: pool.Count + 1})
 		if err != nil {
 			logger.Error(err, "failed to scale pool", "poolID", pool.ID)
-			p.poolMutex.Unlock(poolKey)
-			continue
+			return nil, fmt.Errorf("%w: %v", ErrPoolScaleFailed, err)
 		}
-		scaledOnce = true
-		p.poolMutex.Unlock(poolKey)
-		time.Sleep(200 * time.Millisecond)
-	}
+		*scaledOnce = true
+		return nil, ErrNoClaimableInstance
+	})
+}
 
-	return nil, cloudprovider.NewCreateError(
-		fmt.Errorf("timed out waiting for claimable instance for nodeclaim %s", nodeClaim.Name),
-		"NodePoolProvisioning",
-		"Timed out waiting for LKE instance to become available",
-	)
+func (p *DefaultProvider) withPoolLock(key string, fn func() (*instance.Instance, error)) (*instance.Instance, error) {
+	p.poolMutex.Lock(key)
+	defer p.poolMutex.Unlock(key)
+	return fn()
 }
 
 func (p *DefaultProvider) findOrCreatePool(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceType string, createdPool *bool) (*linodego.LKENodePool, error) {
@@ -245,17 +267,17 @@ func (p *DefaultProvider) matchesPoolKey(pool *linodego.LKENodePool, instanceTyp
 	return tags[karpv1.NodePoolLabelKey] == nodePoolName
 }
 
-func (p *DefaultProvider) findClaimableInstance(ctx context.Context, pool *linodego.LKENodePool) (*linodego.Instance, string, error) {
+func (p *DefaultProvider) findClaimableInstance(ctx context.Context, pool *linodego.LKENodePool) (*linodego.Instance, error) {
 	if p.clusterTier == linodego.LKEVersionEnterprise {
 		return p.findClaimableInstanceEnterprise(ctx, pool)
 	}
 	return p.findClaimableInstanceStandard(ctx, pool)
 }
 
-func (p *DefaultProvider) findClaimableInstanceStandard(ctx context.Context, pool *linodego.LKENodePool) (*linodego.Instance, string, error) {
+func (p *DefaultProvider) findClaimableInstanceStandard(ctx context.Context, pool *linodego.LKENodePool) (*linodego.Instance, error) {
 	freshPool, err := p.client.GetLKENodePool(ctx, p.clusterID, pool.ID)
 	if err != nil {
-		return nil, "", fmt.Errorf("getting node pool %d: %w", pool.ID, err)
+		return nil, fmt.Errorf("getting node pool %d: %w", pool.ID, err)
 	}
 
 	nodesProvisioning := false
@@ -271,25 +293,25 @@ func (p *DefaultProvider) findClaimableInstanceStandard(ctx context.Context, poo
 			if linodego.IsNotFound(err) {
 				continue
 			}
-			return nil, "", fmt.Errorf("getting instance %d: %w", node.InstanceID, err)
+			return nil, fmt.Errorf("getting instance %d: %w", node.InstanceID, err)
 		}
 
 		// Check if instance is already claimed by a NodeClaim
 		// If not claimed, return it for claiming
 		tags := utils.TagListToMap(linodeInstance.Tags)
 		if _, exists := tags[v1alpha1.NodeClaimTagKey]; !exists {
-			return linodeInstance, node.ID, nil
+			return linodeInstance, nil
 		}
 	}
 
 	if nodesProvisioning {
-		return nil, "", ErrNodesProvisioning
+		return nil, ErrNodesProvisioning
 	}
 
-	return nil, "", nil
+	return nil, ErrNoClaimableInstance
 }
 
-func (p *DefaultProvider) findClaimableInstanceEnterprise(ctx context.Context, pool *linodego.LKENodePool) (*linodego.Instance, string, error) {
+func (p *DefaultProvider) findClaimableInstanceEnterprise(ctx context.Context, pool *linodego.LKENodePool) (*linodego.Instance, error) {
 	// Use Linode's automatic nodepool=<id> tag for enterprise discovery
 	filter := linodego.Filter{}
 	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("nodepool=%d", pool.ID))
@@ -297,12 +319,12 @@ func (p *DefaultProvider) findClaimableInstanceEnterprise(ctx context.Context, p
 	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%v:%v", v1alpha1.LabelLKEManaged, "true"))
 	filterJSON, err := filter.MarshalJSON()
 	if err != nil {
-		return nil, "", fmt.Errorf("building filter: %w", err)
+		return nil, fmt.Errorf("building filter: %w", err)
 	}
 
 	instances, err := p.client.ListInstances(ctx, linodego.NewListOptions(0, string(filterJSON)))
 	if err != nil {
-		return nil, "", fmt.Errorf("listing instances: %w", err)
+		return nil, fmt.Errorf("listing instances: %w", err)
 	}
 
 	for _, linodeInstance := range instances {
@@ -312,14 +334,11 @@ func (p *DefaultProvider) findClaimableInstanceEnterprise(ctx context.Context, p
 		// Check if instance is already claimed by a NodeClaim
 		tags := utils.TagListToMap(linodeInstance.Tags)
 		if _, exists := tags[v1alpha1.NodeClaimTagKey]; !exists {
-			// For Enterprise tier, instance Label IS the node ID.
-			// This is critical because pool.Linodes may not be populated for 30-60s.
-			nodeID := linodeInstance.Label
-			return &linodeInstance, nodeID, nil
+			return &linodeInstance, nil
 		}
 	}
 
-	return nil, "", nil
+	return nil, ErrNoClaimableInstance
 }
 
 func (p *DefaultProvider) claimInstance(ctx context.Context, linodeInstance *linodego.Instance, nodeClaim *karpv1.NodeClaim, pool *linodego.LKENodePool) (*linodego.Instance, error) {
@@ -352,14 +371,14 @@ func (p *DefaultProvider) verifyTagsApplied(ctx context.Context, instanceID int,
 
 		inst, err := p.client.GetInstance(ctx, instanceID)
 		if err != nil {
-			time.Sleep(1 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
 		if slices.Contains(inst.Tags, expectedTag) {
 			return inst, nil
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(2 * time.Second)
 	}
 
 	return nil, fmt.Errorf("timed out verifying tags on instance %d", instanceID)
