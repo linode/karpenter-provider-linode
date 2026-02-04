@@ -15,7 +15,6 @@ limitations under the License.
 package offering
 
 import (
-	"context"
 	"fmt"
 	"sync"
 
@@ -27,13 +26,12 @@ import (
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 )
 
 type Provider interface {
-	InjectOfferings(context.Context, []*cloudprovider.InstanceType, *v1.LinodeNodeClass, []string) []*cloudprovider.InstanceType
+	InjectOfferings([]*cloudprovider.InstanceType, map[string]linodego.LinodeType, []string) []*cloudprovider.InstanceType
 }
 
 type NodeClass interface {
@@ -59,16 +57,15 @@ func NewDefaultProvider(
 }
 
 func (p *DefaultProvider) InjectOfferings(
-	ctx context.Context,
 	instanceTypes []*cloudprovider.InstanceType,
-	nodeClass NodeClass,
+	instanceTypesInfo map[string]linodego.LinodeType,
 	allRegions sets.Set[string],
 ) []*cloudprovider.InstanceType {
 	var its []*cloudprovider.InstanceType
 	for _, it := range instanceTypes {
 		offerings := p.createOfferings(
-			ctx,
 			it,
+			instanceTypesInfo,
 			allRegions,
 		)
 		// NOTE: By making this copy one level deep, we can modify the offerings without mutating the results from previous
@@ -87,8 +84,8 @@ func (p *DefaultProvider) InjectOfferings(
 
 //nolint:gocyclo
 func (p *DefaultProvider) createOfferings(
-	ctx context.Context,
 	it *cloudprovider.InstanceType,
+	instanceTypesInfo map[string]linodego.LinodeType,
 	allRegions sets.Set[string],
 ) cloudprovider.Offerings {
 	var offerings []*cloudprovider.Offering
@@ -103,12 +100,9 @@ func (p *DefaultProvider) createOfferings(
 	} else {
 		var cachedOfferings []*cloudprovider.Offering
 		for region := range allRegions {
-			linodeType, err := p.getLinodeType(ctx, it.Name)
-			if err != nil {
-				continue
-			}
+			linodeType := instanceTypesInfo[it.Name]
 			var price float64
-			if linodeType != nil && linodeType.Price != nil {
+			if linodeType.Price != nil {
 				// I'm not sure why we have both hourly and monthly prices, but stick to hourly for now
 				price = float64(linodeType.Price.Hourly)
 			}
@@ -127,14 +121,6 @@ func (p *DefaultProvider) createOfferings(
 	}
 
 	return offerings
-}
-
-func (p *DefaultProvider) getLinodeType(ctx context.Context, instanceTypeID string) (*linodego.LinodeType, error) {
-	linodeType, err := p.client.GetType(ctx, instanceTypeID)
-	if err != nil {
-		return nil, fmt.Errorf("getting Linode type %s: %w", instanceTypeID, err)
-	}
-	return linodeType, nil
 }
 
 func (p *DefaultProvider) cacheKeyFromInstanceType(it *cloudprovider.InstanceType) string {

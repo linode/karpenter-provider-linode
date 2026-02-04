@@ -37,6 +37,10 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype/offering"
 )
 
+const (
+	maxPageSize = 500
+)
+
 type NodeClass interface {
 	client.Object
 	KubeletConfiguration() *v1.KubeletConfiguration
@@ -126,9 +130,8 @@ func (p *DefaultProvider) List(ctx context.Context, nodeClass NodeClass) ([]*clo
 	// date capacity information. Rather than incurring a cache miss each time an instance is launched into a reserved
 	// offering (or terminated), offerings are injected to the cached instance types on each call.
 	return p.offeringProvider.InjectOfferings(
-		ctx,
 		instanceTypes,
-		nodeClass,
+		p.instanceTypesInfo,
 		p.allRegions,
 	), nil
 }
@@ -203,7 +206,7 @@ func (p *DefaultProvider) UpdateInstanceTypes(ctx context.Context) error {
 	// There's no clean way to filter instance types by region client-side either
 	// since we'd need to assume if an instance type doesn't have a region price,
 	// then it's not available in that region.
-	instanceTypes, err := p.client.ListTypes(ctx, &linodego.ListOptions{})
+	instanceTypes, err := p.client.ListTypes(ctx, &linodego.ListOptions{PageSize: maxPageSize})
 	if err != nil {
 		return fmt.Errorf("listing linode instance types, %w", err)
 	}
@@ -230,7 +233,7 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 	defer p.muInstanceTypesOfferings.Unlock()
 
 	// NOTE: region filtering is not supported and will throw a 400 error if attempted
-	regionAvail, err := p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{})
+	regionAvail, err := p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{PageSize: maxPageSize})
 	if err != nil {
 		return fmt.Errorf("listing region availability %w", err)
 	}
