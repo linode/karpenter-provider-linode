@@ -4,6 +4,8 @@ apiVersion: "v4beta"
 # -- The Linode region where the cluster is deployed.
 # Optional in 'lke' mode (auto-discovered from LKE API), required in 'instance' mode.
 region: ""
+# Uncomment to enable debug logging for Linode API calls
+# linodeDebug: 1
 
 # -- Overrides the chart's name.
 nameOverride: ""

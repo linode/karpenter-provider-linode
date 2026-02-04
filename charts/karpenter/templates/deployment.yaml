@@ -128,6 +128,10 @@ spec:
             - name: KARPENTER_MODE
               value: "{{ . }}"
           {{- end }}
+          {{- with .Values.linodeDebug }}
+            - name: LINODE_DEBUG
+              value: "{{ . }}"
+          {{- end }}
           {{- with .Values.controller.env }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
