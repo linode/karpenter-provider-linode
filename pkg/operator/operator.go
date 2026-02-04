@@ -36,7 +36,6 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/lke"
-	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
 func init() {
@@ -74,14 +73,15 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClient 
 	switch opts.Mode {
 	case "lke":
 		log.FromContext(ctx).Info("initializing in LKE mode")
-		listFilter := utils.Filter{Label: opts.ClusterName}
-		filter, err := listFilter.String()
+		// Get cluster ID from the cluster name (label)
+		filter := linodego.Filter{}
+		filter.AddField(linodego.Eq, "label", opts.ClusterName)
+		filterJSON, err := filter.MarshalJSON()
 		if err != nil {
 			return nil, err
 		}
-		// Get cluster ID from the cluster name (label)
 		clusterList, err := linodeClient.ListLKEClusters(ctx, &linodego.ListOptions{
-			Filter: filter,
+			Filter: string(filterJSON),
 		})
 		if err != nil {
 			return nil, err

@@ -16,10 +16,8 @@ package utils
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"net/http"
 	"os"
 	"regexp"
@@ -136,11 +134,11 @@ func GetNodeClassHash(nodeClass *v1alpha1.LinodeNodeClass) string {
 func TagListToMap(tags []string) map[string]string {
 	tagMap := make(map[string]string, len(tags))
 	for _, tag := range tags {
-		parts := strings.Split(tag, ":")
-		if len(parts) != 2 {
+		key, value, ok := splitTag(tag)
+		if !ok {
 			continue
 		}
-		tagMap[parts[0]] = parts[1]
+		tagMap[key] = value
 	}
 	return tagMap
 }
@@ -169,54 +167,30 @@ func DedupeTags(tags []string) []string {
 	return uniqueTags
 }
 
-// Filter holds the fields used for filtering results from the Linode API.
-//
-// The fields within Filter are prioritized so that only the most-specific
-// field is present when Filter is marshaled to JSON.
-type Filter struct {
-	ID                *int              // Filter on the resource's ID (most specific).
-	Label             string            // Filter on the resource's label.
-	Tags              []string          // Filter resources by their tags (least specific).
-	AdditionalFilters map[string]string // Filter resources by additional parameters
+func splitTag(tag string) (string, string, bool) {
+	if key, value, ok := splitTagWithSeparator(tag, ':'); ok {
+		return key, value, true
+	}
+	return splitTagWithSeparator(tag, '=')
 }
 
-// MarshalJSON returns a JSON-encoded representation of a [Filter].
-// The resulting encoded value will have exactly 1 (one) field present.
-// See [Filter] for details on the value precedence.
-func (f Filter) MarshalJSON() ([]byte, error) {
-	filter := make(map[string]string, len(f.AdditionalFilters)+1)
-	switch {
-	case f.ID != nil:
-		filter["id"] = strconv.Itoa(*f.ID)
-	case f.Label != "":
-		filter["label"] = f.Label
-	case len(f.Tags) != 0:
-		filter["tags"] = strings.Join(f.Tags, ",")
+func splitTagWithSeparator(tag string, sep rune) (string, string, bool) {
+	index := strings.IndexRune(tag, sep)
+	if index <= 0 || index == len(tag)-1 {
+		return "", "", false
 	}
-
-	maps.Copy(filter, f.AdditionalFilters)
-	return json.Marshal(filter)
-}
-
-// String returns the string representation of the encoded value from
-// [Filter.MarshalJSON].
-func (f Filter) String() (string, error) {
-	p, err := f.MarshalJSON()
-	if err != nil {
-		return "", err
-	}
-
-	return string(p), nil
+	return tag[:index], tag[index+1:], true
 }
 
 // LookupInstanceByTag returns the single Linode instance matching the provided tag.
 func LookupInstanceByTag(ctx context.Context, client sdk.LinodeAPI, tag string) (*linodego.Instance, error) {
-	listFilter := Filter{Tags: []string{tag}}
-	filter, err := listFilter.String()
+	filter := linodego.Filter{}
+	filter.AddField(linodego.Contains, "tags", tag)
+	filterJSON, err := filter.MarshalJSON()
 	if err != nil {
 		return nil, err
 	}
-	instances, err := client.ListInstances(ctx, linodego.NewListOptions(1, filter))
+	instances, err := client.ListInstances(ctx, linodego.NewListOptions(1, string(filterJSON)))
 	if err != nil {
 		return nil, err
 	}
@@ -304,8 +278,9 @@ func UpdateUnavailableOfferingsCache(
 // it returns an empty string and an error.
 func GetTagValue(tags []string, key string) (string, error) {
 	for _, tag := range tags {
-		if strings.HasPrefix(tag, key+":") {
-			return strings.TrimPrefix(tag, key+":"), nil
+		tagKey, value, ok := splitTag(tag)
+		if ok && tagKey == key {
+			return value, nil
 		}
 	}
 	return "", fmt.Errorf("tag %s not found", key)

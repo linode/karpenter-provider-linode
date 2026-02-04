@@ -393,8 +393,8 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 		linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
 
 		now := time.Now().Add(-time.Minute)
-		instTags := append(poolTags, fmt.Sprintf("%s:%d", v1.PoolIDTagKey, poolID))
-		inst := linodego.Instance{ID: instanceID, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags}
+		instTags := poolTags
+		inst := linodego.Instance{ID: instanceID, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags, LKEClusterID: fake.DefaultClusterID}
 		linodeEnv.LinodeAPI.Instances.Store(instanceID, inst)
 
 		ExpectSingletonReconciled(ctx, lkeGCController)
@@ -426,9 +426,9 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 		linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
 
 		now := time.Now().Add(-time.Minute)
-		instTags := append(poolTags, fmt.Sprintf("%s:%d", v1.PoolIDTagKey, poolID))
-		inst1 := linodego.Instance{ID: instanceID1, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags}
-		inst2 := linodego.Instance{ID: instanceID2, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags}
+		instTags := poolTags
+		inst1 := linodego.Instance{ID: instanceID1, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags, LKEClusterID: fake.DefaultClusterID}
+		inst2 := linodego.Instance{ID: instanceID2, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags, LKEClusterID: fake.DefaultClusterID}
 		linodeEnv.LinodeAPI.Instances.Store(instanceID1, inst1)
 		linodeEnv.LinodeAPI.Instances.Store(instanceID2, inst2)
 
@@ -473,8 +473,8 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 		linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
 
 		now := time.Now().Add(-time.Minute)
-		instTags := append(poolTags, fmt.Sprintf("%s:%d", v1.PoolIDTagKey, poolID))
-		inst := linodego.Instance{ID: instanceID, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags}
+		instTags := poolTags
+		inst := linodego.Instance{ID: instanceID, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags, LKEClusterID: fake.DefaultClusterID}
 		linodeEnv.LinodeAPI.Instances.Store(instanceID, inst)
 
 		nodeClaim := coretest.NodeClaim(karpv1.NodeClaim{
@@ -516,8 +516,8 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 		linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
 
 		now := time.Now()
-		instTags := append(poolTags, fmt.Sprintf("%s:%d", v1.PoolIDTagKey, poolID))
-		inst := linodego.Instance{ID: instanceID, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags}
+		instTags := poolTags
+		inst := linodego.Instance{ID: instanceID, Type: "g6-standard-2", Region: fake.DefaultRegion, Created: &now, Tags: instTags, LKEClusterID: fake.DefaultClusterID}
 		linodeEnv.LinodeAPI.Instances.Store(instanceID, inst)
 
 		ExpectSingletonReconciled(ctx, lkeGCController)
