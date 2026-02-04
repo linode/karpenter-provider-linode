@@ -104,6 +104,11 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClient 
 			linodeClient,
 			unavailableOfferingsCache,
 			cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
+			lke.ProviderConfig{
+				CreateDeadline:         opts.LKECreateDeadline,
+				TagVerificationTimeout: opts.LKETagVerificationTimeout,
+				RetryDelay:             opts.LKERetryDelay,
+			},
 		)
 	case "instance":
 		log.FromContext(ctx).Info("initializing in direct instance mode")

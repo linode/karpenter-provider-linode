@@ -121,6 +121,7 @@ func NewEnvironment(ctx context.Context) *Environment {
 		linodeClient,
 		unavailableOfferingsCache,
 		nodePoolCache,
+		lke.ProviderConfig{},
 	)
 
 	return &Environment{

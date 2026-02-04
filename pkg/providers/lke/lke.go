@@ -42,6 +42,7 @@ import (
 const (
 	DefaultCreateDeadline         = 10 * time.Second
 	DefaultTagVerificationTimeout = 4 * time.Second
+	DefaultRetryDelay             = 2 * time.Second
 )
 
 var ErrNodesProvisioning = errors.New("nodes provisioning")
@@ -59,6 +60,13 @@ type DefaultProvider struct {
 	unavailableOfferings *linodecache.UnavailableOfferings
 	nodeCache            *cache.Cache
 	poolMutex            *utils.KeyedMutex
+	config               ProviderConfig
+}
+
+type ProviderConfig struct {
+	CreateDeadline         time.Duration
+	TagVerificationTimeout time.Duration
+	RetryDelay             time.Duration
 }
 
 func NewDefaultProvider(
@@ -70,7 +78,17 @@ func NewDefaultProvider(
 	client sdk.LinodeAPI,
 	unavailableOfferings *linodecache.UnavailableOfferings,
 	nodePoolCache *cache.Cache,
+	config ProviderConfig,
 ) *DefaultProvider {
+	if config.CreateDeadline == 0 {
+		config.CreateDeadline = DefaultCreateDeadline
+	}
+	if config.TagVerificationTimeout == 0 {
+		config.TagVerificationTimeout = DefaultTagVerificationTimeout
+	}
+	if config.RetryDelay == 0 {
+		config.RetryDelay = DefaultRetryDelay
+	}
 	return &DefaultProvider{
 		clusterID:            clusterID,
 		clusterTier:          clusterTier,
@@ -81,6 +99,7 @@ func NewDefaultProvider(
 		unavailableOfferings: unavailableOfferings,
 		nodeCache:            nodePoolCache,
 		poolMutex:            utils.NewKeyedMutex(),
+		config:               config,
 	}
 }
 
@@ -101,7 +120,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 	poolKey := makePoolKey(nodeClaim.Labels[karpv1.NodePoolLabelKey], instanceType)
 	scaledOnce := false
 	createdPool := false
-	deadline := time.Now().Add(DefaultCreateDeadline)
+	deadline := time.Now().Add(p.config.CreateDeadline)
 	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -109,8 +128,8 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 
 		inst, err := p.attemptCreate(ctx, nodeClass, nodeClaim, tags, cheapestType, instanceType, poolKey, &createdPool, &scaledOnce)
 		if err != nil {
-			if errors.Is(err, ErrNodesProvisioning) || errors.Is(err, ErrNoClaimableInstance) || errors.Is(err, ErrClaimFailed) || errors.Is(err, ErrPoolScaleFailed) {
-				time.Sleep(2 * time.Second)
+			if isRetryableCreateError(err) {
+				time.Sleep(p.config.RetryDelay)
 				continue
 			}
 			return nil, err
@@ -359,7 +378,7 @@ func (p *DefaultProvider) claimInstance(ctx context.Context, linodeInstance *lin
 }
 
 func (p *DefaultProvider) verifyTagsApplied(ctx context.Context, instanceID int, nodeClaimName string) (*linodego.Instance, error) {
-	deadline := time.Now().Add(DefaultTagVerificationTimeout)
+	deadline := time.Now().Add(p.config.TagVerificationTimeout)
 	expectedTag := fmt.Sprintf("%s:%s", v1alpha1.NodeClaimTagKey, nodeClaimName)
 
 	for time.Now().Before(deadline) {
@@ -371,14 +390,14 @@ func (p *DefaultProvider) verifyTagsApplied(ctx context.Context, instanceID int,
 
 		inst, err := p.client.GetInstance(ctx, instanceID)
 		if err != nil {
-			time.Sleep(2 * time.Second)
+			time.Sleep(p.config.RetryDelay)
 			continue
 		}
 
 		if slices.Contains(inst.Tags, expectedTag) {
 			return inst, nil
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(p.config.RetryDelay)
 	}
 
 	return nil, fmt.Errorf("timed out verifying tags on instance %d", instanceID)
@@ -501,6 +520,13 @@ func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
 	}
 	p.nodeCache.Delete(id)
 	return nil
+}
+
+func isRetryableCreateError(err error) bool {
+	return errors.Is(err, ErrNodesProvisioning) ||
+		errors.Is(err, ErrNoClaimableInstance) ||
+		errors.Is(err, ErrClaimFailed) ||
+		errors.Is(err, ErrPoolScaleFailed)
 }
 
 func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[string]string) error {

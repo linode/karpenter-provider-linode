@@ -545,6 +545,7 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 				linodeEnv.LinodeAPI,
 				linodeEnv.UnavailableOfferingsCache,
 				linodeEnv.NodePoolCache,
+				lke.ProviderConfig{},
 			)
 			enterpriseCloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, enterpriseProvider, recorder, env.Client)
 			enterpriseGCController = garbagecollection.NewController(env.Client, enterpriseCloudProvider)

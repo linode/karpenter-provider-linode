@@ -67,6 +67,7 @@ func newEnterpriseProvider(env *test.Environment, recorder events.Recorder) *lke
 		env.LinodeAPI,
 		env.UnavailableOfferingsCache,
 		env.NodePoolCache,
+		lke.ProviderConfig{},
 	)
 }
 
