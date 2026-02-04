@@ -46,6 +46,9 @@
       ],
       "get-lke-cluster-id": [
         "just get-lke-cluster-id"
+      ],
+      "build-karpl-image": [
+	"just build-karpl-image"
       ]
     }
   }
