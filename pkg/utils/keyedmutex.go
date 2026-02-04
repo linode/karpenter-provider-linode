@@ -17,10 +17,11 @@ package utils
 import "sync"
 
 // KeyedMutex provides per-key synchronization using sync.Map + sync.Mutex.
-// NOTE: Lock entries accumulate indefinitely in the sync.Map. This is acceptable
-// because pool keys are bounded by (NodePool count × InstanceType count), which
-// is typically < 20-40 entries. If this becomes an issue, we can consider
-// adding periodic cleanup.
+// DESIGN LIMITATION: Lock entries accumulate indefinitely in the sync.Map and
+// are never removed. This is currently acceptable because pool keys are bounded
+// by (NodePool count × InstanceType count), which is typically < 20–40 entries.
+// TODO: If the cardinality of keys grows beyond these assumptions, consider
+// adding a mechanism for periodic or usage-based cleanup of unused lock entries.
 type KeyedMutex struct {
 	mu    sync.Mutex
 	locks sync.Map

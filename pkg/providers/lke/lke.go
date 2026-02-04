@@ -282,10 +282,10 @@ func (p *DefaultProvider) findClaimableInstanceStandard(ctx context.Context, poo
 
 	nodesProvisioning := false
 	for _, node := range freshPool.Linodes {
+		// Don't return early - we need to check all nodes for claimable instances first
 		if node.InstanceID == 0 {
 			nodesProvisioning = true
 			continue
-			// Don't return early - we need to check all nodes for claimable instances first
 		}
 
 		linodeInstance, err := p.client.GetInstance(ctx, node.InstanceID)

@@ -304,6 +304,8 @@ type tagFilter struct {
 //   - {"tags":{"+contains":"substr"}} => contains match (an instance matches if any tag contains substr)
 //
 // If the filter is missing/unparseable or uses unsupported operators, it is treated as no tag filtering.
+// NOTE: This means tests that use other filter operators will silently pass without any filtering
+// being applied, which can lead to false positives. Only the shapes documented above are enforced.
 func extractTagsFromFilter(opts *linodego.ListOptions) []tagFilter {
 	if opts == nil || opts.Filter == "" {
 		return nil

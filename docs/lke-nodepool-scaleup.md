@@ -163,10 +163,10 @@ sequenceDiagram
   - timeouts waiting for claimable instance (bounded by `DefaultCreateDeadline`)
   - eventual consistency delays
   - retryable API errors (429/5xx)
-- **Invariant violations - TODO (design assumptions, not currently enforced as hard errors):**
+- **Invariant violations (design assumptions, not currently enforced as hard errors; each includes an explicit action item):**
   - >1 pool matches `(karpenterNodePoolName, instanceType)` — code returns first match
   - >1 instance matches `karpenter.sh/nodeclaim:<nodeClaimName>` — code returns first match
-  - any instance has multiple `karpenter.sh/nodeclaim:*` tags — not validated
+  - any instance has multiple `karpenter.sh/nodeclaim:*` tags — not validated; **Action:** add validation in the LKE provider to detect this case and surface it as a hard error (tracked in the team’s issue tracker as a follow-up task).
 
 ## API call volume and scalability concerns
 
