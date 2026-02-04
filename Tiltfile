@@ -26,8 +26,8 @@ k8s_resource('karpenter-crd', pod_readiness='ignore')
 # Install Karpenter itself once the CRDs are present for the controller manager to monitor
 local_resource(
     'karpenter',
-    cmd="helm upgrade --install --namespace kube-system --create-namespace karpenter charts/karpenter --set settings.clusterName=${CLUSTER_NAME} --set apiToken=${LINODE_TOKEN} --wait",
-    env={'LINODE_TOKEN': os.getenv("LINODE_TOKEN"), 'CLUSTER_NAME': os.getenv("CLUSTER_NAME")},
+    cmd="helm upgrade --install --namespace kube-system --create-namespace karpenter charts/karpenter --set settings.clusterName=${CLUSTER_NAME} --set apiToken=${LINODE_TOKEN} --set controller.image.repository=${KO_DOCKER_REPO} --set controller.image.tag=$(git rev-parse --abbrev-ref HEAD) --wait",
+    env={'LINODE_TOKEN': os.getenv("LINODE_TOKEN"), 'CLUSTER_NAME': os.getenv("CLUSTER_NAME"), 'KO_DOCKER_REPO': os.getenv("KO_DOCKER_REPO", "docker.io/linode/karpenter-provider-linode")},
     labels=["karpenter"],
     resource_deps=["karpenter-crd"],
 )

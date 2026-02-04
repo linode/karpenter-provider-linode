@@ -19,6 +19,12 @@ K8S_VERSION := if CLUSTER_TIER == "standard" {
     "v1.31.9+lke7"
 }
 
+## Inject the app version into operator.Version
+WITH_GOFLAGS := "GOFLAGS=\"-ldflags=-X=sigs.k8s.io/karpenter/pkg/operator.Version=$(git describe --tags --always | cut -d\"v\" -f2)\""
+
+KO_DOCKER_REPO := env("KO_DOCKER_REPO", "docker.io/linode/karpenter-provider-linode")
+KOCACHE := env("KOCACHE", "~/.ko")
+
 ONESHELL:
 
 # Create an LKE test cluster
@@ -51,8 +57,11 @@ destroy-lke-cluster cluster_id:
 	linode-cli lke cluster-delete '{{ cluster_id }}'
 	-rm {{ KUBECONFIG }}
 
+build-karpl-image:
+	{{ WITH_GOFLAGS }} KOCACHE={{ KOCACHE }} KO_DOCKER_REPO={{ KO_DOCKER_REPO }} ko build -t $(git rev-parse --abbrev-ref HEAD) --bare github.com/linode/karpenter-provider-linode/cmd/controller
+
 # Run tilt against the LKE cluster in kubeconfig
-run-tilt-lke:
+run-tilt-lke: build-karpl-image
 	KUBECONFIG={{ KUBECONFIG }} tilt {{ TILT_MODE }}
 
 # Run tilt down against the LKE cluster in kubeconfig

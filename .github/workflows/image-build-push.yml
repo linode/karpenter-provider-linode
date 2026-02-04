@@ -28,4 +28,4 @@ jobs:
         uses: jetify-com/devbox-install-action@v0.14.0
 
       - name: Build and push image
-        run: devbox run make image
+        run: devbox run build-karpl-image

@@ -113,12 +113,6 @@ verify: tidy download controller-gen ## Verify code. Includes dependencies, lint
 vulncheck: govulncheck ## Verify code vulnerabilities
 	@govulncheck ./pkg/...
 
-image: ## Build the Karpenter controller images using ko build
-	$(eval CONTROLLER_IMG=$(shell $(WITH_GOFLAGS) KOCACHE=$(KOCACHE) KO_DOCKER_REPO="$(KO_DOCKER_REPO)" ko build --bare github.com/linode/karpenter-provider-linode/cmd/controller))
-	$(eval IMG_REPOSITORY=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 1 | cut -d ":" -f 1))
-	$(eval IMG_TAG=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 1 | cut -d ":" -f 2 -s))
-	$(eval IMG_DIGEST=$(shell echo $(CONTROLLER_IMG) | cut -d "@" -f 2))
-
 release:
 	mkdir -p $(RELEASE_DIR)
 	sed -e 's/appVersion: "latest"/appVersion: "$(IMAGE_VERSION)"/g' ./chart/*/Chart.yaml
@@ -149,7 +143,7 @@ helm-uninstall: ## remove both charts from the existing cluster (requires k8s co
 	@helm uninstall karpenter -n karpenter
 	@helm uninstall karpenter-crd -n karpenter
 
-.PHONY: help presubmit ci-test ci-non-test run test deflake e2etests e2etests-deflake benchmark coverage verify vulncheck image apply install delete docgen codegen tidy download update-karpenter
+.PHONY: help presubmit ci-test ci-non-test run test deflake e2etests e2etests-deflake benchmark coverage verify vulncheck apply install delete docgen codegen tidy download update-karpenter
 
 ## --------------------------------------
 ## Build Dependencies
