@@ -96,9 +96,9 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 	if !nodeClass.GetDeletionTimestamp().IsZero() {
 		return c.finalize(ctx, nodeClass)
 	}
-	if !controllerutil.ContainsFinalizer(nodeClass, karpv1.TerminationFinalizer) {
+	if !controllerutil.ContainsFinalizer(nodeClass, v1alpha1.TerminationFinalizer) {
 		stored := nodeClass.DeepCopy()
-		controllerutil.AddFinalizer(nodeClass, karpv1.TerminationFinalizer)
+		controllerutil.AddFinalizer(nodeClass, v1alpha1.TerminationFinalizer)
 
 		// We use client.MergeFromWithOptimisticLock because patching a list with a JSON merge patch
 		// can cause races due to the fact that it fully replaces the list on a change
@@ -147,7 +147,7 @@ func (c *Controller) finalize(ctx context.Context, nodeClass *v1alpha1.LinodeNod
 		c.recorder.Publish(WaitingOnNodeClaimTerminationEvent(nodeClass, lo.Map(nodeClaims.Items, func(nc karpv1.NodeClaim, _ int) string { return nc.Name })))
 		return reconcile.Result{RequeueAfter: time.Minute * 10}, nil // periodically fire the event
 	}
-	controllerutil.RemoveFinalizer(nodeClass, karpv1.TerminationFinalizer)
+	controllerutil.RemoveFinalizer(nodeClass, v1alpha1.TerminationFinalizer)
 	if !equality.Semantic.DeepEqual(stored, nodeClass) {
 		// We use client.MergeFromWithOptimisticLock because patching a list with a JSON merge patch
 		// can cause races due to the fact that it fully replaces the list on a change
