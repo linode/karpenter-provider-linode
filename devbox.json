@@ -3,7 +3,6 @@
   "packages": [
     "just@1.43.1",
     "kubectl@latest",
-    "linode-cli@5.56.2",
     "kyverno-chainsaw@0.2.14",
     "kubernetes-helm@3.19.1",
     "tilt@0.36.0",

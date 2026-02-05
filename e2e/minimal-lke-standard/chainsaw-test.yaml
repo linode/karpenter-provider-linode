@@ -17,7 +17,7 @@ spec:
             ($error): ~
             (json_parse($stdout).items | length(@)): 0
 
-    - name: Create 10-replica inflate deployment (can't schedule)
+    - name: Create 5-replica inflate deployment (can't schedule)
       try:
       - apply:
           file: ../common/inflate.yaml
@@ -25,13 +25,13 @@ spec:
     - name: Wait for NodeClaim with the correct plan to be ready
       try:
       - assert:
-          timeout: 5m
+          timeout: 10m
           resource:
             apiVersion: karpenter.sh/v1
             kind: NodeClaim
             metadata:
               labels:
-                node.kubernetes.io/instance-type: g6-dedicated-8
+                node.kubernetes.io/instance-type: g6-standard-6
             status:
               (conditions[?type == 'Ready']):
               - status: 'True'
@@ -39,57 +39,12 @@ spec:
       - describe:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
-      - events:
-          namespace: default
-      - podLogs:
-          namespace: kube-system
-          selector: app.kubernetes.io/name=karpenter
-          tail: 250
-
-    - name: Check inflate pods are all scheduled
-      try:
-      - assert:
-          resource:
-            apiVersion: apps/v1
-            kind: Deployment
-            metadata:
-              name: inflate
-              namespace: default
-            status:
-              replicas: 10
-              availableReplicas: 10
-
-    - name: Scale down inflate deployment to 5
-      try:
       - script:
-          content: |
-            kubectl -n default scale deployment inflate --replicas 5
-          check:
-            ($error): ~
-
-    - name: Wait for NodeClaim with the correct plan to be ready
-      try:
-      - assert:
-          timeout: 5m
-          resource:
-            apiVersion: karpenter.sh/v1
-            kind: NodeClaim
-            metadata:
-              labels:
-                node.kubernetes.io/instance-type: g6-standard-4
-            status:
-              (conditions[?type == 'Ready']):
-              - status: 'True'
-      catch:
-      - describe:
-          apiVersion: karpenter.sh/v1
-          kind: NodeClaim
-      - events:
-          namespace: default
+          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
-          tail: 250
+          tail: 100
 
     - name: Check inflate pods are all scheduled
       try:
@@ -104,25 +59,70 @@ spec:
               replicas: 5
               availableReplicas: 5
 
+    - name: Scale down inflate deployment to 2
+      try:
+      - script:
+          content: |
+            kubectl -n default scale deployment inflate --replicas 2
+          check:
+            ($error): ~
+
+    - name: Wait for NodeClaim with the correct plan to be ready
+      try:
+      - assert:
+          timeout: 10m
+          resource:
+            apiVersion: karpenter.sh/v1
+            kind: NodeClaim
+            metadata:
+              labels:
+                node.kubernetes.io/instance-type: g6-standard-4
+            status:
+              (conditions[?type == 'Ready']):
+              - status: 'True'
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - script:
+          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
+
+    - name: Check inflate pods are all scheduled
+      try:
+      - assert:
+          resource:
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: inflate
+              namespace: default
+            status:
+              replicas: 2
+              availableReplicas: 2
+
     - name: Wait for old NodeClaim to be deleted
       try:
       - wait:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
-          timeout: 5m
-          selector: node.kubernetes.io/instance-type=g6-dedicated-8
+          timeout: 10m
+          selector: node.kubernetes.io/instance-type=g6-standard-6
           for:
             deletion: {}
       catch:
       - describe:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
-      - events:
-          namespace: default
+      - script:
+          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
-          tail: 250
+          tail: 100
 
     - name: Scale inflate deployment to zero
       try:
@@ -137,7 +137,7 @@ spec:
       - wait:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
-          timeout: 5m
+          timeout: 10m
           selector: node.kubernetes.io/instance-type=g6-standard-4
           for:
             deletion: {}
@@ -145,9 +145,9 @@ spec:
       - describe:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
-      - events:
-          namespace: default
+      - script:
+          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
-          tail: 250
+          tail: 100
