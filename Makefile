@@ -98,11 +98,11 @@ benchmark: envtest
 coverage:
 	go tool cover -html coverage.out -o coverage.html
 
-verify: tidy download controller-gen ## Verify code. Includes dependencies, linting, formatting, etc
+verify: tidy download controller-gen golangci-lint ## Verify code. Includes dependencies, linting, formatting, etc
 	go generate ./...
 	hack/boilerplate.sh
 	cp  $(KARPENTER_CORE_DIR)/pkg/apis/crds/* pkg/apis/crds
-	# cp pkg/apis/crds/* charts/karpenter-crd/templates
+	cp pkg/apis/crds/* charts/karpenter-crd/templates
 	$(foreach dir,$(MOD_DIRS),cd $(dir) && golangci-lint run $(newline))
 	@git diff --quiet ||\
 		{ echo "New file modification detected in the Git working tree. Please check in before commit."; git --no-pager diff --name-only | uniq | awk '{print "  - " $$0}'; \
@@ -183,6 +183,7 @@ $(CACHE_BIN):
 ENVTEST        ?= $(CACHE_BIN)/setup-envtest
 CONTROLLER_GEN ?= $(CACHE_BIN)/controller-gen
 GOVULNC        ?= $(LOCALBIN)/govulncheck
+GOLANGCI_LINT  ?= $(LOCALBIN)/golangci-lint
 
 ## Tool Versions
 # renovate: datasource=go depName=sigs.k8s.io/controller-runtime/tools/setup-envtest
@@ -194,8 +195,11 @@ CONTROLLER_TOOLS_VERSION ?= v0.19.0
 # renovate: datasource=go depName=golang.org/x/vuln
 GOVULNC_VERSION          ?= v1.1.4
 
+# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
+GOLANGCI_LINT_VERSION    ?= v2.8.0
+
 .PHONY: tools
-tools: $(CONTROLLER_GEN) $(ENVTEST) $(GOVULNC)
+tools: $(CONTROLLER_GEN) $(ENVTEST) $(GOVULNC) $(GOLANGCI_LINT)
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
@@ -211,6 +215,11 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 govulncheck: $(GOVULNC) ## Download govulncheck locally if necessary.
 $(GOVULNC): $(LOCALBIN)
 	GOBIN=$(LOCALBIN) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNC_VERSION)
+
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
+$(GOLANGCI_LINT): $(LOCALBIN)
+	GOBIN=$(LOCALBIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 define newline
 

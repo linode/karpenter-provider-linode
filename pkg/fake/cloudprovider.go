@@ -31,6 +31,7 @@ import (
 const (
 	DefaultRegion      = "us-east"
 	DefaultClusterID   = 12345
+	DefaultClusterName = "test-cluster"
 	DefaultClusterTier = linodego.LKEVersionStandard
 )
 

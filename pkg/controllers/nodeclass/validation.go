@@ -25,10 +25,10 @@ import (
 	"github.com/samber/lo"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
@@ -71,7 +71,7 @@ func NewValidationReconciler(
 }
 
 // nolint:gocyclo
-func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1.LinodeNodeClass) (reconcile.Result, error) {
+func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) (reconcile.Result, error) {
 	if _, ok := lo.Find(v.requiredConditions(), func(cond string) bool {
 		return nodeClass.StatusConditions().Get(cond).IsFalse()
 	}); ok {
@@ -96,9 +96,9 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1.LinodeNodeClas
 		return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
 	}
 
-	nodeClaim := &karpv1.NodeClaim{
-		Spec: karpv1.NodeClaimSpec{
-			NodeClassRef: &karpv1.NodeClassReference{
+	nodeClaim := &v1.NodeClaim{
+		Spec: v1.NodeClaimSpec{
+			NodeClassRef: &v1.NodeClassReference{
 				Name: nodeClass.Name,
 			},
 		},
@@ -150,7 +150,7 @@ func (*Validation) requiredConditions() []string {
 	return []string{}
 }
 
-func (*Validation) cacheKey(nodeClass *v1.LinodeNodeClass, tags map[string]string) string {
+func (*Validation) cacheKey(nodeClass *v1alpha1.LinodeNodeClass, tags map[string]string) string {
 	hash := lo.Must(hashstructure.Hash([]any{
 		nodeClass.Spec,
 		nodeClass.Annotations,
@@ -160,7 +160,7 @@ func (*Validation) cacheKey(nodeClass *v1.LinodeNodeClass, tags map[string]strin
 }
 
 // clearCacheEntries removes all cache entries associated with the given nodeclass from the validation cache
-func (v *Validation) clearCacheEntries(nodeClass *v1.LinodeNodeClass) {
+func (v *Validation) clearCacheEntries(nodeClass *v1alpha1.LinodeNodeClass) {
 	var toDelete []string
 	for key := range v.cache.Items() {
 		parts := strings.Split(key, ":")

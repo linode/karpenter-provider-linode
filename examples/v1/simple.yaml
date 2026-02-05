@@ -9,6 +9,8 @@ kind: NodePool
 metadata:
   name: default
 spec:
+  disruption:
+    consolidateAfter: 30s
   template:
     spec:
       requirements:

@@ -52,6 +52,15 @@ var _ = Describe("TagListToMap", func() {
 			"env":  "prod",
 		}))
 	})
+
+	It("should return a map for key=value tags", func() {
+		tagList := []string{"nodepool=123", "env=prod", "malformatedtag"}
+		tagMap := utils.TagListToMap(tagList)
+		Expect(tagMap).To(Equal(map[string]string{
+			"nodepool": "123",
+			"env":      "prod",
+		}))
+	})
 })
 
 var _ = Describe("DedupeStrings", func() {

@@ -21,22 +21,22 @@ import (
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 )
 
 const (
 	NodeClassDrift cloudprovider.DriftReason = "NodeClassDrift"
 )
 
-func (c *CloudProvider) isNodeClassDrifted(_ context.Context, nodeClaim *karpv1.NodeClaim, _ *karpv1.NodePool, nodeClass *v1.LinodeNodeClass) cloudprovider.DriftReason {
+func (c *CloudProvider) isNodeClassDrifted(_ context.Context, nodeClaim *karpv1.NodeClaim, _ *karpv1.NodePool, nodeClass *v1alpha1.LinodeNodeClass) cloudprovider.DriftReason {
 	return c.areStaticFieldsDrifted(nodeClaim, nodeClass)
 }
 
-func (c *CloudProvider) areStaticFieldsDrifted(nodeClaim *karpv1.NodeClaim, nodeClass *v1.LinodeNodeClass) cloudprovider.DriftReason {
-	nodeClassHash, foundNodeClassHash := nodeClass.Annotations[v1.AnnotationLinodeNodeClassHash]
-	nodeClassHashVersion, foundNodeClassHashVersion := nodeClass.Annotations[v1.AnnotationLinodeNodeClassHashVersion]
-	nodeClaimHash, foundNodeClaimHash := nodeClaim.Annotations[v1.AnnotationLinodeNodeClassHash]
-	nodeClaimHashVersion, foundNodeClaimHashVersion := nodeClaim.Annotations[v1.AnnotationLinodeNodeClassHashVersion]
+func (c *CloudProvider) areStaticFieldsDrifted(nodeClaim *karpv1.NodeClaim, nodeClass *v1alpha1.LinodeNodeClass) cloudprovider.DriftReason {
+	nodeClassHash, foundNodeClassHash := nodeClass.Annotations[v1alpha1.AnnotationLinodeNodeClassHash]
+	nodeClassHashVersion, foundNodeClassHashVersion := nodeClass.Annotations[v1alpha1.AnnotationLinodeNodeClassHashVersion]
+	nodeClaimHash, foundNodeClaimHash := nodeClaim.Annotations[v1alpha1.AnnotationLinodeNodeClassHash]
+	nodeClaimHashVersion, foundNodeClaimHashVersion := nodeClaim.Annotations[v1alpha1.AnnotationLinodeNodeClassHashVersion]
 
 	if !foundNodeClassHash || !foundNodeClaimHash || !foundNodeClassHashVersion || !foundNodeClaimHashVersion {
 		return ""
