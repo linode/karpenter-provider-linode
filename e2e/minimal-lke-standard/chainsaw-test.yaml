@@ -17,7 +17,7 @@ spec:
             ($error): ~
             (json_parse($stdout).items | length(@)): 0
 
-    - name: Create 10-replica inflate deployment (can't schedule)
+    - name: Create 5-replica inflate deployment (can't schedule)
       try:
       - apply:
           file: ../common/inflate.yaml
@@ -31,7 +31,7 @@ spec:
             kind: NodeClaim
             metadata:
               labels:
-                node.kubernetes.io/instance-type: g6-dedicated-8
+                node.kubernetes.io/instance-type: g6-standard-6
             status:
               (conditions[?type == 'Ready']):
               - status: 'True'
@@ -56,14 +56,14 @@ spec:
               name: inflate
               namespace: default
             status:
-              replicas: 10
-              availableReplicas: 10
+              replicas: 5
+              availableReplicas: 5
 
-    - name: Scale down inflate deployment to 5
+    - name: Scale down inflate deployment to 2
       try:
       - script:
           content: |
-            kubectl -n default scale deployment inflate --replicas 5
+            kubectl -n default scale deployment inflate --replicas 2
           check:
             ($error): ~
 
@@ -101,8 +101,8 @@ spec:
               name: inflate
               namespace: default
             status:
-              replicas: 5
-              availableReplicas: 5
+              replicas: 2
+              availableReplicas: 2
 
     - name: Wait for old NodeClaim to be deleted
       try:
@@ -110,7 +110,7 @@ spec:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
           timeout: 10m
-          selector: node.kubernetes.io/instance-type=g6-dedicated-8
+          selector: node.kubernetes.io/instance-type=g6-standard-6
           for:
             deletion: {}
       catch:
