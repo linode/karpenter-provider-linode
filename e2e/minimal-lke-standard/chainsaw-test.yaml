@@ -39,12 +39,12 @@ spec:
       - describe:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
-      - events:
-          namespace: default
+      - script:
+          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
-          tail: 250
+          tail: 100
 
     - name: Check inflate pods are all scheduled
       try:
@@ -84,12 +84,12 @@ spec:
       - describe:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
-      - events:
-          namespace: default
+      - script:
+          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
-          tail: 250
+          tail: 100
 
     - name: Check inflate pods are all scheduled
       try:
@@ -117,12 +117,12 @@ spec:
       - describe:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
-      - events:
-          namespace: default
+      - script:
+          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
-          tail: 250
+          tail: 100
 
     - name: Scale inflate deployment to zero
       try:
@@ -145,9 +145,9 @@ spec:
       - describe:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
-      - events:
-          namespace: default
+      - script:
+          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
-          tail: 250
+          tail: 100

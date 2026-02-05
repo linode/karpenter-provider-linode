@@ -34,6 +34,7 @@ import (
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype/offering"
 )
 
@@ -232,8 +233,16 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 	p.muInstanceTypesOfferings.Lock()
 	defer p.muInstanceTypesOfferings.Unlock()
 
-	// NOTE: region filtering is not supported and will throw a 400 error if attempted
-	regionAvail, err := p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{PageSize: maxPageSize})
+	filter := linodego.Filter{}
+	filter.AddField(linodego.Contains, "region", options.FromContext(ctx).ClusterRegion)
+	filterJSON, err := filter.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf("failed to marshal filter: %w", err)
+	}
+	regionAvail, err := p.client.ListRegionsAvailability(ctx, &linodego.ListOptions{
+		PageSize: maxPageSize,
+		Filter:   string(filterJSON),
+	})
 	if err != nil {
 		return fmt.Errorf("listing region availability %w", err)
 	}

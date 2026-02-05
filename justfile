@@ -3,15 +3,15 @@ CLUSTER_NAME := env('CLUSTER_NAME', "karpl-dev")
 KUBECONFIG := env('KUBECONFIG', CLUSTER_NAME + "-kubeconfig")
 LINODE_CLI_API_VERSION := env('LINODE_CLI_API_VERSION', "v4")
 LINODE_CLI_API_HOST := env('LINODE_CLI_API_HOST', "api.linode.com")
-LINODE_TYPE := env('LINODE_TYPE', 'g6-standard-2')
+LINODE_TYPE := env('LINODE_TYPE', 'g6-standard-1')
 TILT_MODE := env('TILT_MODE', 'ci')
 CHAINSAW_FLAGS := env('CHAINSAW_FLAGS', '--config .chainsaw.yaml')
 CLUSTER_ID := env("CLUSTER_ID", "")
 CLUSTER_TIER := env("CLUSTER_TIER", "standard")
 CLUSTER_FLAGS := if CLUSTER_TIER == "standard" {
-    ""
+    "${CLUSTER_FLAGS}"
 } else {
-    "--tier enterprise"
+    "${CLUSTER_FLAGS} --tier enterprise"
 }
 K8S_VERSION := if CLUSTER_TIER == "standard" {
     "1.34"
@@ -32,7 +32,7 @@ create-lke-cluster:
 	set -eu; \
 	existing_id=$(linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d'); \
 	if [ -n "$existing_id" ]; then echo "LKE cluster '{{ CLUSTER_NAME }}' already exists (id: $existing_id); skipping create"; exit 0; fi; \
-	linode-cli lke cluster-create --label '{{ CLUSTER_NAME }}' --region '{{ LINODE_REGION }}' --k8s_version {{ K8S_VERSION }} --node_pools.type {{ LINODE_TYPE }} --node_pools.count 3 {{ CLUSTER_FLAGS }} --no-defaults
+	linode-cli lke cluster-create --label '{{ CLUSTER_NAME }}' --region '{{ LINODE_REGION }}' --k8s_version {{ K8S_VERSION }} --node_pools.type {{ LINODE_TYPE }} --node_pools.count 2 {{ CLUSTER_FLAGS }} --no-defaults
 
 # Retrying logic to wait for LKE cluster kubeconfig to be ready
 wait-for-lke-cluster-readiness cluster_id:
