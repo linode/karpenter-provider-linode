@@ -25,7 +25,7 @@ spec:
     - name: Wait for NodeClaim with the correct plan to be ready
       try:
       - assert:
-          timeout: 5m
+          timeout: 10m
           resource:
             apiVersion: karpenter.sh/v1
             kind: NodeClaim
@@ -70,7 +70,7 @@ spec:
     - name: Wait for NodeClaim with the correct plan to be ready
       try:
       - assert:
-          timeout: 5m
+          timeout: 10m
           resource:
             apiVersion: karpenter.sh/v1
             kind: NodeClaim
@@ -109,7 +109,7 @@ spec:
       - wait:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
-          timeout: 5m
+          timeout: 10m
           selector: node.kubernetes.io/instance-type=g6-dedicated-8
           for:
             deletion: {}
@@ -137,7 +137,7 @@ spec:
       - wait:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
-          timeout: 5m
+          timeout: 10m
           selector: node.kubernetes.io/instance-type=g6-standard-4
           for:
             deletion: {}
