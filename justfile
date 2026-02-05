@@ -8,11 +8,7 @@ TILT_MODE := env('TILT_MODE', 'ci')
 CHAINSAW_FLAGS := env('CHAINSAW_FLAGS', '--config .chainsaw.yaml')
 CLUSTER_ID := env("CLUSTER_ID", "")
 CLUSTER_TIER := env("CLUSTER_TIER", "standard")
-CLUSTER_FLAGS := if CLUSTER_TIER == "standard" {
-    "${CLUSTER_FLAGS}"
-} else {
-    "${CLUSTER_FLAGS} --tier enterprise"
-}
+CLUSTER_FLAGS := env("CLUSTER_FLAGS", '--control_plane.acl.enable true --control_plane.acl.addresses.ipv4=$(curl --silent ipv4.icanhazip.com)')
 K8S_VERSION := if CLUSTER_TIER == "standard" {
     "1.34"
 } else {
@@ -32,7 +28,7 @@ create-lke-cluster:
 	set -eu; \
 	existing_id=$(linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d'); \
 	if [ -n "$existing_id" ]; then echo "LKE cluster '{{ CLUSTER_NAME }}' already exists (id: $existing_id); skipping create"; exit 0; fi; \
-	linode-cli lke cluster-create --label '{{ CLUSTER_NAME }}' --region '{{ LINODE_REGION }}' --k8s_version {{ K8S_VERSION }} --node_pools.type {{ LINODE_TYPE }} --node_pools.count 2 {{ CLUSTER_FLAGS }} --no-defaults
+	linode-cli lke cluster-create --label '{{ CLUSTER_NAME }}' --region '{{ LINODE_REGION }}' --k8s_version {{ K8S_VERSION }} --node_pools.type {{ LINODE_TYPE }} --node_pools.count 2 {{ CLUSTER_FLAGS }} --tier {{ CLUSTER_TIER }} --no-defaults
 
 # Retrying logic to wait for LKE cluster kubeconfig to be ready
 wait-for-lke-cluster-readiness cluster_id:
