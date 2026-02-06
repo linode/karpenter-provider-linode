@@ -5,5 +5,5 @@ metadata:
 spec:
   testFile: chainsaw-test.yaml
   skipDelete: false
-  failFast: false
+  failFast: true
   parallel: 2
