@@ -115,11 +115,13 @@ func NewEnvironment(ctx context.Context) *Environment {
 	lkeNodeProvider := lke.NewDefaultProvider(
 		fake.DefaultClusterID,
 		fake.DefaultClusterTier,
+		fake.DefaultClusterName,
 		fake.DefaultRegion,
 		eventRecorder,
 		linodeClient,
 		unavailableOfferingsCache,
 		nodePoolCache,
+		lke.ProviderConfig{},
 	)
 
 	return &Environment{

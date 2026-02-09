@@ -44,12 +44,20 @@ var _ = Describe("GetNodeClassHash", func() {
 })
 
 var _ = Describe("TagListToMap", func() {
-	It("should return a map for key:pair tags", func() {
-		tagList := []string{"name:test-uid-123-5", "env:prod", "malformatedtag"}
+	It("should return a map for key=value tags", func() {
+		tagList := []string{"name=test-uid-123-5", "env=prod", "malformatedtag"}
 		tagMap := utils.TagListToMap(tagList)
 		Expect(tagMap).To(Equal(map[string]string{
 			"name": "test-uid-123-5",
 			"env":  "prod",
+		}))
+	})
+
+	It("should skip colon-separated tags", func() {
+		tagList := []string{"name:test-uid-123-5", "env=prod", "malformatedtag"}
+		tagMap := utils.TagListToMap(tagList)
+		Expect(tagMap).To(Equal(map[string]string{
+			"env": "prod",
 		}))
 	})
 })

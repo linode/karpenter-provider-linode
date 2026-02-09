@@ -132,6 +132,18 @@ spec:
             - name: LINODE_DEBUG
               value: "{{ . }}"
           {{- end }}
+          {{- with .Values.settings.lkeCreateDeadline }}
+            - name: LKE_CREATE_DEADLINE
+              value: "{{ . }}"
+          {{- end }}
+          {{- with .Values.settings.lkeTagVerificationTimeout }}
+            - name: LKE_TAG_VERIFICATION_TIMEOUT
+              value: "{{ . }}"
+          {{- end }}
+          {{- with .Values.settings.lkeRetryDelay }}
+            - name: LKE_RETRY_DELAY
+              value: "{{ . }}"
+          {{- end }}
           {{- with .Values.controller.env }}
             {{- toYaml . | nindent 12 }}
           {{- end }}

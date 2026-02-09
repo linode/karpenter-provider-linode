@@ -93,7 +93,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	// Merge tags from NodeClaim and LinodeNodeClass
 	tagList := nodeClass.Spec.Tags
 	for k, v := range tags {
-		tagList = append(tagList, fmt.Sprintf("%s:%s", k, v))
+		tagList = append(tagList, fmt.Sprintf("%s=%s", k, v))
 	}
 
 	if nodeClass.Spec.Image == "" {
@@ -179,17 +179,13 @@ func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...Options) (
 }
 
 func (p *DefaultProvider) List(ctx context.Context) ([]*Instance, error) {
-	listFilter := utils.Filter{
-		Tags: []string{
-			karpv1.NodePoolLabelKey,
-			apis.Group + "/linodenodeclass",
-		},
-	}
-	filter, err := listFilter.String()
+	filter := linodego.Filter{}
+	filter.AddField(linodego.Contains, "tags", []string{karpv1.NodePoolLabelKey, apis.Group + "/linodenodeclass"})
+	filterJSON, err := filter.MarshalJSON()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal filter: %w", err)
 	}
-	linodeInstances, err := p.client.ListInstances(ctx, linodego.NewListOptions(0, filter))
+	linodeInstances, err := p.client.ListInstances(ctx, linodego.NewListOptions(0, string(filterJSON)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list linode instances, %w", err)
 	}
@@ -232,7 +228,7 @@ func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[st
 		time.Sleep(time.Second)
 		if _, err := p.client.CreateTag(ctx, linodego.TagCreateOptions{
 			Linodes: []int{intId},
-			Label:   fmt.Sprintf("%s:%s", k, v),
+			Label:   fmt.Sprintf("%s=%s", k, v),
 		}); err != nil {
 			if linodego.IsNotFound(err) {
 				return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("tagging instance, %w", err))

@@ -38,7 +38,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/utils/resources"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	cloudproviderevents "github.com/linode/karpenter-provider-linode/pkg/cloudprovider/events"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
@@ -117,8 +117,8 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	})
 	nc := c.instanceToNodeClaim(instance, instanceType, nodeClass)
 	nc.Annotations = lo.Assign(nc.Annotations, map[string]string{
-		v1.AnnotationLinodeNodeClassHash:        nodeClass.Hash(),
-		v1.AnnotationLinodeNodeClassHashVersion: v1.LinodeNodeClassHashVersion,
+		v1alpha1.AnnotationLinodeNodeClassHash:        nodeClass.Hash(),
+		v1alpha1.AnnotationLinodeNodeClassHashVersion: v1alpha1.LinodeNodeClassHashVersion,
 	})
 	return nc, nil
 }
@@ -254,7 +254,7 @@ func (c *CloudProvider) Name() string {
 }
 
 func (c *CloudProvider) GetSupportedNodeClasses() []status.Object {
-	return []status.Object{&v1.LinodeNodeClass{}}
+	return []status.Object{&v1alpha1.LinodeNodeClass{}}
 }
 
 func (c *CloudProvider) RepairPolicies() []cloudprovider.RepairPolicy {
@@ -300,11 +300,11 @@ func (c *CloudProvider) RepairPolicies() []cloudprovider.RepairPolicy {
 	}
 }
 
-func (c *CloudProvider) resolveNodeClassFromNodeClaim(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*v1.LinodeNodeClass, error) {
+func (c *CloudProvider) resolveNodeClassFromNodeClaim(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*v1alpha1.LinodeNodeClass, error) {
 	if nodeClaim.Spec.NodeClassRef == nil {
 		return nil, errors.NewNotFound(schema.GroupResource{Group: apis.Group, Resource: "linodenodeclasses"}, "")
 	}
-	nodeClass := &v1.LinodeNodeClass{}
+	nodeClass := &v1alpha1.LinodeNodeClass{}
 	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nodeClaim.Spec.NodeClassRef.Name}, nodeClass); err != nil {
 		return nil, err
 	}
@@ -317,8 +317,8 @@ func (c *CloudProvider) resolveNodeClassFromNodeClaim(ctx context.Context, nodeC
 	return nodeClass, nil
 }
 
-func (c *CloudProvider) resolveNodeClassFromNodePool(ctx context.Context, nodePool *karpv1.NodePool) (*v1.LinodeNodeClass, error) {
-	nodeClass := &v1.LinodeNodeClass{}
+func (c *CloudProvider) resolveNodeClassFromNodePool(ctx context.Context, nodePool *karpv1.NodePool) (*v1alpha1.LinodeNodeClass, error) {
+	nodeClass := &v1alpha1.LinodeNodeClass{}
 	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: nodePool.Spec.Template.Spec.NodeClassRef.Name}, nodeClass); err != nil {
 		return nil, err
 	}
@@ -330,13 +330,13 @@ func (c *CloudProvider) resolveNodeClassFromNodePool(ctx context.Context, nodePo
 	return nodeClass, nil
 }
 
-func (c *CloudProvider) resolveNodeClassFromInstance(ctx context.Context, instance *instance.Instance) (*v1.LinodeNodeClass, error) {
+func (c *CloudProvider) resolveNodeClassFromInstance(ctx context.Context, instance *instance.Instance) (*v1alpha1.LinodeNodeClass, error) {
 	tags := utils.TagListToMap(instance.Tags)
-	name, ok := tags[v1.LabelNodeClass]
+	name, ok := tags[v1alpha1.LabelNodeClass]
 	if !ok {
 		return nil, errors.NewNotFound(schema.GroupResource{Group: apis.Group, Resource: "linodenodeclasses"}, "")
 	}
-	nc := &v1.LinodeNodeClass{}
+	nc := &v1alpha1.LinodeNodeClass{}
 	if err := c.kubeClient.Get(ctx, types.NamespacedName{Name: name}, nc); err != nil {
 		return nil, fmt.Errorf("resolving linodenodeclass, %w", err)
 	}
@@ -348,7 +348,7 @@ func (c *CloudProvider) resolveNodeClassFromInstance(ctx context.Context, instan
 	return nc, nil
 }
 
-func (c *CloudProvider) instanceToNodeClaim(i *instance.Instance, instanceType *cloudprovider.InstanceType, _ *v1.LinodeNodeClass) *karpv1.NodeClaim {
+func (c *CloudProvider) instanceToNodeClaim(i *instance.Instance, instanceType *cloudprovider.InstanceType, _ *v1alpha1.LinodeNodeClass) *karpv1.NodeClaim {
 	nodeClaim := &karpv1.NodeClaim{}
 	labels := map[string]string{}
 	annotations := map[string]string{}

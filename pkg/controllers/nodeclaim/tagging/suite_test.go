@@ -84,9 +84,9 @@ var _ = Describe("TaggingController", func() {
 		linodeInstance = linodego.Instance{
 			Status: linodego.InstanceRunning,
 			Tags: []string{
-				fmt.Sprintf("kubernetes.io/cluster/%s:owned", options.FromContext(ctx).ClusterName),
-				karpv1.NodePoolLabelKey + ":" + "default",
-				v1.LKEClusterNameTagKey + ":" + options.FromContext(ctx).ClusterName,
+				fmt.Sprintf("kubernetes.io/cluster/%s=owned", options.FromContext(ctx).ClusterName),
+				karpv1.NodePoolLabelKey + "=" + "default",
+				v1.LKEClusterNameTagKey + "=" + options.FromContext(ctx).ClusterName,
 			},
 			Region: fake.DefaultRegion,
 			ID:     fake.InstanceID(),
@@ -107,7 +107,7 @@ var _ = Describe("TaggingController", func() {
 		ExpectObjectReconciled(ctx, env.Client, taggingController, nodeClaim)
 		Expect(nodeClaim.Annotations).To(Not(HaveKey(v1.AnnotationInstanceTagged)))
 		Expect(lo.ContainsBy(linodeInstance.Tags, func(tag string) bool {
-			parts := strings.Split(tag, ":")
+			parts := strings.Split(tag, "=")
 			return parts[0] == v1.NameTagKey
 		})).To(BeFalse())
 	})
@@ -155,7 +155,7 @@ var _ = Describe("TaggingController", func() {
 		ExpectObjectReconciled(ctx, env.Client, taggingController, nodeClaim)
 		Expect(nodeClaim.Annotations).To(Not(HaveKey(v1.AnnotationInstanceTagged)))
 		Expect(lo.ContainsBy(linodeInstance.Tags, func(tag string) bool {
-			parts := strings.Split(tag, ":")
+			parts := strings.Split(tag, "=")
 			return parts[0] == v1.NameTagKey
 		})).To(BeFalse())
 	})
@@ -171,7 +171,7 @@ var _ = Describe("TaggingController", func() {
 			})
 
 			for _, tag := range customTags {
-				linodeInstance.Tags = append(linodeInstance.Tags, tag+":custom-tag")
+				linodeInstance.Tags = append(linodeInstance.Tags, tag+"=custom-tag")
 			}
 			linodeEnv.LinodeAPI.Instances.Store(linodeInstance.ID, linodeInstance)
 
@@ -181,17 +181,17 @@ var _ = Describe("TaggingController", func() {
 			Expect(nodeClaim.Annotations).To(HaveKey(v1.AnnotationInstanceTagged))
 
 			expectedTags := []string{
-				v1.NameTagKey + ":" + nodeClaim.Status.NodeName,
-				v1.LKEClusterNameTagKey + ":" + options.FromContext(ctx).ClusterName,
+				v1.NameTagKey + "=" + nodeClaim.Status.NodeName,
+				v1.LKEClusterNameTagKey + "=" + options.FromContext(ctx).ClusterName,
 			}
 			linodeInstance := lo.Must(linodeEnv.LinodeAPI.Instances.Load(linodeInstance.ID)).(linodego.Instance)
 			linodeInstanceTags := instance.NewInstance(ctx, linodeInstance).Tags
 
 			for _, tag := range expectedTags {
-				parts := strings.Split(tag, ":")
+				parts := strings.Split(tag, "=")
 				if len(parts) == 2 && lo.Contains(customTags, parts[0]) {
 					parts[1] = "custom-tag"
-					tag = strings.Join(parts, ":")
+					tag = strings.Join(parts, "=")
 				}
 				Expect(linodeInstanceTags).To(ContainElement(tag))
 			}

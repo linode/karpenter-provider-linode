@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	"github.com/linode/karpenter-provider-linode/pkg/controllers/metrics"
 	nodeclaimgarbagecollection "github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclaim/garbagecollection"
 	nodeclaimtagging "github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclaim/tagging"
@@ -50,7 +50,7 @@ func NewControllers(
 	nodeProvider instance.Provider,
 	instanceTypeProvider *instancetype.DefaultProvider,
 ) []controller.Controller {
-	controllers := []controller.Controller{
+	return []controller.Controller{
 		nodeclass.NewController(
 			kubeClient,
 			cloudProvider,
@@ -65,8 +65,7 @@ func NewControllers(
 		nodeclaimtagging.NewController(kubeClient, cloudProvider, nodeProvider),
 		controllersinstancetype.NewController(instanceTypeProvider),
 		controllersinstancetypecapacity.NewController(kubeClient, cloudProvider, instanceTypeProvider),
-		status.NewController[*v1.LinodeNodeClass](kubeClient, mgr.GetEventRecorderFor("karpenter"), status.EmitDeprecatedMetrics),
+		status.NewController[*v1alpha1.LinodeNodeClass](kubeClient, mgr.GetEventRecorderFor("karpenter"), status.EmitDeprecatedMetrics),
 		metrics.NewController(kubeClient, cloudProvider),
 	}
-	return controllers
 }

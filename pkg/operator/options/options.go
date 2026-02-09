@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	"sigs.k8s.io/karpenter/pkg/utils/env"
@@ -34,12 +35,15 @@ func init() {
 type optionsKey struct{}
 
 type Options struct {
-	ClusterName             string
-	ClusterRegion           string
-	ClusterEndpoint         string
-	VMMemoryOverheadPercent float64
-	DisableDryRun           bool
-	Mode                    string
+	ClusterName               string
+	ClusterRegion             string
+	ClusterEndpoint           string
+	VMMemoryOverheadPercent   float64
+	DisableDryRun             bool
+	Mode                      string
+	LKECreateDeadline         time.Duration
+	LKETagVerificationTimeout time.Duration
+	LKERetryDelay             time.Duration
 }
 
 func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
@@ -49,6 +53,9 @@ func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
 	fs.Float64Var(&o.VMMemoryOverheadPercent, "vm-memory-overhead-percent", utils.WithDefaultFloat64("VM_MEMORY_OVERHEAD_PERCENT", 0.075), "The VM memory overhead as a percent that will be subtracted from the total memory for all instance types when cached information is unavailable.")
 	fs.BoolVarWithEnv(&o.DisableDryRun, "disable-dry-run", "DISABLE_DRY_RUN", false, "If true, then disable dry run validation for LinodeNodeClasses.")
 	fs.StringVar(&o.Mode, "mode", env.WithDefaultString("KARPENTER_MODE", "lke"), "Operating mode: 'lke' for LKE NodePool provisioning, 'instance' for direct Linode instances.")
+	fs.DurationVar(&o.LKECreateDeadline, "lke-create-deadline", env.WithDefaultDuration("LKE_CREATE_DEADLINE", 10*time.Second), "Maximum time to wait for an LKE node pool instance to become claimable.")
+	fs.DurationVar(&o.LKETagVerificationTimeout, "lke-tag-verification-timeout", env.WithDefaultDuration("LKE_TAG_VERIFICATION_TIMEOUT", 4*time.Second), "Maximum time to wait for LKE instance tags to be observed after claim.")
+	fs.DurationVar(&o.LKERetryDelay, "lke-retry-delay", env.WithDefaultDuration("LKE_RETRY_DELAY", 2*time.Second), "Delay between LKE create retries when claimable instances are not yet available.")
 }
 
 func (o *Options) Parse(fs *coreoptions.FlagSet, args ...string) error {

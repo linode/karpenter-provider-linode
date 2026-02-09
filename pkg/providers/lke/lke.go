@@ -16,94 +16,247 @@ package lke
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strconv"
+	"time"
 
 	"github.com/awslabs/operatorpkg/option"
 	"github.com/patrickmn/go-cache"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
 
 	"github.com/linode/linodego"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"k8s.io/utils/keymutex"
+
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
-// DefaultProvider implements Provider against LKE NodePool APIs.
+const (
+	DefaultCreateDeadline         = 10 * time.Second
+	DefaultTagVerificationTimeout = 4 * time.Second
+	DefaultRetryDelay             = 2 * time.Second
+)
+
+var ErrNodesProvisioning = errors.New("nodes provisioning")
+var ErrNoClaimableInstance = errors.New("no claimable instance")
+var ErrClaimFailed = errors.New("claim failed")
+var ErrPoolScaleFailed = errors.New("pool scale failed")
+
 type DefaultProvider struct {
 	clusterID            int
 	clusterTier          linodego.LKEVersionTier
+	clusterName          string
 	region               string
 	recorder             events.Recorder
 	client               sdk.LinodeAPI
 	unavailableOfferings *linodecache.UnavailableOfferings
-	nodeCache            *cache.Cache // instanceID -> *NodePoolInstance
+	nodeCache            *cache.Cache
+	poolMutex            keymutex.KeyMutex
+	config               ProviderConfig
+}
+
+type ProviderConfig struct {
+	CreateDeadline         time.Duration
+	TagVerificationTimeout time.Duration
+	RetryDelay             time.Duration
 }
 
 func NewDefaultProvider(
 	clusterID int,
 	clusterTier linodego.LKEVersionTier,
+	clusterName string,
 	region string,
 	recorder events.Recorder,
 	client sdk.LinodeAPI,
 	unavailableOfferings *linodecache.UnavailableOfferings,
 	nodePoolCache *cache.Cache,
+	config ProviderConfig,
 ) *DefaultProvider {
+	if config.CreateDeadline == 0 {
+		config.CreateDeadline = DefaultCreateDeadline
+	}
+	if config.TagVerificationTimeout == 0 {
+		config.TagVerificationTimeout = DefaultTagVerificationTimeout
+	}
+	if config.RetryDelay == 0 {
+		config.RetryDelay = DefaultRetryDelay
+	}
 	return &DefaultProvider{
 		clusterID:            clusterID,
 		clusterTier:          clusterTier,
+		clusterName:          clusterName,
 		region:               region,
 		recorder:             recorder,
 		client:               client,
 		unavailableOfferings: unavailableOfferings,
 		nodeCache:            nodePoolCache,
+		poolMutex:            keymutex.NewHashed(0),
+		config:               config,
 	}
 }
 
-// Create provisions a new LKE node pool with a single node and returns the first node as Instance.
-func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*instance.Instance, error) {
-	instanceTypes, err := utils.FilterInstanceTypes(ctx, instanceTypes, nodeClaim)
+func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*instance.Instance, error) {
+	cheapestType, instanceType, err := p.resolveCreateInstanceType(ctx, instanceTypes, nodeClaim)
 	if err != nil {
 		return nil, err
 	}
-	cheapestType, err := utils.CheapestInstanceType(instanceTypes)
-	if err != nil {
-		return nil, err
-	}
-	nodeType := cheapestType.Name
 
-	// Merge tags from NodeClass + NodeClaim tags map into the Linode tag format key:value.
-	tagList := append([]string{}, nodeClass.Spec.Tags...)
+	existingInstance, err := p.lookupExistingInstance(ctx, nodeClaim)
+	if err != nil {
+		return nil, err
+	}
+	if existingInstance != nil {
+		return existingInstance, nil
+	}
+
+	poolKey := makePoolKey(nodeClaim.Labels[karpv1.NodePoolLabelKey], instanceType)
+	scaledOnce := false
+	createdPool := false
+	deadline := time.Now().Add(p.config.CreateDeadline)
+	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		inst, err := p.attemptCreate(ctx, nodeClass, nodeClaim, tags, cheapestType, instanceType, poolKey, &createdPool, &scaledOnce)
+		if err != nil {
+			if isRetryableCreateError(err) || utils.IsRetryableError(err) {
+				time.Sleep(p.config.RetryDelay)
+				continue
+			}
+			return nil, err
+		}
+		return inst, nil
+	}
+
+	return nil, cloudprovider.NewCreateError(
+		fmt.Errorf("timed out waiting for claimable instance for nodeclaim %s", nodeClaim.Name),
+		"NodePoolProvisioning",
+		"Timed out waiting for LKE instance to become available",
+	)
+}
+
+func (p *DefaultProvider) resolveCreateInstanceType(ctx context.Context, instanceTypes []*cloudprovider.InstanceType, nodeClaim *karpv1.NodeClaim) (*cloudprovider.InstanceType, string, error) {
+	filteredInstanceTypes, err := utils.FilterInstanceTypes(ctx, instanceTypes, nodeClaim)
+	if err != nil {
+		return nil, "", err
+	}
+	cheapestType, err := utils.CheapestInstanceType(filteredInstanceTypes)
+	if err != nil {
+		return nil, "", err
+	}
+	return cheapestType, cheapestType.Name, nil
+}
+
+func (p *DefaultProvider) lookupExistingInstance(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*instance.Instance, error) {
+	logger := log.FromContext(ctx)
+	nodeClaimTag := fmt.Sprintf("%s=%s", v1alpha1.NodeClaimTagKey, nodeClaim.Name)
+	existingInstance, err := utils.LookupInstanceByTag(ctx, p.client, nodeClaimTag)
+	if err == nil && existingInstance != nil {
+		logger.V(1).Info("found existing instance for nodeclaim", "instanceID", existingInstance.ID, "nodeclaim", nodeClaim.Name)
+		return p.hydrateInstanceFromLinode(ctx, existingInstance)
+	}
+	if err != nil && !errors.Is(err, utils.ErrInstanceNotFound) {
+		return nil, cloudprovider.NewCreateError(
+			err,
+			"InstanceLookupFailed",
+			fmt.Sprintf("Failed to lookup existing instance for nodeclaim %s", nodeClaim.Name),
+		)
+	}
+	return nil, nil
+}
+
+func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, cheapestType *cloudprovider.InstanceType, instanceType string, poolKey string, createdPool *bool, scaledOnce *bool) (*instance.Instance, error) {
+	logger := log.FromContext(ctx)
+	return p.withPoolLock(ctx, poolKey, func() (*instance.Instance, error) {
+		pool, err := p.findOrCreatePool(ctx, nodeClass, nodeClaim, tags, instanceType, createdPool)
+		if err != nil {
+			utils.UpdateUnavailableOfferingsCache(ctx, err, p.region, cheapestType, p.unavailableOfferings)
+			return nil, cloudprovider.NewCreateError(err, "NodePoolCreationFailed", fmt.Sprintf("Failed to find or create LKE node pool: %s", err.Error()))
+		}
+
+		claimableInstance, err := p.findClaimableInstance(ctx, pool)
+		if err != nil {
+			if errors.Is(err, ErrNoClaimableInstance) {
+				claimableInstance = nil
+			} else {
+				return nil, err
+			}
+		}
+
+		if claimableInstance != nil {
+			claimedInstance, err := p.claimInstance(ctx, claimableInstance, nodeClaim, pool)
+			if err != nil {
+				logger.Error(err, "failed to claim instance", "instanceID", claimableInstance.ID)
+				return nil, fmt.Errorf("%w: %w", ErrClaimFailed, err)
+			}
+			inst := instance.NewLKEInstance(claimedInstance.ID, pool.Type, claimedInstance.Tags, p.region, claimedInstance.Created)
+			p.cacheNode(inst)
+			return inst, nil
+		}
+
+		if *createdPool || *scaledOnce {
+			return nil, ErrNoClaimableInstance
+		}
+
+		_, err = p.client.UpdateLKENodePool(ctx, p.clusterID, pool.ID, linodego.LKENodePoolUpdateOptions{Count: pool.Count + 1})
+		if err != nil {
+			logger.Error(err, "failed to scale pool", "poolID", pool.ID)
+			return nil, fmt.Errorf("%w: %w", ErrPoolScaleFailed, err)
+		}
+		*scaledOnce = true
+		return nil, ErrNoClaimableInstance
+	})
+}
+
+func (p *DefaultProvider) withPoolLock(ctx context.Context, key string, fn func() (*instance.Instance, error)) (*instance.Instance, error) {
+	p.poolMutex.LockKey(key)
+	defer func() {
+		if err := p.poolMutex.UnlockKey(key); err != nil {
+			log.FromContext(ctx).Error(err, "failed to unlock pool mutex", "key", key)
+		}
+	}()
+	return fn()
+}
+
+func (p *DefaultProvider) findOrCreatePool(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceType string, createdPool *bool) (*linodego.LKENodePool, error) {
+	// Step 1: Find existing pool
+	pools, err := p.client.ListLKENodePools(ctx, p.clusterID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("listing node pools: %w", err)
+	}
+	karpenterNodePoolName := nodeClaim.Labels[karpv1.NodePoolLabelKey]
+	for i := range pools {
+		pool := &pools[i]
+		if p.matchesPoolKey(pool, instanceType, karpenterNodePoolName) {
+			return pool, nil
+		}
+	}
+
+	// Step 2: Create new pool
+	poolTags := utils.GetTagsForLKE(nodeClass, nodeClaim, p.clusterName)
+	tagList := utils.MapToTagList(poolTags)
 	tagList = append(tagList, utils.MapToTagList(tags)...)
+	tagList = append(tagList, nodeClass.Spec.Tags...)
 	tagList = utils.DedupeTags(tagList)
 
-	// Check if a LKENodePool already exists for this nodeclaim
-	if pool, err := p.findLKENodePoolByNodeClaimTag(ctx, nodeClaim.Name); err != nil {
-		return nil, fmt.Errorf("finding existing node pool for nodeclaim %s, %w", nodeClaim.Name, err)
-	} else if pool != nil {
-		// Pool was found. We don't need to create a new one.
-		// We can not try to get instance info and hydrate nodeclaim.
-		// This adds idempotency to the Create operation so Karpenter nodeclaim controller
-		// doesn't end up with multiple nodepools for the same nodeclaim.
-		return p.instanceFromPool(ctx, pool, nodeClaim.Name)
-	}
-
-	// If no node pool was found, we need to create a new one.
-
-	// Merge both regular taints and startup taints
-	// TODO: we should introduce a new linode api field for startup taints
+	// Eventually we need to differentiate between taints and startup taints on LKE API
 	allTaints := append(nodeClaim.Spec.Taints, nodeClaim.Spec.StartupTaints...)
 	taints := convertToLkeTaints(allTaints)
 
 	createOpts := linodego.LKENodePoolCreateOptions{
-		Count:  1, // we only create one node per nodepool
-		Type:   nodeType,
+		Count:  1,
+		Type:   instanceType,
 		Tags:   tagList,
 		Labels: nodeClass.Spec.Labels,
 		Taints: taints,
@@ -119,120 +272,258 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	}
 
 	pool, err := p.client.CreateLKENodePool(ctx, p.clusterID, createOpts)
-	utils.UpdateUnavailableOfferingsCache(
-		ctx,
-		err,
-		p.region,
-		cheapestType,
-		p.unavailableOfferings,
-	)
 	if err != nil {
-		return nil, cloudprovider.NewCreateError(err, "NodePoolCreationFailed", fmt.Sprintf("Failed to create LKE node pool: %s", err.Error()))
+		return nil, fmt.Errorf("creating node pool: %w", err)
 	}
-	return p.instanceFromPool(ctx, pool, nodeClaim.Name)
+	if createdPool != nil {
+		*createdPool = true
+	}
+	return pool, nil
 }
 
-func (p *DefaultProvider) instanceFromPool(ctx context.Context, pool *linodego.LKENodePool, nodeClaimName string) (*instance.Instance, error) {
+func (p *DefaultProvider) matchesPoolKey(pool *linodego.LKENodePool, instanceType string, nodePoolName string) bool {
+	if pool.Type != instanceType {
+		return false
+	}
+	if !isKarpenterManagedPool(pool) {
+		return false
+	}
+	tags := utils.TagListToMap(pool.Tags)
+	return tags[karpv1.NodePoolLabelKey] == nodePoolName
+}
+
+func (p *DefaultProvider) findClaimableInstance(ctx context.Context, pool *linodego.LKENodePool) (*linodego.Instance, error) {
 	if p.clusterTier == linodego.LKEVersionEnterprise {
-		return p.instanceFromPoolEnterprise(ctx, pool, nodeClaimName)
+		return p.findClaimableInstanceEnterprise(ctx, pool)
 	}
-	return p.instanceFromPoolStandard(ctx, pool)
+	return p.findClaimableInstanceStandard(ctx, pool)
 }
 
-func (p *DefaultProvider) instanceFromPoolStandard(ctx context.Context, pool *linodego.LKENodePool) (*instance.Instance, error) {
-	// InstanceID is populated shortly after pool creation; return CreateError to requeue until ready.
+func (p *DefaultProvider) findClaimableInstanceStandard(ctx context.Context, pool *linodego.LKENodePool) (*linodego.Instance, error) {
 	freshPool, err := p.client.GetLKENodePool(ctx, p.clusterID, pool.ID)
 	if err != nil {
-		if utils.IsRetryableError(err) {
-			return nil, cloudprovider.NewCreateError(fmt.Errorf("waiting for instance ID on pool %d", pool.ID), "NodePoolProvisioning", "Waiting for LKE instance to be ready")
+		return nil, fmt.Errorf("getting node pool %d: %w", pool.ID, err)
+	}
+
+	nodesProvisioning := false
+	for _, node := range freshPool.Linodes {
+		// Don't return early - we need to check all nodes for claimable instances first
+		if node.InstanceID == 0 {
+			nodesProvisioning = true
+			continue
 		}
-		return nil, fmt.Errorf("getting node pool %d, %w", pool.ID, err)
+
+		linodeInstance, err := p.client.GetInstance(ctx, node.InstanceID)
+		if err != nil {
+			if linodego.IsNotFound(err) {
+				continue
+			}
+			return nil, fmt.Errorf("getting instance %d: %w", node.InstanceID, err)
+		}
+
+		// Check if instance is already claimed by a NodeClaim
+		// If not claimed, return it for claiming
+		tags := utils.TagListToMap(linodeInstance.Tags)
+		if _, exists := tags[v1alpha1.NodeClaimTagKey]; !exists {
+			return linodeInstance, nil
+		}
 	}
-	if len(freshPool.Linodes) == 0 || freshPool.Linodes[0].InstanceID == 0 {
-		return nil, cloudprovider.NewCreateError(fmt.Errorf("waiting for instance ID on pool %d", pool.ID), "NodePoolProvisioning", "Waiting for LKE instance to be ready")
+
+	if nodesProvisioning {
+		return nil, ErrNodesProvisioning
 	}
-	inst := instance.NewLKEInstance(freshPool, freshPool.Linodes[0], p.region)
-	p.cacheNode(inst)
-	return inst, nil
+
+	return nil, ErrNoClaimableInstance
 }
 
-func (p *DefaultProvider) instanceFromPoolEnterprise(ctx context.Context, pool *linodego.LKENodePool, nodeClaimName string) (*instance.Instance, error) {
-	nodeClaimTag := fmt.Sprintf("%s:%s", v1.NodeClaimTagKey, nodeClaimName)
-	linodeInstance, err := utils.LookupInstanceByTag(ctx, p.client, nodeClaimTag)
+func (p *DefaultProvider) findClaimableInstanceEnterprise(ctx context.Context, pool *linodego.LKENodePool) (*linodego.Instance, error) {
+	// Use Linode's automatic nodepool=<id> tag for enterprise discovery
+	filter := linodego.Filter{}
+	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("nodepool=%d", pool.ID))
+	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("lke%d", p.clusterID))
+	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%v=%v", v1alpha1.LabelLKEManaged, "true"))
+	filterJSON, err := filter.MarshalJSON()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("building filter: %w", err)
 	}
-	if linodeInstance == nil {
-		return nil, cloudprovider.NewCreateError(fmt.Errorf("waiting for instance tagged %q", nodeClaimTag), "NodePoolProvisioning", "Waiting for LKE instance to be tagged")
+
+	instances, err := p.client.ListInstances(ctx, linodego.NewListOptions(0, string(filterJSON)))
+	if err != nil {
+		return nil, fmt.Errorf("listing instances: %w", err)
 	}
-	inst := instance.NewLKEInstance(pool, linodego.LKENodePoolLinode{InstanceID: linodeInstance.ID}, p.region)
+
+	for _, linodeInstance := range instances {
+		if linodeInstance.Type != pool.Type {
+			continue
+		}
+		// Check if instance is already claimed by a NodeClaim
+		tags := utils.TagListToMap(linodeInstance.Tags)
+		if _, exists := tags[v1alpha1.NodeClaimTagKey]; !exists {
+			return &linodeInstance, nil
+		}
+	}
+
+	return nil, ErrNoClaimableInstance
+}
+
+func (p *DefaultProvider) claimInstance(ctx context.Context, linodeInstance *linodego.Instance, nodeClaim *karpv1.NodeClaim, pool *linodego.LKENodePool) (*linodego.Instance, error) {
+	instanceTags := utils.GetInstanceTagsForLKE(nodeClaim.Name)
+	newTags := append([]string{}, linodeInstance.Tags...)
+	newTags = append(newTags, pool.Tags...)
+	newTags = append(newTags, utils.MapToTagList(instanceTags)...)
+	newTags = utils.DedupeTags(newTags)
+
+	_, err := p.client.UpdateInstance(ctx, linodeInstance.ID, linodego.InstanceUpdateOptions{
+		Tags: &newTags,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("updating instance tags: %w", err)
+	}
+
+	return p.verifyTagsApplied(ctx, linodeInstance.ID, nodeClaim.Name)
+}
+
+func (p *DefaultProvider) verifyTagsApplied(ctx context.Context, instanceID int, nodeClaimName string) (*linodego.Instance, error) {
+	deadline := time.Now().Add(p.config.TagVerificationTimeout)
+	expectedTag := fmt.Sprintf("%s=%s", v1alpha1.NodeClaimTagKey, nodeClaimName)
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		inst, err := p.client.GetInstance(ctx, instanceID)
+		if err != nil {
+			if utils.IsRetryableError(err) || linodego.IsNotFound(err) {
+				time.Sleep(p.config.RetryDelay)
+				continue
+			}
+			return nil, fmt.Errorf("getting instance %d: %w", instanceID, err)
+		}
+
+		if slices.Contains(inst.Tags, expectedTag) {
+			return inst, nil
+		}
+		time.Sleep(p.config.RetryDelay)
+	}
+
+	return nil, fmt.Errorf("timed out verifying tags on instance %d", instanceID)
+}
+
+func (p *DefaultProvider) hydrateInstanceFromLinode(_ context.Context, linodeInstance *linodego.Instance) (*instance.Instance, error) {
+	linodeInstanceID := strconv.Itoa(linodeInstance.ID)
+	if cached, found := p.nodeCache.Get(linodeInstanceID); found {
+		return cached.(*instance.Instance), nil
+	}
+
+	inst := &instance.Instance{
+		ID:      linodeInstance.ID,
+		Created: linodeInstance.Created,
+		Region:  p.region,
+		Type:    linodeInstance.Type,
+		Tags:    linodeInstance.Tags,
+	}
 	p.cacheNode(inst)
 	return inst, nil
 }
 
 func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...instance.Options) (*instance.Instance, error) {
 	options := option.Resolve(opts...)
+	cacheKey := id
 	if !options.SkipCache {
-		if cached, found := p.nodeCache.Get(id); found {
+		if cached, found := p.nodeCache.Get(cacheKey); found {
 			return cached.(*instance.Instance), nil
 		}
 	}
-
-	poolID, err := p.lookupPoolByInstance(ctx, id)
+	instanceID, err := strconv.Atoi(id)
 	if err != nil {
-		return nil, err
+		return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("parsing instance ID: %w", err))
 	}
-	pool, err := p.client.GetLKENodePool(ctx, p.clusterID, poolID)
+	linodeInstance, err := p.client.GetInstance(ctx, instanceID)
 	if err != nil {
-		return nil, err
+		if linodego.IsNotFound(err) {
+			return nil, cloudprovider.NewNodeClaimNotFoundError(err)
+		}
+		return nil, fmt.Errorf("getting instance %d: %w", instanceID, err)
 	}
-	node, err := findNodeInPool(pool, id)
-	if err != nil {
-		return nil, err
+	inst := &instance.Instance{
+		ID:      linodeInstance.ID,
+		Created: linodeInstance.Created,
+		Region:  p.region,
+		Type:    linodeInstance.Type,
+		Tags:    linodeInstance.Tags,
 	}
-	inst := instance.NewLKEInstance(pool, *node, p.region)
 	p.cacheNode(inst)
 	return inst, nil
 }
 
 func (p *DefaultProvider) List(ctx context.Context) ([]*instance.Instance, error) {
-	pools, err := p.client.ListLKENodePools(ctx, p.clusterID, nil)
+	filter := linodego.Filter{}
+	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%s=%s", v1alpha1.LabelLKEManaged, "true"))
+	if p.clusterTier == linodego.LKEVersionEnterprise {
+		filter.AddField(linodego.Contains, "tags", fmt.Sprintf("lke%d", p.clusterID))
+	}
+	filterJSON, err := filter.MarshalJSON()
 	if err != nil {
 		return nil, err
 	}
-	var instances []*instance.Instance
-	for i := range pools {
-		pool := pools[i]
-		// checking if api filtering is not working but manually filtering here
-		if !isKarpenterManagedPool(&pool) {
+	instances, err := p.client.ListInstances(ctx, linodego.NewListOptions(0, string(filterJSON)))
+	if err != nil {
+		return nil, err
+	}
+	var result []*instance.Instance
+	for _, linodeInstance := range instances {
+		if p.clusterID != linodeInstance.LKEClusterID {
 			continue
 		}
-		for _, node := range pool.Linodes {
-			// Skip nodes that don't have an InstanceID yet (still provisioning)
-			if node.InstanceID == 0 {
-				continue
-			}
-			inst := instance.NewLKEInstance(&pool, node, p.region)
-			instances = append(instances, inst)
-			p.cacheNode(inst)
+		inst := &instance.Instance{
+			ID:      linodeInstance.ID,
+			Created: linodeInstance.Created,
+			Region:  p.region,
+			Type:    linodeInstance.Type,
+			Tags:    linodeInstance.Tags,
 		}
+		result = append(result, inst)
+		p.cacheNode(inst)
 	}
-	return instances, nil
+	return result, nil
 }
 
 func isKarpenterManagedPool(pool *linodego.LKENodePool) bool {
 	tags := utils.TagListToMap(pool.Tags)
 	_, hasNodePoolLabel := tags[karpv1.NodePoolLabelKey]
-	_, hasLKEManagedLabel := tags[v1.LabelLKEManaged]
+	_, hasLKEManagedLabel := tags[v1alpha1.LabelLKEManaged]
 	return hasNodePoolLabel && hasLKEManagedLabel
 }
 
 func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
-	poolID, err := p.lookupPoolByInstance(ctx, id)
+
+	lkePool, err := p.findLKENodePoolFromLinodeInstanceID(ctx, id)
 	if err != nil {
 		return cloudprovider.NewNodeClaimNotFoundError(err)
 	}
-	if err := p.client.DeleteLKENodePool(ctx, p.clusterID, poolID); err != nil {
+
+	if len(lkePool.Linodes) <= 1 {
+		if err := p.client.DeleteLKENodePool(ctx, p.clusterID, lkePool.ID); err != nil {
+			if linodego.IsNotFound(err) {
+				p.nodeCache.Delete(id)
+				return cloudprovider.NewNodeClaimNotFoundError(err)
+			}
+			return err
+		}
+		p.nodeCache.Delete(id)
+		return nil
+	}
+
+	poolNode, err := findNodeInPool(lkePool, id)
+	if err != nil {
+		p.nodeCache.Delete(id)
+		return cloudprovider.NewNodeClaimNotFoundError(err)
+	}
+
+	if err := p.client.DeleteLKENodePoolNode(ctx, p.clusterID, poolNode.ID); err != nil {
 		if linodego.IsNotFound(err) {
 			p.nodeCache.Delete(id)
 			return cloudprovider.NewNodeClaimNotFoundError(err)
@@ -243,17 +534,31 @@ func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+func isRetryableCreateError(err error) bool {
+	return errors.Is(err, ErrNodesProvisioning) ||
+		errors.Is(err, ErrNoClaimableInstance) ||
+		errors.Is(err, ErrClaimFailed) ||
+		errors.Is(err, ErrPoolScaleFailed)
+}
+
 func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[string]string) error {
-	poolID, err := p.lookupPoolByInstance(ctx, id)
+	instanceID, err := strconv.Atoi(id)
 	if err != nil {
-		return err
+		return fmt.Errorf("parsing instance ID: %w", err)
 	}
-	pool, err := p.client.GetLKENodePool(ctx, p.clusterID, poolID)
+
+	linodeInstance, err := p.client.GetInstance(ctx, instanceID)
 	if err != nil {
-		return err
+		return fmt.Errorf("getting instance %d: %w", instanceID, err)
 	}
-	merged := utils.DedupeTags(append([]string{}, append(pool.Tags, utils.MapToTagList(tags)...)...))
-	_, err = p.client.UpdateLKENodePool(ctx, p.clusterID, poolID, linodego.LKENodePoolUpdateOptions{Tags: &merged})
+
+	newTags := append([]string{}, linodeInstance.Tags...)
+	newTags = append(newTags, utils.MapToTagList(tags)...)
+	newTags = utils.DedupeTags(newTags)
+
+	_, err = p.client.UpdateInstance(ctx, instanceID, linodego.InstanceUpdateOptions{
+		Tags: &newTags,
+	})
 	return err
 }
 
@@ -274,71 +579,41 @@ func (p *DefaultProvider) cacheNode(n *instance.Instance) {
 	p.nodeCache.SetDefault(id, n)
 }
 
-func (p *DefaultProvider) lookupPoolByInstance(ctx context.Context, id string) (int, error) {
-	if cached, found := p.nodeCache.Get(id); found {
-		return cached.(*instance.Instance).PoolID, nil
-	}
+func (p *DefaultProvider) findLKENodePoolFromLinodeInstanceID(ctx context.Context, id string) (*linodego.LKENodePool, error) {
 	instanceID, err := strconv.Atoi(id)
 	if err != nil {
-		return 0, fmt.Errorf("parsing instance ID, %w", err)
+		return nil, fmt.Errorf("parsing instance ID: %w", err)
 	}
 	pools, err := p.client.ListLKENodePools(ctx, p.clusterID, nil)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	for _, pool := range pools {
-		// Only look in Karpenter-managed pools (API filtering may not work)
 		if !isKarpenterManagedPool(&pool) {
 			continue
 		}
 		for _, node := range pool.Linodes {
 			if node.InstanceID == instanceID {
-				return pool.ID, nil
+				return &pool, nil
 			}
 		}
 	}
-	return 0, fmt.Errorf("instance %d not found in any Karpenter-managed pool", instanceID)
+	return nil, fmt.Errorf("instance %d not found in any Karpenter-managed pool", instanceID)
 }
 
 func findNodeInPool(pool *linodego.LKENodePool, id string) (*linodego.LKENodePoolLinode, error) {
 	instanceID, err := strconv.Atoi(id)
 	if err != nil {
-		return nil, fmt.Errorf("parsing instance ID, %w", err)
+		return nil, fmt.Errorf("parsing instance ID: %w", err)
 	}
 	for _, node := range pool.Linodes {
 		if node.InstanceID == instanceID {
 			return &node, nil
 		}
 	}
-	return nil, fmt.Errorf("instance %d not found in pool %d", instanceID, pool.ID)
+	return nil, fmt.Errorf("instance %d not found in lke node pool %d", instanceID, pool.ID)
 }
 
-func (p *DefaultProvider) findLKENodePoolByNodeClaimTag(ctx context.Context, nodeClaimName string) (*linodego.LKENodePool, error) {
-	pools, err := p.client.ListLKENodePools(ctx, p.clusterID, nil)
-	if err != nil {
-		return nil, err
-	}
-	filtered := make([]linodego.LKENodePool, 0, 1)
-	for _, pool := range pools {
-		// Need to manually filter pools by nodeclaim tag since API serverside filtering is not working :)
-		if poolHasNodeClaimTag(&pool, nodeClaimName) {
-			filtered = append(filtered, pool)
-		}
-	}
-	// no node pools found, we can create a new nodepool for this nodeclaim
-	if len(filtered) == 0 {
-		return nil, nil
-	}
-	// multiple node pools found, we should fail. This should never happen.
-	if len(filtered) > 1 {
-		return nil, fmt.Errorf("found multiple node pools for nodeclaim %q. This should never happen", nodeClaimName)
-	}
-	return &filtered[0], nil
-}
-
-// poolHasNodeClaimTag checks if the pool has the node claim tag.
-// if a pool has the node claim tag, it means that the pool is managed by karpenter.
-func poolHasNodeClaimTag(pool *linodego.LKENodePool, nodeClaimName string) bool {
-	tags := utils.TagListToMap(pool.Tags)
-	return tags[v1.NodeClaimTagKey] == nodeClaimName
+func makePoolKey(karpenterNodePoolName, instanceType string) string {
+	return fmt.Sprintf("%s|%s", karpenterNodePoolName, instanceType)
 }
