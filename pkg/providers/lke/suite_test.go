@@ -546,6 +546,20 @@ var _ = Describe("LKENodeProvider", func() {
 				})
 
 				It("should surface instance get errors when scanning for claimable instances", func() {
+					// Use a short deadline and no retry delay because retryable API errors (503) are
+					// retried within the Create loop. A persistent error with the default 10s
+					// deadline would cause the test to block unnecessarily.
+					provider := lke.NewDefaultProvider(
+						fake.DefaultClusterID,
+						fake.DefaultClusterTier,
+						fake.DefaultClusterName,
+						fake.DefaultRegion,
+						linodeEnv.EventRecorder,
+						linodeEnv.LinodeAPI,
+						linodeEnv.UnavailableOfferingsCache,
+						linodeEnv.NodePoolCache,
+						lke.ProviderConfig{CreateDeadline: 25 * time.Millisecond, TagVerificationTimeout: 25 * time.Millisecond, RetryDelay: 0},
+					)
 					poolID := 999
 					instanceID := 9991
 					poolTags := []string{
@@ -555,28 +569,42 @@ var _ = Describe("LKENodeProvider", func() {
 					pool := &linodego.LKENodePool{ID: poolID, Type: "g6-standard-2", Tags: poolTags, Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID, ID: "node-9991"}}}
 					linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
 
-					linodeEnv.LinodeAPI.GetInstanceBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: "retry"})
+					linodeEnv.LinodeAPI.GetInstanceBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: "retry"}, fake.MaxCalls(0))
 
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
 					Expect(err).ToNot(HaveOccurred())
 
-					poolInstance, err := linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+					poolInstance, err := provider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 					Expect(err).To(HaveOccurred())
 					Expect(poolInstance).To(BeNil())
-					Expect(err.Error()).To(ContainSubstring("getting instance"))
+					Expect(err.Error()).To(ContainSubstring("timed out"))
 				})
 
 				It("should surface retryable create errors", func() {
-					linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: "retry"})
+					// Use a short deadline and no retry delay because retryable API errors (503) are
+					// retried within the Create loop. A persistent error with the default 10s
+					// deadline would cause the test to block unnecessarily.
+					provider := lke.NewDefaultProvider(
+						fake.DefaultClusterID,
+						fake.DefaultClusterTier,
+						fake.DefaultClusterName,
+						fake.DefaultRegion,
+						linodeEnv.EventRecorder,
+						linodeEnv.LinodeAPI,
+						linodeEnv.UnavailableOfferingsCache,
+						linodeEnv.NodePoolCache,
+						lke.ProviderConfig{CreateDeadline: 25 * time.Millisecond, TagVerificationTimeout: 25 * time.Millisecond, RetryDelay: 0},
+					)
+					linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: "retry"}, fake.MaxCalls(0))
 
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
 					Expect(err).ToNot(HaveOccurred())
 
-					poolInstance, err := linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+					poolInstance, err := provider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 					Expect(err).To(HaveOccurred())
 					Expect(poolInstance).To(BeNil())
 				})
@@ -1100,14 +1128,28 @@ var _ = Describe("LKENodeProvider", func() {
 
 			Context("Error paths", func() {
 				It("should surface retryable create errors", func() {
-					linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: "retry"})
+					// Use a short deadline and no retry delay because retryable API errors (503) are
+					// retried within the Create loop. A persistent error with the default 10s
+					// deadline would cause the test to block unnecessarily.
+					provider := lke.NewDefaultProvider(
+						fake.DefaultClusterID,
+						linodego.LKEVersionEnterprise,
+						fake.DefaultClusterName,
+						fake.DefaultRegion,
+						recorder,
+						linodeEnv.LinodeAPI,
+						linodeEnv.UnavailableOfferingsCache,
+						linodeEnv.NodePoolCache,
+						lke.ProviderConfig{CreateDeadline: 25 * time.Millisecond, TagVerificationTimeout: 25 * time.Millisecond, RetryDelay: 0},
+					)
+					linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: "retry"}, fake.MaxCalls(0))
 
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
 					Expect(err).ToNot(HaveOccurred())
 
-					poolInstance, err := enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+					poolInstance, err := provider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 					Expect(err).To(HaveOccurred())
 					Expect(poolInstance).To(BeNil())
 				})

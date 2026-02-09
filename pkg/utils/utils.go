@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"regexp"
@@ -201,18 +202,14 @@ func LookupInstanceByTag(ctx context.Context, client sdk.LinodeAPI, tag string) 
 }
 
 func IsRetryableError(err error) bool {
-	if linodego.ErrHasStatus(err, http.StatusTooManyRequests) {
-		return true
-	}
-	if linodego.ErrHasStatus(err,
+	return linodego.ErrHasStatus(
+		err,
+		http.StatusTooManyRequests,
+		http.StatusInternalServerError,
 		http.StatusBadGateway,
 		http.StatusGatewayTimeout,
-		http.StatusInternalServerError,
-		http.StatusServiceUnavailable) {
-		return true
-	}
-
-	return false
+		http.StatusServiceUnavailable,
+		linodego.ErrorFromError) || errors.Is(err, http.ErrHandlerTimeout) || errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, io.ErrUnexpectedEOF)
 }
 
 // FilterInstanceTypes applies common filters to available instance types.

@@ -128,7 +128,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 
 		inst, err := p.attemptCreate(ctx, nodeClass, nodeClaim, tags, cheapestType, instanceType, poolKey, &createdPool, &scaledOnce)
 		if err != nil {
-			if isRetryableCreateError(err) {
+			if isRetryableCreateError(err) || utils.IsRetryableError(err) {
 				time.Sleep(p.config.RetryDelay)
 				continue
 			}
@@ -390,8 +390,11 @@ func (p *DefaultProvider) verifyTagsApplied(ctx context.Context, instanceID int,
 
 		inst, err := p.client.GetInstance(ctx, instanceID)
 		if err != nil {
-			time.Sleep(p.config.RetryDelay)
-			continue
+			if utils.IsRetryableError(err) || linodego.IsNotFound(err) {
+				time.Sleep(p.config.RetryDelay)
+				continue
+			}
+			return nil, fmt.Errorf("getting instance %d: %w", instanceID, err)
 		}
 
 		if slices.Contains(inst.Tags, expectedTag) {
@@ -420,7 +423,7 @@ func (p *DefaultProvider) hydrateInstanceFromLinode(_ context.Context, linodeIns
 	return inst, nil
 }
 
-func (p *DefaultProvider) Get(_ context.Context, id string, opts ...instance.Options) (*instance.Instance, error) {
+func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...instance.Options) (*instance.Instance, error) {
 	options := option.Resolve(opts...)
 	cacheKey := id
 	if !options.SkipCache {
@@ -432,9 +435,12 @@ func (p *DefaultProvider) Get(_ context.Context, id string, opts ...instance.Opt
 	if err != nil {
 		return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("parsing instance ID: %w", err))
 	}
-	linodeInstance, err := p.client.GetInstance(context.Background(), instanceID)
+	linodeInstance, err := p.client.GetInstance(ctx, instanceID)
 	if err != nil {
-		return nil, cloudprovider.NewNodeClaimNotFoundError(err)
+		if linodego.IsNotFound(err) {
+			return nil, cloudprovider.NewNodeClaimNotFoundError(err)
+		}
+		return nil, fmt.Errorf("getting instance %d: %w", instanceID, err)
 	}
 	inst := &instance.Instance{
 		ID:      linodeInstance.ID,
