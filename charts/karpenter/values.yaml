@@ -161,11 +161,11 @@ logErrorOutputPaths:
 settings:
   # -- The maximum length of a batch window. The longer this is, the more pods we can consider for provisioning at one
   # time which usually results in fewer but larger nodes.
-  batchMaxDuration: 10s
+  batchMaxDuration: 5m # NOTE: this is not the default of 10 seconds because we don't yet support startup taints for LKE standard so we have to extend the window so karpenter doesn't make unnecessary duplicates from not knowing that a newly provisioned instance is still trying to join the cluster so the Pending Pods can schedule
   # -- The maximum amount of time with no new ending pods that if exceeded ends the current batching window. If pods arrive
   # faster than this time, the batching window will be extended up to the maxDuration. If they arrive slower, the pods
   # will be batched separately.
-  batchIdleDuration: 1s
+  batchIdleDuration: 1m # NOTE: see above, default should be 1 second if time to create and join a cluster wasn't so slow
   # -- Cluster CA bundle for TLS configuration of provisioned nodes. If not set, this is taken from the controller's TLS configuration for the API server.
   clusterCABundle: ""
   # -- Cluster name.
