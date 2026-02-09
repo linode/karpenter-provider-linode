@@ -16,6 +16,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install devbox
+        uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: 'true'
+          refresh-cli: 'false'
+
       - name: Create Release Artifacts
         run: devbox run make release
         env:
