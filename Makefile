@@ -115,9 +115,9 @@ vulncheck: govulncheck ## Verify code vulnerabilities
 
 release:
 	mkdir -p $(RELEASE_DIR)
-	sed -e 's/appVersion: "latest"/appVersion: "$(IMAGE_VERSION)"/g' ./chart/*/Chart.yaml
-	tar -czvf ./$(RELEASE_DIR)/karpenter-crd-$(IMAGE_VERSION).tgz -C ./chart/karpenter-crd .
-	tar -czvf ./$(RELEASE_DIR)/karpenter-$(IMAGE_VERSION).tgz -C ./chart/karpenter .
+	sed -e 's/appVersion: "latest"/appVersion: "$(IMAGE_VERSION)"/g' ./charts/*/Chart.yaml
+	tar -czvf ./$(RELEASE_DIR)/karpenter-crd-$(IMAGE_VERSION).tgz -C ./charts/karpenter-crd .
+	tar -czvf ./$(RELEASE_DIR)/karpenter-$(IMAGE_VERSION).tgz -C ./charts/karpenter .
 
 binary: ## Build the Karpenter controller binary using go build
 	go build $(GOFLAGS) -o $(BINARY_FILENAME) ./cmd/controller/...
