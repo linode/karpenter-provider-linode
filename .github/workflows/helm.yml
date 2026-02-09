@@ -3,7 +3,7 @@ name: Helm
 on:
   pull_request:
     paths:
-      - 'chart/**'
+      - 'charts/**'
   workflow_dispatch: {}
   release: {}
 
@@ -22,8 +22,8 @@ jobs:
       - name: Set Version
         run: |
           TAG=$(git describe --tags --abbrev=0)
-          sed -ie "s/appVersion: \"latest\"/appVersion: ${TAG#helm-}/g" chart/*/Chart.yaml
-          sed -ie "s/version: 0.0.0/version: ${TAG#helm-}/g" chart/*/Chart.yaml
+          sed -ie "s/appVersion: \"latest\"/appVersion: ${TAG#helm-}/g" charts/*/Chart.yaml
+          sed -ie "s/version: 0.0.0/version: ${TAG#helm-}/g" charts/*/Chart.yaml
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
@@ -61,8 +61,8 @@ jobs:
       - name: Set Version
         run: |
           TAG=$(git describe --tags --abbrev=0)
-          sed -ie "s/appVersion: \"latest\"/appVersion: ${TAG#helm-}/g" chart/*/Chart.yaml
-          sed -ie "s/version: 0.0.0/version: ${TAG#helm-}/g" chart/*/Chart.yaml
+          sed -ie "s/appVersion: \"latest\"/appVersion: ${TAG#helm-}/g" charts/*/Chart.yaml
+          sed -ie "s/version: 0.0.0/version: ${TAG#helm-}/g" charts/*/Chart.yaml
 
       - name: Configure Git
         run: |
@@ -78,6 +78,6 @@ jobs:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           CR_RELEASE_NAME_TEMPLATE: "helm-{{ .Version }}"
         with:
-          charts_dir: chart
+          charts_dir: charts
           skip_existing: true
           mark_as_latest: false
