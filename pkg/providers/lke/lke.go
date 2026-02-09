@@ -32,6 +32,8 @@ import (
 
 	"github.com/linode/linodego"
 
+	"k8s.io/utils/keymutex"
+
 	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
@@ -59,7 +61,7 @@ type DefaultProvider struct {
 	client               sdk.LinodeAPI
 	unavailableOfferings *linodecache.UnavailableOfferings
 	nodeCache            *cache.Cache
-	poolMutex            *utils.KeyedMutex
+	poolMutex            keymutex.KeyMutex
 	config               ProviderConfig
 }
 
@@ -98,7 +100,7 @@ func NewDefaultProvider(
 		client:               client,
 		unavailableOfferings: unavailableOfferings,
 		nodeCache:            nodePoolCache,
-		poolMutex:            utils.NewKeyedMutex(),
+		poolMutex:            keymutex.NewHashed(0),
 		config:               config,
 	}
 }
@@ -218,8 +220,8 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 }
 
 func (p *DefaultProvider) withPoolLock(key string, fn func() (*instance.Instance, error)) (*instance.Instance, error) {
-	p.poolMutex.Lock(key)
-	defer p.poolMutex.Unlock(key)
+	p.poolMutex.LockKey(key)
+	defer p.poolMutex.UnlockKey(key)
 	return fn()
 }
 
