@@ -178,7 +178,7 @@ func (p *DefaultProvider) lookupExistingInstance(ctx context.Context, nodeClaim 
 
 func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, cheapestType *cloudprovider.InstanceType, instanceType string, poolKey string, createdPool *bool, scaledOnce *bool) (*instance.Instance, error) {
 	logger := log.FromContext(ctx)
-	return p.withPoolLock(poolKey, func() (*instance.Instance, error) {
+	return p.withPoolLock(ctx, poolKey, func() (*instance.Instance, error) {
 		pool, err := p.findOrCreatePool(ctx, nodeClass, nodeClaim, tags, instanceType, createdPool)
 		if err != nil {
 			utils.UpdateUnavailableOfferingsCache(ctx, err, p.region, cheapestType, p.unavailableOfferings)
@@ -219,9 +219,13 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 	})
 }
 
-func (p *DefaultProvider) withPoolLock(key string, fn func() (*instance.Instance, error)) (*instance.Instance, error) {
+func (p *DefaultProvider) withPoolLock(ctx context.Context, key string, fn func() (*instance.Instance, error)) (*instance.Instance, error) {
 	p.poolMutex.LockKey(key)
-	defer p.poolMutex.UnlockKey(key)
+	defer func() {
+		if err := p.poolMutex.UnlockKey(key); err != nil {
+			log.FromContext(ctx).Error(err, "failed to unlock pool mutex", "key", key)
+		}
+	}()
 	return fn()
 }
 
