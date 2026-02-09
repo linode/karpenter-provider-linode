@@ -272,16 +272,3 @@ func UpdateUnavailableOfferingsCache(
 		log.FromContext(ctx).Error(err, "unexpected error during instance creation")
 	}
 }
-
-// GetTagValue searches through a slice of tags and returns the value for the first tag
-// that matches the key prefix format "key:value". If no matching tag is found,
-// it returns an empty string and an error.
-func GetTagValue(tags []string, key string) (string, error) {
-	for _, tag := range tags {
-		tagKey, value, ok := splitTag(tag)
-		if ok && tagKey == key {
-			return value, nil
-		}
-	}
-	return "", fmt.Errorf("tag %s not found", key)
-}
