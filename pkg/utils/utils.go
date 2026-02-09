@@ -147,7 +147,7 @@ func TagListToMap(tags []string) map[string]string {
 func MapToTagList(m map[string]string) []string {
 	out := make([]string, 0, len(m))
 	for k, v := range m {
-		out = append(out, fmt.Sprintf("%s:%s", k, v))
+		out = append(out, fmt.Sprintf("%s=%s", k, v))
 	}
 	return out
 }
@@ -169,14 +169,7 @@ func DedupeTags(tags []string) []string {
 }
 
 func splitTag(tag string) (string, string, bool) {
-	if key, value, ok := splitTagWithSeparator(tag, ':'); ok {
-		return key, value, true
-	}
-	return splitTagWithSeparator(tag, '=')
-}
-
-func splitTagWithSeparator(tag string, sep rune) (string, string, bool) {
-	index := strings.IndexRune(tag, sep)
+	index := strings.IndexRune(tag, '=')
 	if index <= 0 || index == len(tag)-1 {
 		return "", "", false
 	}

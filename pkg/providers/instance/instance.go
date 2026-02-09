@@ -93,7 +93,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 	// Merge tags from NodeClaim and LinodeNodeClass
 	tagList := nodeClass.Spec.Tags
 	for k, v := range tags {
-		tagList = append(tagList, fmt.Sprintf("%s:%s", k, v))
+		tagList = append(tagList, fmt.Sprintf("%s=%s", k, v))
 	}
 
 	if nodeClass.Spec.Image == "" {
@@ -228,7 +228,7 @@ func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[st
 		time.Sleep(time.Second)
 		if _, err := p.client.CreateTag(ctx, linodego.TagCreateOptions{
 			Linodes: []int{intId},
-			Label:   fmt.Sprintf("%s:%s", k, v),
+			Label:   fmt.Sprintf("%s=%s", k, v),
 		}); err != nil {
 			if linodego.IsNotFound(err) {
 				return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("tagging instance, %w", err))

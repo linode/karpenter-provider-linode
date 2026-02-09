@@ -382,8 +382,8 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 		instanceID := 6001
 		providerID := fake.ProviderID(instanceID)
 		poolTags := []string{
-			fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
-			fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+			fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+			fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
 		}
 		pool := &linodego.LKENodePool{
 			ID:      poolID,
@@ -412,8 +412,8 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 		instanceID2 := 6003
 		providerID1 := fake.ProviderID(instanceID1)
 		poolTags := []string{
-			fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
-			fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+			fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+			fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
 		}
 		pool := &linodego.LKENodePool{
 			ID:   poolID,
@@ -462,8 +462,8 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 		instanceID := 6004
 		providerID := fake.ProviderID(instanceID)
 		poolTags := []string{
-			fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
-			fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+			fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+			fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
 		}
 		pool := &linodego.LKENodePool{
 			ID:      poolID,
@@ -505,8 +505,8 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 		instanceID := 6005
 		providerID := fake.ProviderID(instanceID)
 		poolTags := []string{
-			fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
-			fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+			fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+			fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
 		}
 		pool := &linodego.LKENodePool{
 			ID:      poolID,
@@ -556,8 +556,8 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 			instanceID := 7001
 			providerID := fake.ProviderID(instanceID)
 			poolTags := []string{
-				fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
-				fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+				fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+				fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
 			}
 			pool := &linodego.LKENodePool{
 				ID:      poolID,
@@ -589,8 +589,8 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 			instanceID2 := 7003
 			providerID1 := fake.ProviderID(instanceID1)
 			poolTags := []string{
-				fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
-				fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+				fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+				fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
 			}
 			pool := &linodego.LKENodePool{
 				ID:   poolID,
@@ -641,8 +641,8 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 			instanceID := 7004
 			providerID := fake.ProviderID(instanceID)
 			poolTags := []string{
-				fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
-				fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+				fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+				fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
 			}
 			pool := &linodego.LKENodePool{
 				ID:      poolID,
@@ -687,8 +687,8 @@ var _ = Describe("GarbageCollection LKE Mode", func() {
 			instanceID := 7005
 			providerID := fake.ProviderID(instanceID)
 			poolTags := []string{
-				fmt.Sprintf("%s:%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
-				fmt.Sprintf("%s:%s", v1.LabelLKEManaged, "true"),
+				fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+				fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
 			}
 			pool := &linodego.LKENodePool{
 				ID:      poolID,

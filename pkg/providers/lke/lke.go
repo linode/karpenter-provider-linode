@@ -158,7 +158,7 @@ func (p *DefaultProvider) resolveCreateInstanceType(ctx context.Context, instanc
 
 func (p *DefaultProvider) lookupExistingInstance(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*instance.Instance, error) {
 	logger := log.FromContext(ctx)
-	nodeClaimTag := fmt.Sprintf("%s:%s", v1alpha1.NodeClaimTagKey, nodeClaim.Name)
+	nodeClaimTag := fmt.Sprintf("%s=%s", v1alpha1.NodeClaimTagKey, nodeClaim.Name)
 	existingInstance, err := utils.LookupInstanceByTag(ctx, p.client, nodeClaimTag)
 	if err == nil && existingInstance != nil {
 		logger.V(1).Info("found existing instance for nodeclaim", "instanceID", existingInstance.ID, "nodeclaim", nodeClaim.Name)
@@ -335,7 +335,7 @@ func (p *DefaultProvider) findClaimableInstanceEnterprise(ctx context.Context, p
 	filter := linodego.Filter{}
 	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("nodepool=%d", pool.ID))
 	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("lke%d", p.clusterID))
-	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%v:%v", v1alpha1.LabelLKEManaged, "true"))
+	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%v=%v", v1alpha1.LabelLKEManaged, "true"))
 	filterJSON, err := filter.MarshalJSON()
 	if err != nil {
 		return nil, fmt.Errorf("building filter: %w", err)
@@ -379,7 +379,7 @@ func (p *DefaultProvider) claimInstance(ctx context.Context, linodeInstance *lin
 
 func (p *DefaultProvider) verifyTagsApplied(ctx context.Context, instanceID int, nodeClaimName string) (*linodego.Instance, error) {
 	deadline := time.Now().Add(p.config.TagVerificationTimeout)
-	expectedTag := fmt.Sprintf("%s:%s", v1alpha1.NodeClaimTagKey, nodeClaimName)
+	expectedTag := fmt.Sprintf("%s=%s", v1alpha1.NodeClaimTagKey, nodeClaimName)
 
 	for time.Now().Before(deadline) {
 		select {
@@ -455,7 +455,7 @@ func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...instance.O
 
 func (p *DefaultProvider) List(ctx context.Context) ([]*instance.Instance, error) {
 	filter := linodego.Filter{}
-	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%s:%s", v1alpha1.LabelLKEManaged, "true"))
+	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%s=%s", v1alpha1.LabelLKEManaged, "true"))
 	if p.clusterTier == linodego.LKEVersionEnterprise {
 		filter.AddField(linodego.Contains, "tags", fmt.Sprintf("lke%d", p.clusterID))
 	}
