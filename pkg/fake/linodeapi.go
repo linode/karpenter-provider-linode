@@ -173,10 +173,10 @@ func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.Lino
 }
 
 func (l *LinodeClient) ListRegionsAvailability(_ context.Context, _ *linodego.ListOptions) ([]linodego.RegionAvailability, error) {
-	if !l.ListRegionsAvailabilityOutput.IsNil() {
-		return *l.ListRegionsAvailabilityOutput.Clone(), nil
+	if l.ListRegionsAvailabilityOutput.IsNil() {
+		return nil, nil
 	}
-	return MakeInstanceOfferings(defaultLinodeTypeList), nil
+	return *l.ListRegionsAvailabilityOutput.Clone(), nil
 }
 
 func (l *LinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.Instance, error) {
@@ -394,10 +394,10 @@ func (l *LinodeClient) CreateTag(_ context.Context, opts linodego.TagCreateOptio
 }
 
 func (l *LinodeClient) ListTypes(_ context.Context, _ *linodego.ListOptions) ([]linodego.LinodeType, error) {
-	if !l.ListTypesOutput.IsNil() {
-		return *l.ListTypesOutput.Clone(), nil
+	if l.ListTypesOutput.IsNil() {
+		return nil, nil
 	}
-	return MakeInstances(), nil
+	return *l.ListTypesOutput.Clone(), nil
 }
 
 func (l *LinodeClient) CreateLKENodePool(_ context.Context, clusterID int, opts linodego.LKENodePoolCreateOptions) (*linodego.LKENodePool, error) {

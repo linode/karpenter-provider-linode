@@ -120,6 +120,7 @@ var _ = BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{}))
 	ctx = options.ToContext(ctx, test.Options())
 	linodeEnv.Reset()
+	linodeEnv.SetDefaults()
 })
 
 var _ = Describe("LKENodeProvider", func() {

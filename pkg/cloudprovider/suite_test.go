@@ -94,6 +94,7 @@ var _ = BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
 	linodeEnv.Reset()
+	linodeEnv.SetDefaults()
 })
 
 var _ = AfterEach(func() {

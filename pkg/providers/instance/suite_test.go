@@ -29,11 +29,10 @@ import (
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 	testv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 
-	"github.com/linode/karpenter-provider-linode/pkg/fake"
-
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
+	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/test"
 
@@ -78,6 +77,7 @@ var _ = BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{}))
 	ctx = options.ToContext(ctx, test.Options())
 	linodeEnv.Reset()
+	linodeEnv.SetDefaults()
 })
 
 var _ = Describe("InstanceProvider", func() {
