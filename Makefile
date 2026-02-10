@@ -102,7 +102,7 @@ verify: tidy download controller-gen golangci-lint ## Verify code. Includes depe
 	go generate ./...
 	hack/boilerplate.sh
 	cp  $(KARPENTER_CORE_DIR)/pkg/apis/crds/* pkg/apis/crds
-	cp pkg/apis/crds/* charts/karpenter-crd/templates
+	cp pkg/apis/crds/* charts/karpenter_crd/templates
 	$(foreach dir,$(MOD_DIRS),cd $(dir) && golangci-lint run $(newline))
 	@git diff --quiet ||\
 		{ echo "New file modification detected in the Git working tree. Please check in before commit."; git --no-pager diff --name-only | uniq | awk '{print "  - " $$0}'; \
@@ -116,7 +116,7 @@ vulncheck: govulncheck ## Verify code vulnerabilities
 release:
 	mkdir -p $(RELEASE_DIR)
 	sed -e 's/appVersion: "latest"/appVersion: "$(IMAGE_VERSION)"/g' ./charts/*/Chart.yaml
-	tar -czvf ./$(RELEASE_DIR)/karpenter-crd-$(IMAGE_VERSION).tgz -C ./charts/karpenter-crd .
+	tar -czvf ./$(RELEASE_DIR)/karpenter_crd-$(IMAGE_VERSION).tgz -C ./charts/karpenter_crd .
 	tar -czvf ./$(RELEASE_DIR)/karpenter-$(IMAGE_VERSION).tgz -C ./charts/karpenter .
 
 binary: ## Build the Karpenter controller binary using go build
@@ -133,7 +133,7 @@ update-karpenter: ## Update kubernetes-sigs/karpenter to latest
 	go mod tidy
 
 helm-install: ## install karpenter onto an existing cluster (requires k8s context to be set)
-	@helm upgrade --install --namespace karpenter --create-namespace karpenter-crd charts/karpenter-crd
+	@helm upgrade --install --namespace karpenter --create-namespace karpenter_crd charts/karpenter_crd
 	@helm upgrade --install --namespace karpenter --create-namespace karpenter charts/karpenter \
 		--set controller.image.repository=$(KO_DOCKER_REPO) \
 		--set settings.clusterName=${CLUSTER_NAME} \
@@ -141,7 +141,7 @@ helm-install: ## install karpenter onto an existing cluster (requires k8s contex
 
 helm-uninstall: ## remove both charts from the existing cluster (requires k8s context to be set)
 	@helm uninstall karpenter -n karpenter
-	@helm uninstall karpenter-crd -n karpenter
+	@helm uninstall karpenter_crd -n karpenter
 
 .PHONY: help presubmit ci-test ci-non-test run test deflake e2etests e2etests-deflake benchmark coverage verify vulncheck apply install delete docgen codegen tidy download update-karpenter
 

@@ -12,16 +12,16 @@ if k8s_context().startswith("lke"):
 
 # Install CRDs for Karpenter to work
 helm_resource(
-    "karpenter-crd",
-    "./charts/karpenter-crd",
+    "karpenter_crd",
+    "./charts/karpenter_crd",
     namespace="kube-system",
     flags=[
         "--create-namespace",
         "--wait",
     ],
-    labels=["karpenter-crd"],
+    labels=["karpenter_crd"],
 )
-k8s_resource('karpenter-crd', pod_readiness='ignore')
+k8s_resource('karpenter_crd', pod_readiness='ignore')
 
 # Install Karpenter itself once the CRDs are present for the controller manager to monitor
 local_resource(
@@ -29,7 +29,7 @@ local_resource(
     cmd="helm upgrade --install --namespace kube-system --create-namespace karpenter charts/karpenter --set settings.clusterName=${CLUSTER_NAME} --set apiToken=${LINODE_TOKEN} --set controller.image.repository=${KO_DOCKER_REPO} --set controller.image.tag=$(git rev-parse --abbrev-ref HEAD) --set settings.batchMaxDuration=10s --set settings.batchIdleDuration=1s --wait",
     env={'LINODE_TOKEN': os.getenv("LINODE_TOKEN"), 'CLUSTER_NAME': os.getenv("CLUSTER_NAME"), 'KO_DOCKER_REPO': os.getenv("KO_DOCKER_REPO", "docker.io/linode/karpenter-provider-linode")},
     labels=["karpenter"],
-    resource_deps=["karpenter-crd"],
+    resource_deps=["karpenter_crd"],
 )
 
 k8s_yaml("./examples/v1/simple.yaml")
@@ -37,5 +37,5 @@ k8s_resource(
     new_name="karpl-nodepool-nodeclass",
     objects=["default:linodenodeclass", "default:nodepool"],
     labels=["karpenter"],
-    resource_deps=["karpenter-crd"],
+    resource_deps=["karpenter_crd"],
 )
