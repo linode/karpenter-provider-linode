@@ -185,7 +185,7 @@
         }
       }
     },
-    "kubectl@latest": {
+    "kubectl@1.35.0": {
       "last_modified": "2026-01-23T17:20:52Z",
       "resolved": "github:NixOS/nixpkgs/a1bab9e494f5f4939442a57a58d0449a109593fe#kubectl",
       "source": "devbox-search",
