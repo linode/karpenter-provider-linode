@@ -85,6 +85,7 @@ var _ = BeforeEach(func() {
 	ctx = options.ToContext(ctx, test.Options())
 	cluster.Reset()
 	linodeEnv.Reset()
+	linodeEnv.SetDefaults()
 })
 
 var _ = AfterEach(func() {

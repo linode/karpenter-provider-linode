@@ -18,6 +18,18 @@ import (
 	"context"
 	"testing"
 
+	"github.com/awslabs/operatorpkg/object"
+	"github.com/awslabs/operatorpkg/status"
+	"github.com/samber/lo"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/tools/record"
+	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/events"
+	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
+	coretest "sigs.k8s.io/karpenter/pkg/test"
+	"sigs.k8s.io/karpenter/pkg/test/v1alpha1"
+
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
@@ -26,21 +38,8 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/test"
 
-	"github.com/awslabs/operatorpkg/object"
-	"k8s.io/apimachinery/pkg/util/sets"
-	"sigs.k8s.io/karpenter/pkg/test/v1alpha1"
-
-	"github.com/awslabs/operatorpkg/status"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/samber/lo"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/tools/record"
-	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
-	"sigs.k8s.io/karpenter/pkg/events"
-	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
-	coretest "sigs.k8s.io/karpenter/pkg/test"
-
 	. "sigs.k8s.io/karpenter/pkg/test/expectations"
 	. "sigs.k8s.io/karpenter/pkg/utils/testing"
 )
@@ -76,6 +75,7 @@ var _ = AfterSuite(func() {
 var _ = BeforeEach(func() {
 	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
+	linodeEnv.SetDefaults()
 
 	nodePool = coretest.NodePool()
 	nodeClass = test.LinodeNodeClass(
