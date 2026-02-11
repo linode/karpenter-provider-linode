@@ -207,13 +207,9 @@ var _ = Describe("LKENodeProvider", func() {
 				It("should create a dedicated nodepool instance", func() {
 					nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 						{
-							NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-								Key:      karpv1.CapacityTypeLabelKey,
-								Operator: corev1.NodeSelectorOpIn,
-								Values: []string{
-									karpv1.CapacityTypeOnDemand,
-								},
-							},
+							Key:      karpv1.CapacityTypeLabelKey,
+							Operator: corev1.NodeSelectorOpIn,
+							Values:   []string{karpv1.CapacityTypeOnDemand},
 						},
 					}
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
@@ -684,7 +680,13 @@ var _ = Describe("LKENodeProvider", func() {
 				})
 
 				It("should create a dedicated nodepool instance", func() {
-					nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{{NodeSelectorRequirement: corev1.NodeSelectorRequirement{Key: karpv1.CapacityTypeLabelKey, Operator: corev1.NodeSelectorOpIn, Values: []string{karpv1.CapacityTypeOnDemand}}}}
+					nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
+						{
+							Key:      karpv1.CapacityTypeLabelKey,
+							Operator: corev1.NodeSelectorOpIn,
+							Values:   []string{karpv1.CapacityTypeOnDemand},
+						},
+					}
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 
