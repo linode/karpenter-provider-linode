@@ -190,7 +190,7 @@ GOLANGCI_LINT  ?= $(LOCALBIN)/golangci-lint
 ENVTEST_VERSION ?= release-0.22
 
 # renovate: datasource=go depName=sigs.k8s.io/controller-tools
-CONTROLLER_TOOLS_VERSION ?= v0.19.0
+CONTROLLER_TOOLS_VERSION ?= v0.20.0
 
 # renovate: datasource=go depName=golang.org/x/vuln
 GOVULNC_VERSION          ?= v1.1.4
