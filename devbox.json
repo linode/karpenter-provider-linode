@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
   "packages": [
     "just@1.46.0",
-    "kubectl@latest",
+    "kubectl@1.35.0",
     "kyverno-chainsaw@0.2.14",
     "kubernetes-helm@3.19.1",
     "tilt@0.36.0",
