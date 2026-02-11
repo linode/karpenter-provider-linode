@@ -1,2 +1,6 @@
 src:
- - '!**/**.md'
+ - '**/**.go'
+ - 'charts/**'
+ - 'e2e/**'
+ - 'Tiltfile'
+ - 'go.mod'
