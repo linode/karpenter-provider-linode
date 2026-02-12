@@ -198,11 +198,9 @@ var _ = Describe("CloudProvider", func() {
 		// Specify no instance types and expect to receive a capacity error
 		nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
 			{
-				NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-					Key:      corev1.LabelInstanceTypeStable,
-					Operator: corev1.NodeSelectorOpIn,
-					Values:   []string{"test-instance-type"},
-				},
+				Key:      corev1.LabelInstanceTypeStable,
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   []string{"test-instance-type"},
 			},
 		}
 		ExpectApplied(ctx, env.Client, nodePool, nodeClass, nodeClaim)
@@ -268,18 +266,14 @@ var _ = Describe("CloudProvider", func() {
 							},
 							Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
 								{
-									NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-										Key:      v1.LabelInstanceClass,
-										Operator: corev1.NodeSelectorOpIn,
-										Values:   []string{"standard"},
-									},
+									Key:      v1.LabelInstanceClass,
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"standard"},
 								},
 								{
-									NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-										Key:      corev1.LabelInstanceTypeStable,
-										Operator: corev1.NodeSelectorOpIn,
-										Values:   instanceNames,
-									},
+									Key:       corev1.LabelInstanceTypeStable,
+									Operator:  corev1.NodeSelectorOpIn,
+									Values:    instanceNames,
 									MinValues: lo.ToPtr(2),
 								},
 							},

@@ -108,11 +108,9 @@ var _ = Describe("InstanceTypeProvider", func() {
 					Spec: karpv1.NodeClaimTemplateSpec{
 						Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
 							{
-								NodeSelectorRequirement: corev1.NodeSelectorRequirement{
-									Key:      corev1.LabelTopologyRegion,
-									Operator: corev1.NodeSelectorOpIn,
-									Values:   []string{fake.DefaultRegion},
-								},
+								Key:      corev1.LabelTopologyRegion,
+								Operator: corev1.NodeSelectorOpIn,
+								Values:   []string{fake.DefaultRegion},
 							},
 						},
 						NodeClassRef: &karpv1.NodeClassReference{
