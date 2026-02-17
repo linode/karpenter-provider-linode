@@ -108,14 +108,14 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 		tags = utils.GetTags(nodeClass, nodeClaim, options.FromContext(ctx).ClusterName)
 	}
 
-	instance, err := c.nodeProvider.Create(ctx, nodeClass, nodeClaim, tags, instanceTypes)
+	inst, err := c.nodeProvider.Create(ctx, nodeClass, nodeClaim, tags, instanceTypes)
 	if err != nil {
 		return nil, fmt.Errorf("creating instance, %w", err)
 	}
 	instanceType, _ := lo.Find(instanceTypes, func(i *cloudprovider.InstanceType) bool {
-		return i.Name == instance.Type
+		return i.Name == inst.Type
 	})
-	nc := c.instanceToNodeClaim(instance, instanceType, nodeClass)
+	nc := c.instanceToNodeClaim(inst, instanceType, nodeClass)
 	nc.Annotations = lo.Assign(nc.Annotations, map[string]string{
 		v1alpha1.AnnotationLinodeNodeClassHash:        nodeClass.Hash(),
 		v1alpha1.AnnotationLinodeNodeClassHashVersion: v1alpha1.LinodeNodeClassHashVersion,
@@ -330,8 +330,8 @@ func (c *CloudProvider) resolveNodeClassFromNodePool(ctx context.Context, nodePo
 	return nodeClass, nil
 }
 
-func (c *CloudProvider) resolveNodeClassFromInstance(ctx context.Context, instance *instance.Instance) (*v1alpha1.LinodeNodeClass, error) {
-	tags := utils.TagListToMap(instance.Tags)
+func (c *CloudProvider) resolveNodeClassFromInstance(ctx context.Context, inst *instance.Instance) (*v1alpha1.LinodeNodeClass, error) {
+	tags := utils.TagListToMap(inst.Tags)
 	name, ok := tags[v1alpha1.LabelNodeClass]
 	if !ok {
 		return nil, errors.NewNotFound(schema.GroupResource{Group: apis.Group, Resource: "linodenodeclasses"}, "")
@@ -348,7 +348,7 @@ func (c *CloudProvider) resolveNodeClassFromInstance(ctx context.Context, instan
 	return nc, nil
 }
 
-func (c *CloudProvider) instanceToNodeClaim(i *instance.Instance, instanceType *cloudprovider.InstanceType, _ *v1alpha1.LinodeNodeClass) *karpv1.NodeClaim {
+func (c *CloudProvider) instanceToNodeClaim(inst *instance.Instance, instanceType *cloudprovider.InstanceType, _ *v1alpha1.LinodeNodeClass) *karpv1.NodeClaim {
 	nodeClaim := &karpv1.NodeClaim{}
 	labels := map[string]string{}
 	annotations := map[string]string{}
@@ -378,30 +378,30 @@ func (c *CloudProvider) instanceToNodeClaim(i *instance.Instance, instanceType *
 
 	// NOTE: These two labels are required on the nodeclaim for karpenter to properly consolidate nodes
 	// when scaling down because of decreased demand.
-	labels[corev1.LabelTopologyZone] = i.Region
+	labels[corev1.LabelTopologyZone] = inst.Region
 	labels[karpv1.CapacityTypeLabelKey] = "on-demand" // Linode does not have spot instances
 
 	nodeClaim.Labels = labels
 	nodeClaim.Annotations = annotations
-	if i.Created != nil {
-		nodeClaim.CreationTimestamp = metav1.Time{Time: *i.Created}
+	if inst.Created != nil {
+		nodeClaim.CreationTimestamp = metav1.Time{Time: *inst.Created}
 	}
 	// Set the deletionTimestamp to be the current time if the instance is currently terminating
-	if i.Status == linodego.InstanceDeleting || i.Status == linodego.InstanceShuttingDown {
+	if inst.Status == linodego.InstanceDeleting || inst.Status == linodego.InstanceShuttingDown {
 		nodeClaim.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 	}
-	nodeClaim.Status.ProviderID = fmt.Sprintf("linode://%d", i.ID)
-	nodeClaim.Status.ImageID = i.Image
+	nodeClaim.Status.ProviderID = fmt.Sprintf("linode://%d", inst.ID)
+	nodeClaim.Status.ImageID = inst.Image
 	return nodeClaim
 }
 
-func (c *CloudProvider) resolveInstanceTypeFromInstance(ctx context.Context, instance *instance.Instance) (*cloudprovider.InstanceType, error) {
-	nodePool, err := c.resolveNodePoolFromInstance(ctx, instance)
+func (c *CloudProvider) resolveInstanceTypeFromInstance(ctx context.Context, inst *instance.Instance) (*cloudprovider.InstanceType, error) {
+	nodePool, err := c.resolveNodePoolFromInstance(ctx, inst)
 	if err != nil {
 		// If we can't resolve the NodePool, we fall back to not getting instance type info
 		return nil, client.IgnoreNotFound(fmt.Errorf("resolving nodepool, %w", err))
 	}
-	instanceType, err := c.getInstanceType(ctx, nodePool, instance.Type)
+	instanceType, err := c.getInstanceType(ctx, nodePool, inst.Type)
 	if err != nil {
 		// If we can't resolve the NodePool, we fall back to not getting instance type info
 		return nil, client.IgnoreNotFound(fmt.Errorf("resolving instance type, %w", err))
@@ -409,8 +409,8 @@ func (c *CloudProvider) resolveInstanceTypeFromInstance(ctx context.Context, ins
 	return instanceType, nil
 }
 
-func (c *CloudProvider) resolveNodePoolFromInstance(ctx context.Context, instance *instance.Instance) (*karpv1.NodePool, error) {
-	tags := utils.TagListToMap(instance.Tags)
+func (c *CloudProvider) resolveNodePoolFromInstance(ctx context.Context, inst *instance.Instance) (*karpv1.NodePool, error) {
+	tags := utils.TagListToMap(inst.Tags)
 
 	if nodePoolName, ok := tags[karpv1.NodePoolLabelKey]; ok {
 		nodePool := &karpv1.NodePool{}

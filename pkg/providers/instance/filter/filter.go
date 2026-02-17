@@ -23,7 +23,7 @@ import (
 )
 
 type Filter interface {
-	FilterReject(instanceTypes []*cloudprovider.InstanceType) (kept []*cloudprovider.InstanceType, rejected []*cloudprovider.InstanceType)
+	FilterReject(instanceTypes []*cloudprovider.InstanceType) (kept, rejected []*cloudprovider.InstanceType)
 	Name() string
 }
 
@@ -41,7 +41,7 @@ type compatibleAvailableFilter struct {
 	requests     corev1.ResourceList
 }
 
-func (f compatibleAvailableFilter) FilterReject(instanceTypes []*cloudprovider.InstanceType) ([]*cloudprovider.InstanceType, []*cloudprovider.InstanceType) {
+func (f compatibleAvailableFilter) FilterReject(instanceTypes []*cloudprovider.InstanceType) (kept, rejected []*cloudprovider.InstanceType) {
 	return lo.FilterReject(instanceTypes, func(i *cloudprovider.InstanceType, _ int) bool {
 		if !f.requirements.IsCompatible(i.Requirements, scheduling.AllowUndefinedWellKnownLabels) {
 			return false

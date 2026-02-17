@@ -186,7 +186,7 @@ var _ = Describe("TaggingController", func() {
 				v1.LKEClusterNameTagKey + "=" + options.FromContext(ctx).ClusterName,
 			}
 			linodeInstance := lo.Must(linodeEnv.LinodeAPI.Instances.Load(linodeInstance.ID)).(linodego.Instance)
-			linodeInstanceTags := instance.NewInstance(ctx, linodeInstance).Tags
+			linodeInstanceTags := instance.NewInstance(ctx, &linodeInstance).Tags
 
 			for _, tag := range expectedTags {
 				parts := strings.Split(tag, "=")

@@ -77,7 +77,7 @@ func (u *UnavailableOfferings) IsUnavailable(instanceType, region string) bool {
 }
 
 // MarkUnavailable communicates recently observed temporary capacity shortages in the provided offerings
-func (u *UnavailableOfferings) MarkUnavailable(ctx context.Context, unavailableReason string, instanceType string, region string) {
+func (u *UnavailableOfferings) MarkUnavailable(ctx context.Context, unavailableReason, instanceType, region string) {
 	// even if the key is already in the cache, we still need to call Set to extend the cached entry's TTL
 	log.FromContext(ctx).WithValues(
 		"reason", unavailableReason,

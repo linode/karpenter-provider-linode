@@ -52,12 +52,12 @@ type Operator struct {
 }
 
 // allow passing a custom Linode client for testing
-func NewOperator(ctx context.Context, operator *operator.Operator, linodeClient sdk.LinodeAPI) (*Operator, error) {
+func NewOperator(ctx context.Context, op *operator.Operator, linodeClient sdk.LinodeAPI) (*Operator, error) {
 	if linodeClient == nil {
 		linodeClient = lo.Must(sdk.CreateLinodeClient(lo.Must(CreateLinodeClientConfig(ctx))))
 	}
 	unavailableOfferingsCache := linodecache.NewUnavailableOfferings()
-	kubeDNSIP, err := KubeDNSIP(ctx, operator.KubernetesInterface)
+	kubeDNSIP, err := KubeDNSIP(ctx, op.KubernetesInterface)
 	if err != nil {
 		// If we fail to get the kube-dns IP, we don't want to crash because this causes issues with custom DNS setups
 		log.FromContext(ctx).V(1).Info(fmt.Sprintf("unable to detect the IP of the kube-dns service, %s", err))
@@ -100,7 +100,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClient 
 			linodego.LKEVersionTier(clusterList[0].Tier),
 			opts.ClusterName,
 			opts.ClusterRegion,
-			operator.EventRecorder,
+			op.EventRecorder,
 			linodeClient,
 			unavailableOfferingsCache,
 			cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
@@ -114,7 +114,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClient 
 		log.FromContext(ctx).Info("initializing in direct instance mode")
 		nodeProvider = instance.NewDefaultProvider(
 			opts.ClusterRegion,
-			operator.EventRecorder,
+			op.EventRecorder,
 			linodeClient,
 			unavailableOfferingsCache,
 			cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
@@ -135,7 +135,7 @@ func NewOperator(ctx context.Context, operator *operator.Operator, linodeClient 
 	lo.Must0(instanceTypeProvider.UpdateInstanceTypeOfferings(ctx))
 
 	return &Operator{
-		Operator:                  operator,
+		Operator:                  op,
 		UnavailableOfferingsCache: unavailableOfferingsCache,
 		ValidationCache:           validationCache,
 		InstanceTypesProvider:     instanceTypeProvider,

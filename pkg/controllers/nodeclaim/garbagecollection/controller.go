@@ -73,7 +73,7 @@ func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 		return nc.Status.ProviderID, nc.Status.ProviderID != ""
 	})...)
 	nodeList := &corev1.NodeList{}
-	if err = c.kubeClient.List(ctx, nodeList); err != nil {
+	if err := c.kubeClient.List(ctx, nodeList); err != nil {
 		return reconciler.Result{}, err
 	}
 	errs := make([]error, len(cloudNodeClaims))
@@ -82,7 +82,7 @@ func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 			errs[i] = c.garbageCollect(ctx, cloudNodeClaims[i], nodeList)
 		}
 	})
-	if err = multierr.Combine(errs...); err != nil {
+	if err := multierr.Combine(errs...); err != nil {
 		return reconciler.Result{}, err
 	}
 	c.successfulCount++

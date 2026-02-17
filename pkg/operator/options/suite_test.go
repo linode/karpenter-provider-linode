@@ -157,7 +157,7 @@ var _ = Describe("Options", func() {
 	})
 })
 
-func expectOptionsEqual(optsA *options.Options, optsB *options.Options) {
+func expectOptionsEqual(optsA, optsB *options.Options) {
 	GinkgoHelper()
 	Expect(optsA.ClusterName).To(Equal(optsB.ClusterName))
 	Expect(optsA.ClusterEndpoint).To(Equal(optsB.ClusterEndpoint))

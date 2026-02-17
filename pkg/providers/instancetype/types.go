@@ -41,7 +41,7 @@ type Resolver interface {
 	// CacheKey tells the InstanceType cache if something changes about the InstanceTypes or Offerings based on the NodeClass.
 	CacheKey(NodeClass) string
 	// Resolve generates an InstanceType based on raw LinodeType and NodeClass setting data
-	Resolve(ctx context.Context, info linodego.LinodeType, nodeClass NodeClass) *cloudprovider.InstanceType
+	Resolve(ctx context.Context, info *linodego.LinodeType, nodeClass NodeClass) *cloudprovider.InstanceType
 }
 
 type DefaultResolver struct {
@@ -52,7 +52,7 @@ func (d DefaultResolver) CacheKey(nodeClass NodeClass) string {
 	return nodeClass.GetName()
 }
 
-func (d DefaultResolver) Resolve(ctx context.Context, info linodego.LinodeType, nodeClass NodeClass) *cloudprovider.InstanceType {
+func (d DefaultResolver) Resolve(ctx context.Context, info *linodego.LinodeType, nodeClass NodeClass) *cloudprovider.InstanceType {
 	// !!! Important !!!
 	// Any changes to the values passed into the NewInstanceType method will require making updates to the cache key
 	// so that Karpenter is able to cache the set of InstanceTypes based on values that alter the set of instance types
@@ -82,7 +82,7 @@ func NewDefaultResolver(region string) *DefaultResolver {
 
 func NewInstanceType(
 	ctx context.Context,
-	info linodego.LinodeType,
+	info *linodego.LinodeType,
 	region string,
 	maxPods *int32,
 	podsPerCore *int32,
@@ -111,7 +111,7 @@ func systemReservedResources(systemReserved map[string]string) corev1.ResourceLi
 }
 
 func kubeReservedResources(cpus, pods *resource.Quantity, kubeReserved map[string]string) corev1.ResourceList {
-	resources := corev1.ResourceList{
+	resourceList := corev1.ResourceList{
 		corev1.ResourceMemory:           resource.MustParse(fmt.Sprintf("%dMi", (11*pods.Value())+255)),
 		corev1.ResourceEphemeralStorage: resource.MustParse("1Gi"), // default kube-reserved ephemeral-storage
 	}
@@ -127,22 +127,24 @@ func kubeReservedResources(cpus, pods *resource.Quantity, kubeReserved map[strin
 		{start: 2000, end: 4000, percentage: 0.005},
 		{start: 4000, end: 1 << 31, percentage: 0.0025},
 	} {
-		if cpu := cpus.MilliValue(); cpu >= cpuRange.start {
-			r := float64(cpuRange.end - cpuRange.start)
-			if cpu < cpuRange.end {
-				r = float64(cpu - cpuRange.start)
-			}
-			cpuOverhead := resources.Cpu()
-			cpuOverhead.Add(*resource.NewMilliQuantity(int64(r*cpuRange.percentage), resource.DecimalSI))
-			resources[corev1.ResourceCPU] = *cpuOverhead
+		cpuMilli := cpus.MilliValue()
+		if cpuMilli < cpuRange.start {
+			continue
 		}
+		r := float64(cpuRange.end - cpuRange.start)
+		if cpuMilli < cpuRange.end {
+			r = float64(cpuMilli - cpuRange.start)
+		}
+		cpuOverhead := resourceList.Cpu()
+		cpuOverhead.Add(*resource.NewMilliQuantity(int64(r*cpuRange.percentage), resource.DecimalSI))
+		resourceList[corev1.ResourceCPU] = *cpuOverhead
 	}
-	return lo.Assign(resources, lo.MapEntries(kubeReserved, func(k string, v string) (corev1.ResourceName, resource.Quantity) {
+	return lo.Assign(resourceList, lo.MapEntries(kubeReserved, func(k string, v string) (corev1.ResourceName, resource.Quantity) {
 		return corev1.ResourceName(k), resource.MustParse(v)
 	}))
 }
 
-func evictionThreshold(memory *resource.Quantity, evictionHard map[string]string, evictionSoft map[string]string) corev1.ResourceList {
+func evictionThreshold(memory *resource.Quantity, evictionHard, evictionSoft map[string]string) corev1.ResourceList {
 	overhead := corev1.ResourceList{
 		corev1.ResourceMemory: resource.MustParse("100Mi"),
 	}
@@ -194,7 +196,7 @@ func mustParsePercentage(v string) float64 {
 }
 
 func computeRequirements(
-	info linodego.LinodeType,
+	info *linodego.LinodeType,
 	region string,
 ) scheduling.Requirements {
 	requirements := scheduling.NewRequirements(
@@ -235,7 +237,7 @@ func computeRequirements(
 	return requirements
 }
 
-func computeCapacity(ctx context.Context, info linodego.LinodeType, maxPods, podsPerCore *int32) corev1.ResourceList {
+func computeCapacity(ctx context.Context, info *linodego.LinodeType, maxPods, podsPerCore *int32) corev1.ResourceList {
 	resourceList := corev1.ResourceList{
 		corev1.ResourceCPU:    *cpu(info),
 		corev1.ResourceMemory: *memory(ctx, info),
@@ -244,11 +246,11 @@ func computeCapacity(ctx context.Context, info linodego.LinodeType, maxPods, pod
 	return resourceList
 }
 
-func cpu(info linodego.LinodeType) *resource.Quantity {
+func cpu(info *linodego.LinodeType) *resource.Quantity {
 	return resources.Quantity(strconv.Itoa(info.VCPUs))
 }
 
-func memory(ctx context.Context, info linodego.LinodeType) *resource.Quantity {
+func memory(ctx context.Context, info *linodego.LinodeType) *resource.Quantity {
 	sizeInMib := info.Memory
 	mem := resources.Quantity(fmt.Sprintf("%dMi", sizeInMib))
 	// Account for VM overhead in calculation
@@ -257,7 +259,7 @@ func memory(ctx context.Context, info linodego.LinodeType) *resource.Quantity {
 	return mem
 }
 
-func pods(info linodego.LinodeType, maxPods, podsPerCore *int32) *resource.Quantity {
+func pods(info *linodego.LinodeType, maxPods, podsPerCore *int32) *resource.Quantity {
 	var count int64
 	switch {
 	case maxPods != nil:
