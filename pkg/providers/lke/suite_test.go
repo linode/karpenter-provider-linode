@@ -95,6 +95,7 @@ func enqueueListInstances(env *test.Environment, lists ...[]linodego.Instance) {
 }
 
 func TestNodepool(t *testing.T) {
+	t.Parallel()
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "NodePool Provider Suite")

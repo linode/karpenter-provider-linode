@@ -45,6 +45,7 @@ var linodeEnv *test.Environment
 var controller *controllersinstancetype.Controller
 
 func TestLinode(t *testing.T) {
+	t.Parallel()
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "InstanceType")

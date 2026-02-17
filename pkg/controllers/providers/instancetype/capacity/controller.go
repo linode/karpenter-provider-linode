@@ -18,8 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"sigs.k8s.io/karpenter/pkg/cloudprovider"
-
 	"github.com/awslabs/operatorpkg/option"
 	"github.com/awslabs/operatorpkg/reasonable"
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/operator/injection"
 	nodeutils "sigs.k8s.io/karpenter/pkg/utils/node"
 

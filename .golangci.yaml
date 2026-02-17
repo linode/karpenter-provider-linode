@@ -2,27 +2,123 @@ version: "2"
 run:
   tests: true
   timeout: 5m
+  issues-exit-code: 1
+output:
+  formats:
+    text:
+      path: stdout
 linters:
   enable:
+    - asasalint
     - asciicheck
     - bidichk
+    - bodyclose
+    - containedctx
+    - contextcheck
     - copyloopvar
+    - cyclop
+    - decorder
+    - depguard
+    - dogsled
+    - dupword
+    - durationcheck
+    - errchkjson
+    - errname
     - errorlint
+    - exhaustive
+    - forbidigo
+#    - forcetypeassert
+    - gocheckcompilerdirectives
+    - gochecksumtype
+    - gocognit
+    - goconst
+#    - gocritic
     - gocyclo
     - goheader
+    - goprintffuncname
     - gosec
+    - gosmopolitan
+    - loggercheck
+    - maintidx
+    - makezero
     - misspell
+    - musttag
+    - nestif
     - nilerr
+    - nilnesserr
+#    - nilnil
+    - noctx
+    - nolintlint
+    - paralleltest
+    - predeclared
+    - protogetter
+    - reassign
+    - recvcheck
     - revive
+#    - rowserrcheck
+    - spancheck
+    - sqlclosecheck
     - staticcheck
+    - testifylint
+    - thelper
     - tparallel
     - unconvert
     - unparam
-  disable:
-    - prealloc
+    - usestdlibvars
+    - usetesting
+    - whitespace
+    - zerologlint
+    - govet
+    - ineffassign
+    - unused
   settings:
-    gocyclo:
-      min-complexity: 11
+    cyclop:
+      max-complexity: 15
+    depguard:
+      rules:
+        main:
+          files:
+            - $all
+            - '!$test'
+          deny:
+            - pkg: reflect
+              desc: Reflection is never clear.
+            - pkg: gob
+              desc: Please convert types manually
+    dupl:
+      threshold: 100
+#     errcheck:
+#       check-type-assertions: true
+#       check-blank: true
+#       exclude-functions:
+#         - fmt:.*
+#         - io/ioutil:^Read.*
+    goconst:
+      min-len: 3
+      min-occurrences: 5
+#     gocritic:
+#       enabled-tags:
+#         - diagnostic
+#         - experimental
+#         - opinionated
+#         - performance
+#         - style
+#       settings:
+#         captLocal:
+#           paramsOnly: true
+#         rangeValCopy:
+#           sizeThreshold: 32
+    lll:
+      tab-width: 1
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
+    unparam:
+      check-exported: false
     goheader:
       template: |-
         Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,10 +132,6 @@ linters:
         WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
         See the License for the specific language governing permissions and
         limitations under the License.
-    govet:
-      disable:
-        - fieldalignment
-      enable-all: true
     misspell:
       locale: US
     revive:
@@ -64,31 +156,40 @@ linters:
       - path: (.+)\.go$
         text: declaration of "(err|ctx)" shadows declaration at
     paths:
-      - tools
-      - website
       - hack
       - charts
-      - designs
       - third_party$
       - builtin$
       - examples$
 issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
   fix: true
 formatters:
   enable:
+    - gci
+    - gofmt
     - goimports
   settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - blank
+        - dot
+        - prefix(github.com/linode/karpenter-provider-linode)
+    gofmt:
+      simplify: true
     goimports:
       local-prefixes:
         - github.com/linode/karpenter-provider-linode
   exclusions:
     generated: lax
     paths:
-      - tools
-      - website
+      - zz_(.+)\.go
       - hack
       - charts
-      - designs
       - third_party$
       - builtin$
       - examples$

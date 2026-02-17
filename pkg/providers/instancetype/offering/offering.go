@@ -82,7 +82,6 @@ func (p *DefaultProvider) InjectOfferings(
 	return its
 }
 
-//nolint:gocyclo
 func (p *DefaultProvider) createOfferings(
 	it *cloudprovider.InstanceType,
 	instanceTypesInfo map[string]linodego.LinodeType,

@@ -16,10 +16,10 @@ limitations under the License.
 package apis
 
 import (
-	_ "embed"
-
 	"github.com/awslabs/operatorpkg/object"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
+	_ "embed"
 )
 
 //go:generate controller-gen crd object:headerFile="../../hack/boilerplate.go.txt" paths="./..." output:crd:artifacts:config=crds

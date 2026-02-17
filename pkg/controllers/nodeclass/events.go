@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
-
 	"sigs.k8s.io/karpenter/pkg/events"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"

@@ -52,6 +52,7 @@ var env *coretest.Environment
 var taggingController *tagging.Controller
 
 func TestAPIs(t *testing.T) {
+	t.Parallel()
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "TaggingController")

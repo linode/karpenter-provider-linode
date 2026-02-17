@@ -62,6 +62,7 @@ var standardImage v1.LinodeImage
 var nvidiaImage v1.LinodeImage
 
 func TestLinode(t *testing.T) {
+	t.Parallel()
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "CapacityCache")

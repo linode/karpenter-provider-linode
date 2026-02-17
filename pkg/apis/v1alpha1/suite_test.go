@@ -18,18 +18,16 @@ import (
 	"context"
 	"testing"
 
-	"sigs.k8s.io/karpenter/pkg/test/v1alpha1"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	. "sigs.k8s.io/karpenter/pkg/utils/testing"
-
-	. "sigs.k8s.io/karpenter/pkg/test/expectations"
-
 	coretest "sigs.k8s.io/karpenter/pkg/test"
+	"sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	"github.com/linode/karpenter-provider-linode/pkg/test"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	. "sigs.k8s.io/karpenter/pkg/test/expectations"
+	. "sigs.k8s.io/karpenter/pkg/utils/testing"
 )
 
 var ctx context.Context
@@ -37,6 +35,7 @@ var env *coretest.Environment
 var linodeEnv *test.Environment
 
 func TestAPIs(t *testing.T) {
+	t.Parallel()
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Validation")
