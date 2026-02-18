@@ -138,7 +138,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		return nil, cloudprovider.NewCreateError(err, "InstanceCreationFailed", fmt.Sprintf("Failed to create Linode instance: %s", err.Error()))
 	}
 
-	return NewInstance(ctx, *instance), nil
+	return NewInstance(ctx, instance), nil
 }
 
 func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...Options) (*Instance, error) {
@@ -242,5 +242,5 @@ func instancesFromLinodeInstances(ctx context.Context, instances []linodego.Inst
 	if len(instances) == 0 {
 		return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("instance not found"))
 	}
-	return lo.Map(instances, func(i linodego.Instance, _ int) *Instance { return NewInstance(ctx, i) }), nil
+	return lo.Map(instances, func(i linodego.Instance, _ int) *Instance { inst := i; return NewInstance(ctx, &inst) }), nil
 }

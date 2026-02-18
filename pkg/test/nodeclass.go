@@ -25,8 +25,8 @@ import (
 
 func LinodeNodeClass(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {
 	options := v1.LinodeNodeClass{}
-	for _, override := range overrides {
-		if err := mergo.Merge(&options, override, mergo.WithOverride); err != nil {
+	for i := range overrides {
+		if err := mergo.Merge(&options, overrides[i], mergo.WithOverride); err != nil {
 			panic(fmt.Sprintf("Failed to merge settings: %s", err))
 		}
 	}

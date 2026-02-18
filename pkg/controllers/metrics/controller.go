@@ -56,7 +56,8 @@ func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 	}
 	availability := map[metricDimensions]bool{}
 	price := map[metricDimensions]float64{}
-	for _, nodePool := range nodePools.Items {
+	for i := range nodePools.Items {
+		nodePool := nodePools.Items[i]
 		instanceTypes, err := c.cloudProvider.GetInstanceTypes(ctx, &nodePool)
 		if err != nil {
 			return reconciler.Result{}, err

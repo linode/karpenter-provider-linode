@@ -32,7 +32,7 @@ linters:
     - gochecksumtype
     - gocognit
     - goconst
-#    - gocritic
+    - gocritic
     - gocyclo
     - goheader
     - goprintffuncname
@@ -96,18 +96,18 @@ linters:
     goconst:
       min-len: 3
       min-occurrences: 5
-#     gocritic:
-#       enabled-tags:
-#         - diagnostic
-#         - experimental
-#         - opinionated
-#         - performance
-#         - style
-#       settings:
-#         captLocal:
-#           paramsOnly: true
-#         rangeValCopy:
-#           sizeThreshold: 32
+    gocritic:
+       enabled-tags:
+         - diagnostic
+         - experimental
+         - opinionated
+         - performance
+         - style
+       settings:
+         captLocal:
+           paramsOnly: true
+         rangeValCopy:
+           sizeThreshold: 256
     lll:
       tab-width: 1
     nolintlint:

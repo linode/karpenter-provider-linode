@@ -166,7 +166,7 @@ func DedupeTags(tags []string) []string {
 	return uniqueTags
 }
 
-func splitTag(tag string) (string, string, bool) {
+func splitTag(tag string) (key, value string, ok bool) {
 	index := strings.IndexRune(tag, '=')
 	if index <= 0 || index == len(tag)-1 {
 		return "", "", false

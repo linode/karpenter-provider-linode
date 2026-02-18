@@ -231,6 +231,7 @@ func (l *LinodeClient) Reset() {
 	l.UpdateInstanceBehavior.Reset()
 }
 
+//nolint:gocritic // can't change signature to take a pointer receiver for opts since it needs to satisfy the linodego interface
 func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceCreateOptions) (*linodego.Instance, error) {
 	instance, err := l.CreateInstanceBehavior.Invoke(&opts, func(opts *linodego.InstanceCreateOptions) (**linodego.Instance, error) {
 		var icedPools []CapacityPool
@@ -278,7 +279,7 @@ func (l *LinodeClient) ListInstances(_ context.Context, opts *linodego.ListOptio
 
 		l.Instances.Range(func(k interface{}, v interface{}) bool {
 			inst := v.(linodego.Instance)
-			if !instanceMatchesTags(inst, requiredTags) {
+			if !instanceMatchesTags(&inst, requiredTags) {
 				return true
 			}
 			instances = append(instances, inst)
@@ -340,7 +341,7 @@ func extractTagsFromFilter(opts *linodego.ListOptions) []tagFilter {
 // instanceMatchesTags applies the tag filters returned by extractTagsFromFilter.
 // All filters must match (logical AND). For exact filters, a tag must equal the filter value.
 // For contains filters, at least one tag must contain the filter value.
-func instanceMatchesTags(inst linodego.Instance, filters []tagFilter) bool {
+func instanceMatchesTags(inst *linodego.Instance, filters []tagFilter) bool {
 	for _, filter := range filters {
 		found := false
 		for _, instTag := range inst.Tags {
@@ -371,6 +372,7 @@ func (l *LinodeClient) DeleteInstance(_ context.Context, linodeID int) error {
 	return err
 }
 
+//nolint:gocritic // can't change signature to take a pointer receiver for opts since it needs to satisfy the linodego interface
 func (l *LinodeClient) CreateTag(_ context.Context, opts linodego.TagCreateOptions) (*linodego.Tag, error) {
 	tag, err := l.CreateTagsBehavior.Invoke(&opts, func(opts *linodego.TagCreateOptions) (*linodego.Tag, error) {
 		linodeIDs := opts.Linodes
@@ -400,6 +402,7 @@ func (l *LinodeClient) ListTypes(_ context.Context, _ *linodego.ListOptions) ([]
 	return *l.ListTypesOutput.Clone(), nil
 }
 
+//nolint:gocritic // can't change signature to take a pointer receiver for opts since it needs to satisfy the linodego interface
 func (l *LinodeClient) CreateLKENodePool(_ context.Context, clusterID int, opts linodego.LKENodePoolCreateOptions) (*linodego.LKENodePool, error) {
 	params := struct {
 		ClusterID int
@@ -793,13 +796,14 @@ func (l *LinodeClient) DeleteLKENodePoolNode(_ context.Context, clusterID int, n
 			}
 
 			for i, node := range pool.Linodes {
-				if node.ID == params.NodeID {
-					foundPoolKey = key
-					foundPool = pool
-					nodeIndex = i
-					nodeInstanceID = node.InstanceID
-					return false
+				if node.ID != params.NodeID {
+					continue
 				}
+				foundPoolKey = key
+				foundPool = pool
+				nodeIndex = i
+				nodeInstanceID = node.InstanceID
+				return false
 			}
 			return true
 		})
