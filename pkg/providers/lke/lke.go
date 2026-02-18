@@ -23,16 +23,14 @@ import (
 	"time"
 
 	"github.com/awslabs/operatorpkg/option"
+	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/keymutex"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
-
-	"github.com/linode/linodego"
-
-	"k8s.io/utils/keymutex"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
@@ -499,7 +497,6 @@ func isKarpenterManagedPool(pool *linodego.LKENodePool) bool {
 }
 
 func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
-
 	lkePool, err := p.findLKENodePoolFromLinodeInstanceID(ctx, id)
 	if err != nil {
 		return cloudprovider.NewNodeClaimNotFoundError(err)

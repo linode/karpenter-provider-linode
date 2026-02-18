@@ -18,11 +18,10 @@ import (
 	"context"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-
 	"github.com/awslabs/operatorpkg/reconciler"
 	"github.com/awslabs/operatorpkg/singleton"
 	"github.com/samber/lo"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -50,7 +49,6 @@ func NewController(kubeClient client.Client, cloudProvider cloudprovider.CloudPr
 	}
 }
 
-//nolint:gocyclo
 func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 	nodePools := &karpv1.NodePoolList{}
 	if err := c.kubeClient.List(ctx, nodePools); err != nil {

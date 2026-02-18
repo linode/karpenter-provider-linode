@@ -37,6 +37,7 @@ var stop context.CancelFunc
 var env *coretest.Environment
 
 func TestLinode(t *testing.T) {
+	t.Parallel()
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "CloudProvider/Linode")

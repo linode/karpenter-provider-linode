@@ -550,7 +550,7 @@ func (l *LinodeClient) GetLKENodePool(_ context.Context, clusterID, poolID int) 
 	return *pool, err
 }
 
-// nolint:gocyclo // fix this later
+//nolint:gocognit,cyclop // fix this later
 func (l *LinodeClient) UpdateLKENodePool(_ context.Context, clusterID, poolID int, opts linodego.LKENodePoolUpdateOptions) (*linodego.LKENodePool, error) {
 	params := struct {
 		ClusterID int

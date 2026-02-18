@@ -193,7 +193,6 @@ func mustParsePercentage(v string) float64 {
 	return p
 }
 
-//nolint:gocyclo
 func computeRequirements(
 	info linodego.LinodeType,
 	region string,

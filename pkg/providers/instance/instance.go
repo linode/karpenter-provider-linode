@@ -20,12 +20,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/samber/lo"
-
 	"github.com/awslabs/operatorpkg/option"
 	"github.com/google/uuid"
 	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
+	"github.com/samber/lo"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
@@ -71,7 +70,6 @@ func NewDefaultProvider(
 	unavailableOfferings *linodecache.UnavailableOfferings,
 	instanceCache *cache.Cache,
 ) *DefaultProvider {
-
 	return &DefaultProvider{
 		region:               region,
 		recorder:             recorder,

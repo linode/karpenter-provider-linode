@@ -53,6 +53,7 @@ var nodeClass *v1.LinodeNodeClass
 var nodePool *karpv1.NodePool
 
 func TestLinode(t *testing.T) {
+	t.Parallel()
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "MetricsController")

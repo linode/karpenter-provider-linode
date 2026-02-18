@@ -89,7 +89,6 @@ func (c *Controller) Name() string {
 	return "nodeclass"
 }
 
-//nolint:gocyclo
 func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) (reconcile.Result, error) {
 	ctx = injection.WithControllerName(ctx, c.Name())
 
