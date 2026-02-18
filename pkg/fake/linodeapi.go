@@ -28,6 +28,13 @@ import (
 	"sigs.k8s.io/karpenter/pkg/utils/atomic"
 )
 
+const (
+	DefaultRegion      = "us-east"
+	DefaultClusterID   = 12345
+	DefaultClusterName = "test-cluster"
+	DefaultClusterTier = linodego.LKEVersionStandard
+)
+
 var (
 	// TODO: get this list from a static file
 	defaultLinodeTypeList = []linodego.LinodeType{
@@ -367,6 +374,7 @@ func instanceMatchesTags(inst *linodego.Instance, filters []tagFilter) bool {
 func (l *LinodeClient) DeleteInstance(_ context.Context, linodeID int) error {
 	_, err := l.DeleteInstanceBehavior.Invoke(&linodeID, func(linodeID *int) (*error, error) {
 		l.Instances.LoadAndDelete(*linodeID)
+		//nolint:nilnil // this is intentional
 		return nil, nil
 	})
 	return err
@@ -713,6 +721,7 @@ func (l *LinodeClient) DeleteLKENodePool(_ context.Context, clusterID, poolID in
 		}
 		l.NodePools.Delete(key)
 
+		//nolint:nilnil // this is intentional
 		return nil, nil
 	})
 
@@ -824,6 +833,7 @@ func (l *LinodeClient) DeleteLKENodePoolNode(_ context.Context, clusterID int, n
 			l.NodePools.Delete(foundPoolKey)
 		}
 
+		//nolint:nilnil // this is intentional
 		return nil, nil
 	})
 

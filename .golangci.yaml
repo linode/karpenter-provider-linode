@@ -27,7 +27,6 @@ linters:
     - errorlint
     - exhaustive
     - forbidigo
-#    - forcetypeassert
     - gocheckcompilerdirectives
     - gochecksumtype
     - gocognit
@@ -46,7 +45,7 @@ linters:
     - nestif
     - nilerr
     - nilnesserr
-#    - nilnil
+    - nilnil
     - noctx
     - nolintlint
     - paralleltest
@@ -55,7 +54,7 @@ linters:
     - reassign
     - recvcheck
     - revive
-#    - rowserrcheck
+    - rowserrcheck
     - spancheck
     - sqlclosecheck
     - staticcheck
@@ -87,12 +86,6 @@ linters:
               desc: Please convert types manually
     dupl:
       threshold: 100
-#     errcheck:
-#       check-type-assertions: true
-#       check-blank: true
-#       exclude-functions:
-#         - fmt:.*
-#         - io/ioutil:^Read.*
     goconst:
       min-len: 3
       min-occurrences: 5
