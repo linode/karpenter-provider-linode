@@ -174,37 +174,18 @@ func (c *CloudProvider) GetInstanceTypes(ctx context.Context, nodePool *karpv1.N
 	nodeClass, err := c.resolveNodeClassFromNodePool(ctx, nodePool)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// If we can't resolve the NodeClass, then it's impossible for us to resolve the instance types
 			c.recorder.Publish(cloudproviderevents.NodePoolFailedToResolveNodeClass(nodePool))
-			return nil, nil
 		}
-		return nil, fmt.Errorf("resolving nodeclass, %w", err)
+		// We must return an error here in the event of the node class not being found. Otherwise users just get
+		// no instance types and a failure to schedule with no indicator pointing to a bad configuration
+		// as the cause.
+		return nil, fmt.Errorf("resolving node class, %w", err)
 	}
-	// TODO, break this coupling
 	instanceTypes, err := c.instanceTypeProvider.List(ctx, nodeClass)
 	if err != nil {
 		return nil, err
 	}
 	return instanceTypes, nil
-}
-
-// getInstanceType returns a specific instance type to avoid re-constructing all InstanceTypes
-func (c *CloudProvider) getInstanceType(ctx context.Context, nodePool *karpv1.NodePool, name string) (*cloudprovider.InstanceType, error) {
-	nodeClass, err := c.resolveNodeClassFromNodePool(ctx, nodePool)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// If we can't resolve the NodeClass, then it's impossible for us to resolve the instance types
-			c.recorder.Publish(cloudproviderevents.NodePoolFailedToResolveNodeClass(nodePool))
-			return nil, nil
-		}
-		return nil, fmt.Errorf("resolving nodeclass, %w", err)
-	}
-	it, err := c.instanceTypeProvider.Get(ctx, nodeClass, name)
-	if err != nil {
-		return nil, fmt.Errorf("resolving instancetype, %w", err)
-	}
-
-	return it, err
 }
 
 func (c *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim) error {
@@ -401,11 +382,14 @@ func (c *CloudProvider) resolveInstanceTypeFromInstance(ctx context.Context, ins
 		// If we can't resolve the NodePool, we fall back to not getting instance type info
 		return nil, client.IgnoreNotFound(fmt.Errorf("resolving nodepool, %w", err))
 	}
-	instanceType, err := c.getInstanceType(ctx, nodePool, inst.Type)
+	instanceTypes, err := c.GetInstanceTypes(ctx, nodePool)
 	if err != nil {
 		// If we can't resolve the NodePool, we fall back to not getting instance type info
 		return nil, client.IgnoreNotFound(fmt.Errorf("resolving instance type, %w", err))
 	}
+	instanceType, _ := lo.Find(instanceTypes, func(i *cloudprovider.InstanceType) bool {
+		return i.Name == inst.Type
+	})
 	return instanceType, nil
 }
 

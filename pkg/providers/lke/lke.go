@@ -111,7 +111,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 	}
 
 	existingInstance, err := p.lookupExistingInstance(ctx, nodeClaim)
-	if err != nil {
+	if err != nil && !errors.Is(err, utils.ErrInstanceNotFound) {
 		return nil, err
 	}
 	if existingInstance != nil {
@@ -156,21 +156,12 @@ func (p *DefaultProvider) resolveCreateInstanceType(ctx context.Context, instanc
 }
 
 func (p *DefaultProvider) lookupExistingInstance(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*instance.Instance, error) {
-	logger := log.FromContext(ctx)
-	nodeClaimTag := fmt.Sprintf("%s=%s", v1alpha1.NodeClaimTagKey, nodeClaim.Name)
-	existingInstance, err := utils.LookupInstanceByTag(ctx, p.client, nodeClaimTag)
-	if err == nil && existingInstance != nil {
-		logger.V(1).Info("found existing instance for nodeclaim", "instanceID", existingInstance.ID, "nodeclaim", nodeClaim.Name)
-		return p.hydrateInstanceFromLinode(ctx, existingInstance)
+	existingInstance, err := utils.LookupInstanceByTag(ctx, p.client, fmt.Sprintf("%s=%s", v1alpha1.NodeClaimTagKey, nodeClaim.Name))
+	if err != nil {
+		return nil, err
 	}
-	if err != nil && !errors.Is(err, utils.ErrInstanceNotFound) {
-		return nil, cloudprovider.NewCreateError(
-			err,
-			"InstanceLookupFailed",
-			fmt.Sprintf("Failed to lookup existing instance for nodeclaim %s", nodeClaim.Name),
-		)
-	}
-	return nil, nil
+	log.FromContext(ctx).V(1).Info("found existing instance for nodeclaim", "instanceID", existingInstance.ID, "nodeclaim", nodeClaim.Name)
+	return p.hydrateInstanceFromLinode(ctx, existingInstance)
 }
 
 func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, cheapestType *cloudprovider.InstanceType, instanceType, poolKey string, createdPool, scaledOnce *bool) (*instance.Instance, error) {
@@ -183,12 +174,8 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 		}
 
 		claimableInstance, err := p.findClaimableInstance(ctx, pool)
-		if err != nil {
-			if errors.Is(err, ErrNoClaimableInstance) {
-				claimableInstance = nil
-			} else {
-				return nil, err
-			}
+		if err != nil && !isRetryableCreateError(err) {
+			return nil, err
 		}
 
 		if claimableInstance != nil {
