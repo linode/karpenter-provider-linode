@@ -174,7 +174,7 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 		}
 
 		claimableInstance, err := p.findClaimableInstance(ctx, pool)
-		if err != nil && !errors.Is(err, ErrNoClaimableInstance) {
+		if err != nil && !isRetryableCreateError(err) {
 			return nil, err
 		}
 
