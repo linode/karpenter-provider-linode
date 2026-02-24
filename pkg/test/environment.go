@@ -170,7 +170,6 @@ func NewEnvironment(ctx context.Context) *Environment {
 // generateTestCACert creates a minimal self-signed CA cert and returns its PEM bytes.
 func generateTestCACert() []byte {
 	key := lo.Must(ecdsa.GenerateKey(elliptic.P256(), rand.Reader))
-
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject:      pkix.Name{CommonName: "test-ca"},
@@ -179,29 +178,23 @@ func generateTestCACert() []byte {
 		IsCA:         true,
 		KeyUsage:     x509.KeyUsageCertSign,
 	}
-
 	certDER := lo.Must(x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key))
 
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 }
 
 func fakeClusterInfoConfigMap(server string) *v1.ConfigMap {
-
-	caPEM := generateTestCACert()
-
 	kubeConfigObj := clientcmdapiv1.Config{
 		Clusters: []clientcmdapiv1.NamedCluster{
 			{
 				Name: "local",
 				Cluster: clientcmdapiv1.Cluster{
 					Server:                   server,
-					CertificateAuthorityData: caPEM, // valid PEM, not base64 here
+					CertificateAuthorityData: generateTestCACert(), // valid PEM, not base64 here
 				},
 			},
 		},
 	}
-
-	kubeConfigBytes := lo.Must(yaml.Marshal(kubeConfigObj))
 
 	return &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -209,7 +202,7 @@ func fakeClusterInfoConfigMap(server string) *v1.ConfigMap {
 			Namespace: "kube-public",
 		},
 		Data: map[string]string{
-			"kubeconfig": string(kubeConfigBytes),
+			"kubeconfig": string(lo.Must(yaml.Marshal(kubeConfigObj))),
 		},
 	}
 }

@@ -207,7 +207,6 @@ func (p *DefaultProvider) buildUserData(ctx context.Context, _ *v1alpha1.LinodeN
 	if err != nil {
 		return "", fmt.Errorf("failed to get cluster-info configmap: %w", err)
 	}
-	p.kubeClient.Discovery().ServerVersion()
 	// Parse the kubeconfig stored in the ConfigMap
 	kubeconfig, err := clientcmd.Load([]byte(clusterInfoConfigMap.Data["kubeconfig"]))
 	if err != nil {
@@ -251,13 +250,30 @@ func (p *DefaultProvider) buildUserData(ctx context.Context, _ *v1alpha1.LinodeN
 		return "", fmt.Errorf("failed to generate k8s server version: %w", err)
 	}
 	bootstrapData := fmt.Sprintf(`#cloud-config
+write_files:
+  - path: /run/kubeadm-join-config.yaml
+    owner: root:root
+    permissions: '0640'
+    content: |
+      ---
+      apiVersion: kubeadm.k8s.io/v1beta3
+      kind: JoinConfiguration
+      discovery:
+        bootstrapToken:
+          apiServerEndpoint: %s
+          caCertHashes:
+            - sha256:%s
+          token: %s.%s
+      nodeRegistration:
+        kubeletExtraArgs:
+          cloud-provider: external
+          register-with-taints: "karpenter.sh/unregistered:NoExecute"
+        name: '{{ ds.meta_data.label }}'
 runcmd:
+  - hostnamectl set-hostname '{{ ds.meta_data.label }}' && hostname -F /etc/hostname
   - curl -fsSL https://github.com/linode/cluster-api-provider-linode/raw/dd76b1f979696ef22ce093d420cdbd0051a1d725/scripts/pre-kubeadminit.sh | bash -s %s
-  - hostname "{{ ds.meta_data.label }}"
-  - echo "{{ ds.meta_data.label }}" >/etc/hostname
-  - mkdir -p /etc/kubernetes/manifests
-  - kubeadm join %s --token %s.%s --discovery-token-ca-cert-hash sha256:%s
-`, k8sVersion.GitVersion, clusterEndpoint, tokenID, tokenSecret, caCertHash)
+  - kubeadm join --config /run/kubeadm-join-config.yaml
+`, clusterEndpoint, caCertHash, tokenID, tokenSecret, k8sVersion.GitVersion)
 
 	return b64.StdEncoding.EncodeToString([]byte(bootstrapData)), nil
 }
