@@ -116,8 +116,9 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 	if nodeClass.Spec.Image == "" {
 		nodeClass.Spec.Image = defaultImage
 	}
+	instName := fmt.Sprintf("%s-%s", nodeClaim.Name, uuid.NewString()[0:8])
 	createOpts := linodego.InstanceCreateOptions{
-		Label:           fmt.Sprintf("%s-%s", nodeClaim.Name, uuid.NewString()[0:8]),
+		Label:           instName,
 		Region:          p.region,
 		Type:            cheapestType.Name,
 		RootPass:        uuid.NewString(),
@@ -132,7 +133,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 	}
 
 	if options.FromContext(ctx).Mode != options.ProvisionModeLKE {
-		userData, err := p.buildUserData(ctx, nodeClass)
+		userData, err := p.buildUserData(ctx, nodeClass, instName)
 		if err != nil {
 			return nil, err
 		}
@@ -201,7 +202,7 @@ func (p *DefaultProvider) updateACL(ctx context.Context, instance *linodego.Inst
 	return nil
 }
 
-func (p *DefaultProvider) buildUserData(ctx context.Context, _ *v1alpha1.LinodeNodeClass) (string, error) {
+func (p *DefaultProvider) buildUserData(ctx context.Context, _ *v1alpha1.LinodeNodeClass, instName string) (string, error) {
 	// First figure out the cluster endpoint via the cluster-info configmap and the CA crt hash
 	clusterInfoConfigMap, err := p.kubeClient.CoreV1().ConfigMaps("kube-public").Get(ctx, "cluster-info", metav1.GetOptions{})
 	if err != nil {
@@ -268,12 +269,13 @@ write_files:
         kubeletExtraArgs:
           cloud-provider: external
           register-with-taints: "karpenter.sh/unregistered:NoExecute"
-        name: '{{ ds.meta_data.label }}'
+        name: %s
 runcmd:
-  - hostnamectl set-hostname '{{ ds.meta_data.label }}' && hostname -F /etc/hostname
+  - hostnamectl set-hostname %s && hostname -F /etc/hostname
+  - mkdir -p /etc/kubernetes/manifests
   - curl -fsSL https://github.com/linode/cluster-api-provider-linode/raw/dd76b1f979696ef22ce093d420cdbd0051a1d725/scripts/pre-kubeadminit.sh | bash -s %s
   - kubeadm join --config /run/kubeadm-join-config.yaml
-`, clusterEndpoint, caCertHash, tokenID, tokenSecret, k8sVersion.GitVersion)
+`, clusterEndpoint, caCertHash, tokenID, tokenSecret, instName, instName, k8sVersion.GitVersion)
 
 	return b64.StdEncoding.EncodeToString([]byte(bootstrapData)), nil
 }
