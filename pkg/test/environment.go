@@ -16,17 +16,31 @@ package test
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"time"
 
 	"github.com/patrickmn/go-cache"
 	"github.com/samber/lo"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/version"
+	discoveryfake "k8s.io/client-go/discovery/fake"
+	fakeK8s "k8s.io/client-go/kubernetes/fake"
+	clientcmdapiv1 "k8s.io/client-go/tools/clientcmd/api/v1"
 	clock "k8s.io/utils/clock/testing"
 	"k8s.io/utils/ptr"
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/karpenter/pkg/controllers/nodeoverlay"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
+	"sigs.k8s.io/yaml"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
@@ -36,7 +50,7 @@ import (
 )
 
 func init() {
-	coretest.SetDefaultNodeClassType(&v1.LinodeNodeClass{})
+	coretest.SetDefaultNodeClassType(&v1alpha1.LinodeNodeClass{})
 }
 
 type Environment struct {
@@ -67,7 +81,7 @@ type Environment struct {
 // NodeProvider returns the appropriate provider based on the mode in context.
 // For tests that need a specific provider, use InstanceProvider or LKENodeProvider directly.
 func (env *Environment) NodeProvider(ctx context.Context) instance.Provider {
-	if options.FromContext(ctx).Mode == "lke" {
+	if options.FromContext(ctx).Mode == options.ProvisionModeLKE {
 		return env.LKENodeProvider
 	}
 	return env.InstanceProvider
@@ -101,6 +115,14 @@ func NewEnvironment(ctx context.Context) *Environment {
 	// Instance type updates are hydrated asynchronously after this by controllers.
 	lo.Must0(instanceTypesProvider.UpdateInstanceTypes(ctx))
 	lo.Must0(instanceTypesProvider.UpdateInstanceTypeOfferings(ctx))
+	// Build dummy cluster-info ConfigMap
+	fakeClient := fakeK8s.NewClientset(fakeClusterInfoConfigMap("https://my-api-server:6443"))
+	fakeDiscovery := fakeClient.Discovery().(*discoveryfake.FakeDiscovery)
+	fakeDiscovery.FakedServerVersion = &version.Info{
+		Major:      "1",
+		Minor:      "34",
+		GitVersion: "v1.34.4",
+	}
 
 	instanceProvider := instance.NewDefaultProvider(
 		fake.DefaultRegion,
@@ -108,6 +130,8 @@ func NewEnvironment(ctx context.Context) *Environment {
 		linodeClient,
 		unavailableOfferingsCache,
 		instanceCache,
+		fakeClient,
+		fake.DefaultClusterID,
 	)
 
 	lkeNodeProvider := lke.NewDefaultProvider(
@@ -140,6 +164,53 @@ func NewEnvironment(ctx context.Context) *Environment {
 		InstanceTypesProvider: instanceTypesProvider,
 		InstanceProvider:      instanceProvider,
 		LKENodeProvider:       lkeNodeProvider,
+	}
+}
+
+// generateTestCACert creates a minimal self-signed CA cert and returns its PEM bytes.
+func generateTestCACert() []byte {
+	key := lo.Must(ecdsa.GenerateKey(elliptic.P256(), rand.Reader))
+
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "test-ca"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		IsCA:         true,
+		KeyUsage:     x509.KeyUsageCertSign,
+	}
+
+	certDER := lo.Must(x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key))
+
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+}
+
+func fakeClusterInfoConfigMap(server string) *v1.ConfigMap {
+
+	caPEM := generateTestCACert()
+
+	kubeConfigObj := clientcmdapiv1.Config{
+		Clusters: []clientcmdapiv1.NamedCluster{
+			{
+				Name: "local",
+				Cluster: clientcmdapiv1.Cluster{
+					Server:                   server,
+					CertificateAuthorityData: caPEM, // valid PEM, not base64 here
+				},
+			},
+		},
+	}
+
+	kubeConfigBytes := lo.Must(yaml.Marshal(kubeConfigObj))
+
+	return &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster-info",
+			Namespace: "kube-public",
+		},
+		Data: map[string]string{
+			"kubeconfig": string(kubeConfigBytes),
+		},
 	}
 }
 

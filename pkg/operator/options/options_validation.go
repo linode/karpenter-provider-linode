@@ -22,6 +22,11 @@ import (
 	"go.uber.org/multierr"
 )
 
+const (
+	ProvisionModeLKE      = "lke"
+	ProvisionModeInstance = "instance"
+)
+
 func (o *Options) Validate() error {
 	return multierr.Combine(
 		o.validateEndpoint(),
@@ -55,15 +60,12 @@ func (o *Options) validateRequiredFields() error {
 	if o.ClusterName == "" {
 		return fmt.Errorf("missing field, cluster-name")
 	}
-	if o.Mode == "instance" && o.ClusterRegion == "" {
-		return fmt.Errorf("missing field, cluster-region")
-	}
 	return nil
 }
 
 func (o *Options) validateMode() error {
-	if o.Mode != "lke" && o.Mode != "instance" {
-		return fmt.Errorf("invalid mode %q, must be either 'lke' or 'instance'", o.Mode)
+	if o.Mode != ProvisionModeLKE && o.Mode != ProvisionModeInstance {
+		return fmt.Errorf("invalid mode %q, must be either %s or %s", o.Mode, ProvisionModeLKE, ProvisionModeInstance)
 	}
 	return nil
 }

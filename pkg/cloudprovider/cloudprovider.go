@@ -102,7 +102,7 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	// Compute tags based on mode (LKE adds additional managed tag)
 	var tags map[string]string
 	switch options.FromContext(ctx).Mode {
-	case "lke":
+	case options.ProvisionModeLKE:
 		tags = utils.GetTagsForLKE(nodeClass, nodeClaim, options.FromContext(ctx).ClusterName)
 	default:
 		tags = utils.GetTags(nodeClass, nodeClaim, options.FromContext(ctx).ClusterName)

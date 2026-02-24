@@ -67,34 +67,33 @@ func NewOperator(ctx context.Context, op *operator.Operator, linodeClient sdk.Li
 	validationCache := cache.New(linodecache.ValidationTTL, linodecache.DefaultCleanupInterval)
 
 	opts := options.FromContext(ctx)
+	// Get cluster ID from the cluster name (label)
+	filter := linodego.Filter{}
+	filter.AddField(linodego.Eq, "label", opts.ClusterName)
+	filterJSON, err := filter.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	clusterList, err := linodeClient.ListLKEClusters(ctx, &linodego.ListOptions{
+		Filter: string(filterJSON),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(clusterList) != 1 {
+		return nil, fmt.Errorf("could not determine LKE cluster with name: %s", opts.ClusterName)
+	}
+
+	if opts.ClusterRegion == "" {
+		opts.ClusterRegion = clusterList[0].Region
+		log.FromContext(ctx).WithValues("region", opts.ClusterRegion).Info("discovered LKE cluster region")
+	}
 	var nodeProvider instance.Provider
 
 	// Initialize only the provider needed for the configured mode
 	switch opts.Mode {
-	case "lke":
+	case options.ProvisionModeLKE:
 		log.FromContext(ctx).Info("initializing in LKE mode")
-		// Get cluster ID from the cluster name (label)
-		filter := linodego.Filter{}
-		filter.AddField(linodego.Eq, "label", opts.ClusterName)
-		filterJSON, err := filter.MarshalJSON()
-		if err != nil {
-			return nil, err
-		}
-		clusterList, err := linodeClient.ListLKEClusters(ctx, &linodego.ListOptions{
-			Filter: string(filterJSON),
-		})
-		if err != nil {
-			return nil, err
-		}
-		if len(clusterList) != 1 {
-			return nil, fmt.Errorf("could not determine LKE cluster with name: %s", opts.ClusterName)
-		}
-
-		if opts.ClusterRegion == "" {
-			opts.ClusterRegion = clusterList[0].Region
-			log.FromContext(ctx).WithValues("region", opts.ClusterRegion).Info("discovered LKE cluster region")
-		}
-
 		nodeProvider = lke.NewDefaultProvider(
 			clusterList[0].ID,
 			linodego.LKEVersionTier(clusterList[0].Tier),
@@ -110,7 +109,7 @@ func NewOperator(ctx context.Context, op *operator.Operator, linodeClient sdk.Li
 				RetryDelay:             opts.LKERetryDelay,
 			},
 		)
-	case "instance":
+	case options.ProvisionModeInstance:
 		log.FromContext(ctx).Info("initializing in direct instance mode")
 		nodeProvider = instance.NewDefaultProvider(
 			opts.ClusterRegion,
@@ -118,6 +117,8 @@ func NewOperator(ctx context.Context, op *operator.Operator, linodeClient sdk.Li
 			linodeClient,
 			unavailableOfferingsCache,
 			cache.New(linodecache.DefaultTTL, linodecache.DefaultCleanupInterval),
+			op.KubernetesInterface,
+			clusterList[0].ID,
 		)
 	}
 

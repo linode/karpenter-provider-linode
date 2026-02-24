@@ -79,7 +79,7 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 
 	// Use appropriate tag function based on mode
 	var tags map[string]string
-	if options.FromContext(ctx).Mode == "lke" {
+	if options.FromContext(ctx).Mode == options.ProvisionModeLKE {
 		tags = utils.GetTagsForLKE(nodeClass, nodeClaim, options.FromContext(ctx).ClusterName)
 	} else {
 		tags = utils.GetTags(nodeClass, nodeClaim, options.FromContext(ctx).ClusterName)

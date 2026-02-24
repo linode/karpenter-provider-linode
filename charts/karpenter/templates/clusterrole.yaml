@@ -32,7 +32,13 @@ rules:
   - apiGroups: ["karpenter.k8s.linode"]
     resources: ["linodenodeclasses"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: [ "" ]
+    resources: [ "configmaps", "secrets" ]
+    verbs: [ "get", "list", "watch" ]
   # Write
   - apiGroups: ["karpenter.k8s.linode"]
     resources: ["linodenodeclasses", "linodenodeclasses/status"]
     verbs: ["patch", "update"]
+  - apiGroups: [ "" ]
+    resources: [ "secrets" ]
+    verbs: [ "create" ]

@@ -38,8 +38,10 @@ type LinodeAPI interface {
 
 	// LKE Cluster methods for LKE cluster management
 	ListLKEClusters(ctx context.Context, opts *linodego.ListOptions) ([]linodego.LKECluster, error)
-	// NodePool methods for LKE cluster management
+	UpdateLKEClusterControlPlaneACL(ctx context.Context, clusterID int, opts linodego.LKEClusterControlPlaneACLUpdateOptions) (*linodego.LKEClusterControlPlaneACLResponse, error)
+	GetLKEClusterControlPlaneACL(ctx context.Context, clusterID int) (*linodego.LKEClusterControlPlaneACLResponse, error)
 
+	// NodePool methods for LKE cluster management
 	CreateLKENodePool(ctx context.Context, clusterID int, opts linodego.LKENodePoolCreateOptions) (*linodego.LKENodePool, error)
 	ListLKENodePools(ctx context.Context, clusterID int, opts *linodego.ListOptions) ([]linodego.LKENodePool, error)
 	GetLKENodePool(ctx context.Context, clusterID, poolID int) (*linodego.LKENodePool, error)

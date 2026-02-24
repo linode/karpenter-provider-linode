@@ -106,10 +106,9 @@ var _ = Describe("GarbageCollection", func() {
 		instance = &linodego.Instance{
 			Status: linodego.InstanceRunning,
 			Tags: []string{
-				fmt.Sprintf("kubernetes.io/cluster/%s:owned", options.FromContext(ctx).ClusterName),
-				karpv1.NodePoolLabelKey + ":" + nodePool.Name,
-				v1.LabelNodeClass + ":" + nodeClass.Name,
-				v1.LKEClusterNameTagKey + ":" + options.FromContext(ctx).ClusterName,
+				fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePool.Name),
+				fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
+				fmt.Sprintf("lke%d", fake.DefaultClusterID),
 			},
 			Region: fake.DefaultRegion,
 			ID:     instanceID,
@@ -159,10 +158,9 @@ var _ = Describe("GarbageCollection", func() {
 				linodego.Instance{
 					Status: linodego.InstanceRunning,
 					Tags: []string{
-						fmt.Sprintf("kubernetes.io/cluster/%s:owned", options.FromContext(ctx).ClusterName),
-						karpv1.NodePoolLabelKey + ":default",
-						v1.LabelNodeClass + ":default",
-						v1.LKEClusterNameTagKey + ":" + options.FromContext(ctx).ClusterName,
+						fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, "default"),
+						fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
+						fmt.Sprintf("lke%d", fake.DefaultClusterID),
 					},
 					Region: fake.DefaultRegion,
 					// Launch time was 1m ago
@@ -198,7 +196,8 @@ var _ = Describe("GarbageCollection", func() {
 				linodego.Instance{
 					Status: linodego.InstanceRunning,
 					Tags: []string{
-						fmt.Sprintf("kubernetes.io/cluster/%s:owned", options.FromContext(ctx).ClusterName),
+						v1.LKEClusterNameTagKey + "=" + options.FromContext(ctx).ClusterName,
+						fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
 					},
 					Region: fake.DefaultRegion,
 					// Launch time was 1m ago
@@ -301,9 +300,8 @@ var _ = Describe("GarbageCollection", func() {
 				linodego.Instance{
 					Status: linodego.InstanceRunning,
 					Tags: []string{
-						fmt.Sprintf("kubernetes.io/cluster/%s:owned", options.FromContext(ctx).ClusterName),
-						karpv1.NodePoolLabelKey + ":default",
-						v1.LKEClusterNameTagKey + ":" + options.FromContext(ctx).ClusterName,
+						karpv1.NodePoolLabelKey + "=default",
+						v1.LKEClusterNameTagKey + "=" + options.FromContext(ctx).ClusterName,
 					},
 					Region: fake.DefaultRegion,
 					// Launch time was 1m ago

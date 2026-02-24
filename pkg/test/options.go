@@ -44,6 +44,6 @@ func Options(overrides ...OptionsFields) *options.Options {
 		ClusterEndpoint:         lo.FromPtrOr(opts.ClusterEndpoint, "https://test-cluster"),
 		ClusterRegion:           lo.FromPtrOr(opts.ClusterRegion, fake.DefaultRegion),
 		VMMemoryOverheadPercent: lo.FromPtrOr(opts.VMMemoryOverheadPercent, 0.075),
-		Mode:                    lo.FromPtrOr(opts.Mode, "lke"),
+		Mode:                    lo.FromPtrOr(opts.Mode, options.ProvisionModeLKE),
 	}
 }

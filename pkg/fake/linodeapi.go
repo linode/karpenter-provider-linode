@@ -160,6 +160,29 @@ type LinodeClient struct {
 	LinodeAPIBehavior
 }
 
+func (l *LinodeClient) UpdateLKEClusterControlPlaneACL(ctx context.Context, clusterID int, opts linodego.LKEClusterControlPlaneACLUpdateOptions) (*linodego.LKEClusterControlPlaneACLResponse, error) {
+	return &linodego.LKEClusterControlPlaneACLResponse{
+		ACL: linodego.LKEClusterControlPlaneACL{
+			Enabled:    false,
+			Addresses:  nil,
+			RevisionID: "",
+		},
+	}, nil
+}
+
+func (l *LinodeClient) GetLKEClusterControlPlaneACL(ctx context.Context, clusterID int) (*linodego.LKEClusterControlPlaneACLResponse, error) {
+	return &linodego.LKEClusterControlPlaneACLResponse{
+		ACL: linodego.LKEClusterControlPlaneACL{
+			Enabled: false,
+			Addresses: &linodego.LKEClusterControlPlaneACLAddresses{
+				IPv4: []string{"1.2.3.4"},
+				IPv6: nil,
+			},
+			RevisionID: "",
+		},
+	}, nil
+}
+
 func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.LinodeType, error) {
 	linodeType, err := l.GetTypeBehavior.Invoke(&typeID, func(typeID *string) (**linodego.LinodeType, error) {
 		// Find the type in defaultLinodeTypeList
