@@ -258,7 +258,7 @@ func (p *DefaultProvider) findOrCreatePool(ctx context.Context, nodeClass *v1alp
 		Count:  1,
 		Type:   instanceType,
 		Tags:   tagList,
-		Labels: nodeClass.Spec.Labels,
+		Labels: lkeLabelsFromNodeClaim(nodeClaim),
 		Taints: taints,
 	}
 	if nodeClass.Spec.FirewallID != nil {
@@ -572,6 +572,17 @@ func convertToLkeTaints(taints []corev1.Taint) []linodego.LKENodePoolTaint {
 		})
 	}
 	return res
+}
+
+func lkeLabelsFromNodeClaim(nodeClaim *karpv1.NodeClaim) linodego.LKENodePoolLabels {
+	if len(nodeClaim.Labels) == 0 {
+		return nil
+	}
+	labels := make(linodego.LKENodePoolLabels, len(nodeClaim.Labels))
+	for key, value := range nodeClaim.Labels {
+		labels[key] = value
+	}
+	return labels
 }
 
 func (p *DefaultProvider) cacheNode(n *instance.Instance) {

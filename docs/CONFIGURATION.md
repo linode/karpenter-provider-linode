@@ -44,7 +44,6 @@ The `LinodeNodeClass` allows you to configure specific settings for the nodes ma
 |-------|------|-----------------|-------------|
 | `tags` | `[]string` | **All** | List of tags to apply to the Instance or Node Pool. |
 | `firewallID` | `int` | **All** | The ID of the Cloud Firewall to attach. |
-| `labels` | `map[string]string`| **LKE** | Labels to apply specifically to the **LKE Node Pool** infrastructure. |
 | `lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for the node (e.g., "1.29"). This is only available for LKE-E |
 | `lkeUpdateStrategy` | `string` | **LKE** | Strategy for pool updates: `rolling_update` or `on_recycle`. This is only available for LKE-E |
 | `image` | `string` | **Instance** | The Image ID to deploy (default: `linode/ubuntu22.04`). |
@@ -62,7 +61,7 @@ It is important to distinguish between Karpenter configuration and Linode-specif
 *   **Taints**: Taints are defined in the **Karpenter `NodePool`** resource (`spec.template.spec.taints`), *not* in the `LinodeNodeClass`.
     *   **LKE Mode**: Taints are passed to the LKE Node Pool configuration and applied to nodes by LKE.
 *   **Kubernetes Labels**: Standard scheduling labels are defined in the **Karpenter `NodePool`** (`spec.template.metadata.labels`). Karpenter ensures these are applied to the Node object.
-*   **LKE Labels**: The `labels` field in `LinodeNodeClass` is specific to **LKE Node Pools** infrastructure. While they often propagate to Kubernetes nodes via the CCM, this field is intended for LKE-level organization.
+*   **LKE Labels**: LKE Node Pool labels are derived from the labels resolved onto the NodeClaim (originating from NodePool template metadata labels).
 
 ### Example: LKE Mode
 

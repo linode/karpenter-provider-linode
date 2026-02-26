@@ -447,12 +447,6 @@ spec:
                     evictionSoft
                   rule: has(self.evictionSoftGracePeriod) ? self.evictionSoftGracePeriod.all(e,
                     (e in self.evictionSoft)):true
-              labels:
-                additionalProperties:
-                  type: string
-                description: labels is a map of Kubernetes node labels to apply to
-                  the Node.
-                type: object
               lkeK8sVersion:
                 description: |-
                   lkeK8sVersion is the Kubernetes version for LKE node pools.

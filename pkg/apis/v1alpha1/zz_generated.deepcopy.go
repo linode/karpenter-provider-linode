@@ -441,13 +441,6 @@ func (in *LinodeNodeClassSpec) DeepCopyInto(out *LinodeNodeClassSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	if in.Labels != nil {
-		in, out := &in.Labels, &out.Labels
-		*out = make(linodego.LKENodePoolLabels, len(*in))
-		for key, val := range *in {
-			(*out)[key] = val
-		}
-	}
 	if in.FirewallID != nil {
 		in, out := &in.FirewallID, &out.FirewallID
 		*out = new(int)
