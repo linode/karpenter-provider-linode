@@ -160,7 +160,7 @@ func (p *DefaultProvider) resolveCreateInstanceType(ctx context.Context, instanc
 
 func (p *DefaultProvider) lookupExistingInstance(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*instance.Instance, error) {
 	logger := log.FromContext(ctx)
-	nodeClaimTag := fmt.Sprintf("%s=%s", v1alpha1.NodeClaimTagKey, nodeClaim.Name)
+	nodeClaimTag := utils.NodeClaimTag(nodeClaim.Name)
 	existingInstance, err := utils.LookupInstanceByTag(ctx, p.client, nodeClaimTag)
 	if err == nil && existingInstance != nil {
 		logger.V(1).Info("found existing instance for nodeclaim", "instanceID", existingInstance.ID, "nodeclaim", nodeClaim.Name)
@@ -367,10 +367,9 @@ func (p *DefaultProvider) findClaimableInstanceEnterprise(ctx context.Context, p
 }
 
 func (p *DefaultProvider) claimInstance(ctx context.Context, linodeInstance *linodego.Instance, nodeClaim *karpv1.NodeClaim, pool *linodego.LKENodePool) (*linodego.Instance, error) {
-	instanceTags := utils.GetInstanceTagsForLKE(nodeClaim.Name)
 	newTags := append([]string{}, linodeInstance.Tags...)
 	newTags = append(newTags, pool.Tags...)
-	newTags = append(newTags, utils.MapToTagList(instanceTags)...)
+	newTags = append(newTags, utils.NodeClaimTag(nodeClaim.Name))
 	newTags = utils.DedupeTags(newTags)
 
 	_, err := p.client.UpdateInstance(ctx, linodeInstance.ID, linodego.InstanceUpdateOptions{
@@ -385,7 +384,7 @@ func (p *DefaultProvider) claimInstance(ctx context.Context, linodeInstance *lin
 
 func (p *DefaultProvider) verifyTagsApplied(ctx context.Context, instanceID int, nodeClaimName string) (*linodego.Instance, error) {
 	deadline := time.Now().Add(p.config.TagVerificationTimeout)
-	expectedTag := fmt.Sprintf("%s=%s", v1alpha1.NodeClaimTagKey, nodeClaimName)
+	expectedTag := utils.NodeClaimTag(nodeClaimName)
 
 	for time.Now().Before(deadline) {
 		select {

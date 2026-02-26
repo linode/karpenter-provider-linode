@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net/http"
 	"os"
@@ -45,6 +46,8 @@ var (
 	ErrInstanceNotFound = errors.New("instance not found")
 	instanceIDRegex     = regexp.MustCompile(`(?P<Provider>.*)://(?P<InstanceID>.*)`)
 )
+
+const maxLinodeTagLength = 50
 
 // ParseInstanceID parses the provider ID stored on the node to get the instance ID
 // associated with a node
@@ -124,8 +127,33 @@ func GetTagsForLKE(nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeCl
 
 func GetInstanceTagsForLKE(nodeClaimName string) map[string]string {
 	return map[string]string{
-		v1alpha1.NodeClaimTagKey: nodeClaimName,
+		v1alpha1.NodeClaimTagKey: NormalizeNodeClaimTagValue(nodeClaimName),
 	}
+}
+
+func NodeClaimTag(nodeClaimName string) string {
+	return fmt.Sprintf("%s=%s", v1alpha1.NodeClaimTagKey, NormalizeNodeClaimTagValue(nodeClaimName))
+}
+
+func NormalizeNodeClaimTagValue(nodeClaimName string) string {
+	maxValueLength := maxLinodeTagLength - len(v1alpha1.NodeClaimTagKey) - 1 // account for '='
+	if maxValueLength <= 0 {
+		return ""
+	}
+	if len(nodeClaimName) <= maxValueLength {
+		return nodeClaimName
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(nodeClaimName))
+	hash := fmt.Sprintf("%08x", h.Sum32())
+	prefixLength := maxValueLength - len(hash) - 1
+	if prefixLength <= 0 {
+		if len(hash) > maxValueLength {
+			return hash[:maxValueLength]
+		}
+		return hash
+	}
+	return fmt.Sprintf("%s-%s", nodeClaimName[:prefixLength], hash)
 }
 
 func GetNodeClassHash(nodeClass *v1alpha1.LinodeNodeClass) string {
