@@ -1,0 +1,136 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: consolidation-empty-node-scale-down
+  labels:
+    all:
+    pr:
+    nightly:
+    category.consolidation:
+spec:
+  steps:
+    - name: Make sure there are no lingering NodeClaims
+      try:
+      - script:
+          content: kubectl get nodeclaim -o json
+          check:
+            ($error): ~
+            (json_parse($stdout).items | length(@)): 0
+
+    - name: Create consolidation NodePool
+      try:
+      - apply:
+          file: nodepool-consolidation.yaml
+
+    - name: Empty-node consolidation after scale down
+      try:
+      - apply:
+          file: inflate-consolidation.yaml
+
+    - name: Wait for scale-up deployment to be ready
+      try:
+      - assert:
+          timeout: 10m
+          resource:
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: inflate
+              namespace: default
+            status:
+              replicas: 5
+              availableReplicas: 5
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - script:
+          content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
+
+    - name: Check for two g6-standard-4 NodeClaims to be ready
+      try:
+      - script:
+          timeout: 15m
+          content: |
+            set -euo pipefail
+            count=$(kubectl get nodeclaim \
+              -l karpenter.sh/nodepool=consolidation-empty,node.kubernetes.io/instance-type=g6-standard-4 \
+              -o name | wc -l | tr -d ' ')
+            if [ "$count" -lt 2 ]; then
+              echo "Expected at least 2 g6-standard-4 NodeClaims, got $count"
+              exit 1
+            fi
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - script:
+          content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
+
+    - name: Scale down to create underutilized nodes
+      try:
+      - script:
+          content: |
+            set -euo pipefail
+            kubectl -n default scale deployment inflate --replicas 1
+
+    - name: Check for g6-standard-2 NodeClaim to be ready
+      try:
+      - assert:
+          timeout: 15m
+          resource:
+            apiVersion: karpenter.sh/v1
+            kind: NodeClaim
+            metadata:
+              labels:
+                node.kubernetes.io/instance-type: g6-standard-2
+            status:
+              (conditions[?type == 'Ready']):
+              - status: 'True'
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - script:
+          content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
+
+    - name: Scale inflate deployment to zero
+      try:
+      - script:
+          content: |
+            set -euo pipefail
+            kubectl -n default scale deployment inflate --replicas 0
+
+    - name: Wait for NodeClaims to be deleted
+      try:
+      - wait:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+          timeout: 10m
+          selector: karpenter.sh/nodepool=consolidation-empty
+          for:
+            deletion: {}
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - script:
+          content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100

@@ -1,0 +1,105 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: drift-nodepool-labels-taints
+  labels:
+    all:
+    nightly:
+    category.drift:
+spec:
+  steps:
+    - name: Make sure there are no lingering NodeClaims
+      try:
+      - script:
+          content: kubectl get nodeclaim -o json
+          check:
+            ($error): ~
+            (json_parse($stdout).items | length(@)): 0
+
+    - name: Create drift NodePool
+      try:
+      - apply:
+          file: nodepool-drift.yaml
+
+    - name: Create inflate deployment
+      try:
+      - apply:
+          file: inflate-drift.yaml
+
+    - name: Wait for initial scheduling
+      try:
+      - assert:
+          timeout: 10m
+          resource:
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: inflate
+              namespace: default
+            status:
+              replicas: 1
+              availableReplicas: 1
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - script:
+          content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
+
+    - name: Drift on NodePool template labels/taints change
+      try:
+      - script:
+          timeout: 15m
+          content: |
+            set -euo pipefail
+            marker=$(date +%s)
+            kubectl patch nodepool drift-labels-taints --type merge -p "{\"spec\":{\"template\":{\"metadata\":{\"labels\":{\"e2e.linode.dev/drift-marker\":\"$marker\"}},\"spec\":{\"taints\":[{\"key\":\"e2e.linode.dev/drift\",\"value\":\"$marker\",\"effect\":\"NoSchedule\"}]}}}}"
+            if kubectl wait --for=condition=Drifted nodeclaim -l karpenter.sh/nodepool=drift-labels-taints --timeout=5m; then
+              echo "NodeClaim marked drifted"
+              exit 0
+            fi
+            echo "Timed out waiting for NodeClaim to be marked drifted"
+            exit 1
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - script:
+          content: |
+            kubectl get nodepool drift-labels-taints -o yaml
+            kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
+
+    - name: Scale inflate deployment to zero
+      try:
+      - script:
+          content: kubectl -n default scale deployment inflate --replicas 0
+
+    - name: Wait for NodeClaims to be deleted
+      try:
+      - wait:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+          timeout: 10m
+          selector: karpenter.sh/nodepool=drift-labels-taints
+          for:
+            deletion: {}
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - script:
+          content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100

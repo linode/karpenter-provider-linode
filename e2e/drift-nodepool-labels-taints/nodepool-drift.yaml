@@ -1,0 +1,19 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: drift-labels-taints
+spec:
+  template:
+    metadata:
+      labels:
+        e2e.linode.dev/drift-labels-taints: "true"
+    spec:
+      requirements:
+        - key: e2e.linode.dev/drift-labels-taints
+          operator: Exists
+      nodeClassRef:
+        group: karpenter.k8s.linode
+        kind: LinodeNodeClass
+        name: default
+  limits:
+    cpu: 1000

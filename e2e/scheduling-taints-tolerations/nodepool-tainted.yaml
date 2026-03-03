@@ -1,0 +1,23 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: tainted
+spec:
+  template:
+    metadata:
+      labels:
+        e2e.linode.dev/dedicated: tainted
+    spec:
+      requirements:
+        - key: e2e.linode.dev/dedicated
+          operator: Exists
+      taints:
+        - key: e2e.linode.dev/dedicated
+          value: tainted
+          effect: NoSchedule
+      nodeClassRef:
+        group: karpenter.k8s.linode
+        kind: LinodeNodeClass
+        name: default
+  limits:
+    cpu: 1000

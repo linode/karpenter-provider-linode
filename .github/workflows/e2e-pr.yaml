@@ -1,4 +1,4 @@
-name: e2e
+name: e2e-pr
 
 on:
   workflow_dispatch:
@@ -50,6 +50,7 @@ jobs:
       LINODE_REGION: us-sea
       CLUSTER_NAME: karpl-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || format('manual-{0}', github.run_id) }}
       KUBECONFIG: ${{ github.event.pull_request.number && format('pr-{0}-kubeconfig', github.event.pull_request.number) || format('manual-{0}-kubeconfig', github.run_id) }}
+      CHAINSAW_SELECTOR: pr
 
     steps:
       - name: Checkout code

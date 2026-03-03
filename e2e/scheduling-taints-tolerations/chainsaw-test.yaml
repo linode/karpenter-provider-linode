@@ -3,12 +3,12 @@ apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
   creationTimestamp: null
-  name: minimal-lke-standard
+  name: scheduling-taints-tolerations
   labels:
     all:
     pr:
     nightly:
-    category.baseline:
+    category.scheduling:
 spec:
   steps:
     - name: Make sure there are no lingering NodeClaims
@@ -19,10 +19,44 @@ spec:
             ($error): ~
             (json_parse($stdout).items | length(@)): 0
 
-    - name: Create 5-replica inflate deployment (can't schedule)
+    - name: Create tainted NodePool
       try:
       - apply:
-          file: inflate.yaml
+          file: nodepool-tainted.yaml
+
+    - name: Create tolerated and non-tolerated inflate workloads
+      try:
+      - apply:
+          file: inflate-tainted.yaml
+      - apply:
+          file: inflate-no-toleration.yaml
+      catch:
+      - script:
+          content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+
+    - name: Wait for initial scheduling
+      try:
+      - assert:
+          timeout: 10m
+          resource:
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: inflate
+              namespace: default
+            status:
+              replicas: 1
+              availableReplicas: 1
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - script:
+          content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
 
     - name: Wait for NodeClaim with the correct plan to be ready
       try:
@@ -33,7 +67,7 @@ spec:
             kind: NodeClaim
             metadata:
               labels:
-                node.kubernetes.io/instance-type: g6-standard-6
+                node.kubernetes.io/instance-type: g6-standard-2
             status:
               (conditions[?type == 'Ready']):
               - status: 'True'
@@ -48,99 +82,45 @@ spec:
           selector: app.kubernetes.io/name=karpenter
           tail: 100
 
-    - name: Check inflate pods are all scheduled
-      try:
-      - assert:
-          resource:
-            apiVersion: apps/v1
-            kind: Deployment
-            metadata:
-              name: inflate
-              namespace: default
-            status:
-              replicas: 5
-              availableReplicas: 5
-
-    - name: Scale down inflate deployment to 2
+    - name: Assert toleration behavior
       try:
       - script:
           content: |
-            kubectl -n default scale deployment inflate --replicas 2
-          check:
-            ($error): ~
-
-    - name: Wait for NodeClaim with the correct plan to be ready
-      try:
-      - assert:
-          timeout: 10m
-          resource:
-            apiVersion: karpenter.sh/v1
-            kind: NodeClaim
-            metadata:
-              labels:
-                node.kubernetes.io/instance-type: g6-standard-4
-            status:
-              (conditions[?type == 'Ready']):
-              - status: 'True'
+            set -euo pipefail
+            inflate_phase=$(kubectl -n default get pod -l app=inflate -o jsonpath='{.items[0].status.phase}')
+            no_toleration_phase=$(kubectl -n default get pod -l app=inflate-no-toleration -o jsonpath='{.items[0].status.phase}')
+            [ "$inflate_phase" = "Running" ]
+            [ "$no_toleration_phase" = "Pending" ]
       catch:
-      - describe:
-          apiVersion: karpenter.sh/v1
-          kind: NodeClaim
       - script:
-          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+          content: |
+            kubectl -n default describe deployment inflate
+            kubectl -n default describe deployment inflate-no-toleration
+            kubectl -n default get pod -l app=inflate -o wide
+            kubectl -n default get pod -l app=inflate-no-toleration -o wide
+            kubectl get node -o wide
+            kubectl get nodepool tainted -o yaml
+            kubectl get nodeclaims -A -o wide
+            kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
           tail: 100
 
-    - name: Check inflate pods are all scheduled
-      try:
-      - assert:
-          resource:
-            apiVersion: apps/v1
-            kind: Deployment
-            metadata:
-              name: inflate
-              namespace: default
-            status:
-              replicas: 2
-              availableReplicas: 2
-
-    - name: Wait for old NodeClaim to be deleted
-      try:
-      - wait:
-          apiVersion: karpenter.sh/v1
-          kind: NodeClaim
-          timeout: 10m
-          selector: node.kubernetes.io/instance-type=g6-standard-6
-          for:
-            deletion: {}
-      catch:
-      - describe:
-          apiVersion: karpenter.sh/v1
-          kind: NodeClaim
-      - script:
-          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
-      - podLogs:
-          namespace: kube-system
-          selector: app.kubernetes.io/name=karpenter
-          tail: 100
-
-    - name: Scale inflate deployment to zero
+    - name: Scale the deployments to zero
       try:
       - script:
           content: |
             kubectl scale -n default deployment inflate --replicas 0
-          check:
-            ($error): ~
-
-    - name: Wait for NodeClaim to be deleted
+            kubectl scale -n default deployment inflate-no-toleration --replicas 0
+    
+    - name: Wait for NodeClaims to be deleted
       try:
       - wait:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
           timeout: 10m
-          selector: node.kubernetes.io/instance-type=g6-standard-4
+          selector: karpenter.sh/nodepool=tainted
           for:
             deletion: {}
       catch:
@@ -148,7 +128,7 @@ spec:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
       - script:
-          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+          content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter

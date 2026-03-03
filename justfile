@@ -6,6 +6,7 @@ LINODE_CLI_API_HOST := env('LINODE_CLI_API_HOST', "api.linode.com")
 LINODE_TYPE := env('LINODE_TYPE', 'g6-standard-1')
 TILT_MODE := env('TILT_MODE', 'ci')
 CHAINSAW_FLAGS := env('CHAINSAW_FLAGS', '--config .chainsaw.yaml')
+CHAINSAW_SELECTOR := env('CHAINSAW_SELECTOR', 'all')
 CLUSTER_ID := env("CLUSTER_ID", "")
 CLUSTER_TIER := env("CLUSTER_TIER", "standard")
 CLUSTER_ACL_FLAGS := env("CLUSTER_ACL_FLAGS", '--acl.enabled true --acl.addresses.ipv4=$(curl --silent ipv4.icanhazip.com)')
@@ -68,9 +69,62 @@ cleanup-tilt-lke:
 # Configures the vanilla LKE cluster with KARPL code
 configure-lke-cluster: init-lke-cluster run-tilt-lke
 
+# Collect useful diagnostics for E2E failures
+collect-e2e-diagnostics:
+	#!/usr/bin/env bash
+	set +e
+	echo "=== NodeClaims ==="
+	KUBECONFIG={{ KUBECONFIG }} kubectl get nodeclaims -A -o wide
+	echo "=== Nodes ==="
+	KUBECONFIG={{ KUBECONFIG }} kubectl get nodes -o wide
+	echo "=== Events (last 50) ==="
+	KUBECONFIG={{ KUBECONFIG }} kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+	echo "=== Karpenter logs ==="
+	KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system logs -l app.kubernetes.io/name=karpenter --tail=100
+
+# Cleanup common test leftovers and enforce a clean NodeClaim starting point
+pre-e2e-cleanup-and-sanity:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	KUBECONFIG={{ KUBECONFIG }} kubectl -n default delete deployment inflate scheduling-no-toleration --ignore-not-found=true
+	KUBECONFIG={{ KUBECONFIG }} kubectl -n default delete pod scheduling-label-selector scheduling-no-toleration scheduling-with-toleration --ignore-not-found=true
+	KUBECONFIG={{ KUBECONFIG }} kubectl delete nodepool selector tainted --ignore-not-found=true
+	KUBECONFIG={{ KUBECONFIG }} kubectl delete linodenodeclass tainted --ignore-not-found=true
+	KUBECONFIG={{ KUBECONFIG }} kubectl delete nodeclaims --all --ignore-not-found=true
+	for _ in $(seq 1 10); do
+		count=$(KUBECONFIG={{ KUBECONFIG }} kubectl get nodeclaims -o jsonpath='{.items[*].metadata.name}' | wc -w | tr -d ' ')
+		if [ "$count" = "0" ]; then
+			echo "NodeClaims are clean"
+			exit 0
+		fi
+		echo "Waiting for NodeClaims to be deleted (remaining: $count)"
+		sleep 5
+	done
+	echo "Timed out waiting for NodeClaims to be deleted"
+	just collect-e2e-diagnostics
+	exit 1
+
+# Restart Karpenter so reused clusters pick up the latest image before tests
+restart-karpenter-before-e2e:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	deployment_name=$(KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system get deployment -l app.kubernetes.io/name=karpenter -o jsonpath='{.items[0].metadata.name}')
+	if [ -z "$deployment_name" ]; then
+		echo "Unable to locate Karpenter deployment in kube-system"
+		just collect-e2e-diagnostics
+		exit 1
+	fi
+	echo "Restarting deployment/$deployment_name in kube-system"
+	KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system rollout restart deployment/"$deployment_name"
+	if ! KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system rollout status deployment/"$deployment_name" --timeout=5m; then
+		echo "Karpenter rollout did not become healthy"
+		just collect-e2e-diagnostics
+		exit 1
+	fi
+
 # Run chainsaw tests on an existing LKE cluster
 run-e2e:
-	KUBECONFIG={{ KUBECONFIG }} chainsaw test e2e {{ CHAINSAW_FLAGS }}
+	KUBECONFIG={{ KUBECONFIG }} chainsaw test e2e --selector {{ CHAINSAW_SELECTOR }} {{ CHAINSAW_FLAGS }}
 
 # Set up and run e2e tests
-setup-and-test-e2e: create-lke-cluster configure-lke-cluster run-e2e
+setup-and-test-e2e: create-lke-cluster configure-lke-cluster pre-e2e-cleanup-and-sanity restart-karpenter-before-e2e run-e2e

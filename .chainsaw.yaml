@@ -6,4 +6,4 @@ spec:
   testFile: chainsaw-test.yaml
   skipDelete: false
   failFast: true
-  parallel: 2
+  parallel: 1

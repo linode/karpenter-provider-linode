@@ -1,0 +1,22 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: consolidation-empty
+spec:
+  template:
+    metadata:
+      labels:
+        e2e.linode.dev/consolidation-empty: "true"
+    spec:
+      requirements:
+        - key: e2e.linode.dev/consolidation-empty
+          operator: Exists
+        - key: karpenter.k8s.linode/instance-memory
+          operator: Lt
+          values: ["8193"]
+      nodeClassRef:
+        group: karpenter.k8s.linode
+        kind: LinodeNodeClass
+        name: default
+  limits:
+    cpu: 1000
