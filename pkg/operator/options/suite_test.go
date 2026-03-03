@@ -41,6 +41,7 @@ var linodeEnv *test.Environment
 var stop context.CancelFunc
 
 func TestAPIs(t *testing.T) {
+	t.Parallel()
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Options")
@@ -156,7 +157,7 @@ var _ = Describe("Options", func() {
 	})
 })
 
-func expectOptionsEqual(optsA *options.Options, optsB *options.Options) {
+func expectOptionsEqual(optsA, optsB *options.Options) {
 	GinkgoHelper()
 	Expect(optsA.ClusterName).To(Equal(optsB.ClusterName))
 	Expect(optsA.ClusterEndpoint).To(Equal(optsB.ClusterEndpoint))

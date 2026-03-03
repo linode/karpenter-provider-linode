@@ -26,15 +26,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/samber/lo"
-
 	"github.com/awslabs/operatorpkg/serrors"
+	"github.com/linode/linodego"
+	"github.com/samber/lo"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
-
-	"github.com/linode/linodego"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
@@ -196,7 +194,7 @@ func DedupeTags(tags []string) []string {
 	return uniqueTags
 }
 
-func splitTag(tag string) (string, string, bool) {
+func splitTag(tag string) (key, value string, ok bool) {
 	index := strings.IndexRune(tag, '=')
 	if index <= 0 || index == len(tag)-1 {
 		return "", "", false

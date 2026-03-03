@@ -22,19 +22,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/linode/linodego"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/ptr"
-	"sigs.k8s.io/karpenter/pkg/test/v1alpha1"
-
 	"github.com/awslabs/operatorpkg/object"
+	"github.com/linode/linodego"
 	"github.com/samber/lo"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	karpcloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
+	"sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
@@ -58,6 +57,7 @@ var garbageCollectionController *garbagecollection.Controller
 var cloudProvider *cloudprovider.CloudProvider
 
 func TestAPIs(t *testing.T) {
+	t.Parallel()
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "GarbageCollection")

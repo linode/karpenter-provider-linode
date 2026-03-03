@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/awslabs/operatorpkg/reasonable"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/klog/v2"
@@ -33,8 +34,6 @@ import (
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/operator/injection"
 	"sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
-
-	"github.com/awslabs/operatorpkg/reasonable"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"

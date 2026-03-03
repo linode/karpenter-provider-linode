@@ -51,6 +51,7 @@ var controller *nodeclass.Controller
 var cloudProvider *cloudprovider.CloudProvider
 
 func TestAPIs(t *testing.T) {
+	t.Parallel()
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "LinodeNodeClass")

@@ -75,9 +75,6 @@ func (env *Environment) NodeProvider(ctx context.Context) instance.Provider {
 
 func NewEnvironment(ctx context.Context) *Environment {
 	// Mock
-	clock := &clock.FakeClock{}
-	store := nodeoverlay.NewInstanceTypeStore()
-
 	linodeClient := fake.NewLinodeClient()
 
 	// cache
@@ -126,9 +123,9 @@ func NewEnvironment(ctx context.Context) *Environment {
 	)
 
 	return &Environment{
-		Clock:             clock,
+		Clock:             &clock.FakeClock{},
 		EventRecorder:     eventRecorder,
-		InstanceTypeStore: store,
+		InstanceTypeStore: nodeoverlay.NewInstanceTypeStore(),
 
 		LinodeAPI: linodeClient,
 

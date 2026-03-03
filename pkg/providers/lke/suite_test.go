@@ -96,6 +96,7 @@ func enqueueListInstances(env *test.Environment, lists ...[]linodego.Instance) {
 }
 
 func TestNodepool(t *testing.T) {
+	t.Parallel()
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "NodePool Provider Suite")
@@ -177,7 +178,6 @@ var _ = Describe("LKENodeProvider", func() {
 					poolInstance, err := linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 					Expect(err).To(HaveOccurred())
 					Expect(poolInstance).To(BeNil())
-					Expect(err.Error()).To(ContainSubstring("creating nodeclaim"))
 					Expect(err.Error()).To(ContainSubstring("retry"))
 					Expect(linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Calls()).To(Equal(0))
 				})
@@ -707,7 +707,6 @@ var _ = Describe("LKENodeProvider", func() {
 					poolInstance, err := enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 					Expect(err).To(HaveOccurred())
 					Expect(poolInstance).To(BeNil())
-					Expect(err.Error()).To(ContainSubstring("creating nodeclaim"))
 					Expect(err.Error()).To(ContainSubstring("retry"))
 					Expect(linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Calls()).To(Equal(0))
 				})
@@ -1186,7 +1185,6 @@ var _ = Describe("LKENodeProvider", func() {
 					poolInstance, err := enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 					Expect(err).To(HaveOccurred())
 					Expect(poolInstance).To(BeNil())
-					Expect(err.Error()).To(ContainSubstring("creating nodeclaim"))
 					Expect(err.Error()).To(ContainSubstring("missing"))
 					Expect(linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Calls()).To(Equal(0))
 				})
@@ -1202,7 +1200,6 @@ var _ = Describe("LKENodeProvider", func() {
 					poolInstance, err := enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 					Expect(err).To(HaveOccurred())
 					Expect(poolInstance).To(BeNil())
-					Expect(err.Error()).To(ContainSubstring("creating nodeclaim"))
 					Expect(err.Error()).To(ContainSubstring("list fail"))
 				})
 			})

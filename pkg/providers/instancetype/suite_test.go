@@ -57,6 +57,7 @@ var cluster *state.Cluster
 var cloudProvider *cloudprovider.CloudProvider
 
 func TestLinode(t *testing.T) {
+	t.Parallel()
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "InstanceTypeProvider")
@@ -180,7 +181,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 			It("should use defaults when no kubelet is specified", func() {
 				nodeClass.Spec.Kubelet = &v1.KubeletConfiguration{}
 				it := instancetype.NewInstanceType(ctx,
-					info,
+					&info,
 					fake.DefaultRegion,
 					nodeClass.Spec.Kubelet.MaxPods,
 					nodeClass.Spec.Kubelet.PodsPerCore,
@@ -202,7 +203,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 					},
 				}
 				it := instancetype.NewInstanceType(ctx,
-					info,
+					&info,
 					fake.DefaultRegion,
 					nodeClass.Spec.Kubelet.MaxPods,
 					nodeClass.Spec.Kubelet.PodsPerCore,

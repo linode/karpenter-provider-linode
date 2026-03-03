@@ -28,6 +28,13 @@ import (
 	"sigs.k8s.io/karpenter/pkg/utils/atomic"
 )
 
+const (
+	DefaultRegion      = "us-east"
+	DefaultClusterID   = 12345
+	DefaultClusterName = "test-cluster"
+	DefaultClusterTier = linodego.LKEVersionStandard
+)
+
 var (
 	// TODO: get this list from a static file
 	defaultLinodeTypeList = []linodego.LinodeType{
@@ -231,6 +238,7 @@ func (l *LinodeClient) Reset() {
 	l.UpdateInstanceBehavior.Reset()
 }
 
+//nolint:gocritic // can't change signature to take a pointer receiver for opts since it needs to satisfy the linodego interface
 func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceCreateOptions) (*linodego.Instance, error) {
 	instance, err := l.CreateInstanceBehavior.Invoke(&opts, func(opts *linodego.InstanceCreateOptions) (**linodego.Instance, error) {
 		var icedPools []CapacityPool
@@ -278,7 +286,7 @@ func (l *LinodeClient) ListInstances(_ context.Context, opts *linodego.ListOptio
 
 		l.Instances.Range(func(k interface{}, v interface{}) bool {
 			inst := v.(linodego.Instance)
-			if !instanceMatchesTags(inst, requiredTags) {
+			if !instanceMatchesTags(&inst, requiredTags) {
 				return true
 			}
 			instances = append(instances, inst)
@@ -340,7 +348,7 @@ func extractTagsFromFilter(opts *linodego.ListOptions) []tagFilter {
 // instanceMatchesTags applies the tag filters returned by extractTagsFromFilter.
 // All filters must match (logical AND). For exact filters, a tag must equal the filter value.
 // For contains filters, at least one tag must contain the filter value.
-func instanceMatchesTags(inst linodego.Instance, filters []tagFilter) bool {
+func instanceMatchesTags(inst *linodego.Instance, filters []tagFilter) bool {
 	for _, filter := range filters {
 		found := false
 		for _, instTag := range inst.Tags {
@@ -366,11 +374,13 @@ func instanceMatchesTags(inst linodego.Instance, filters []tagFilter) bool {
 func (l *LinodeClient) DeleteInstance(_ context.Context, linodeID int) error {
 	_, err := l.DeleteInstanceBehavior.Invoke(&linodeID, func(linodeID *int) (*error, error) {
 		l.Instances.LoadAndDelete(*linodeID)
+		//nolint:nilnil // this is intentional
 		return nil, nil
 	})
 	return err
 }
 
+//nolint:gocritic // can't change signature to take a pointer receiver for opts since it needs to satisfy the linodego interface
 func (l *LinodeClient) CreateTag(_ context.Context, opts linodego.TagCreateOptions) (*linodego.Tag, error) {
 	tag, err := l.CreateTagsBehavior.Invoke(&opts, func(opts *linodego.TagCreateOptions) (*linodego.Tag, error) {
 		linodeIDs := opts.Linodes
@@ -400,6 +410,7 @@ func (l *LinodeClient) ListTypes(_ context.Context, _ *linodego.ListOptions) ([]
 	return *l.ListTypesOutput.Clone(), nil
 }
 
+//nolint:gocritic // can't change signature to take a pointer receiver for opts since it needs to satisfy the linodego interface
 func (l *LinodeClient) CreateLKENodePool(_ context.Context, clusterID int, opts linodego.LKENodePoolCreateOptions) (*linodego.LKENodePool, error) {
 	params := struct {
 		ClusterID int
@@ -550,7 +561,7 @@ func (l *LinodeClient) GetLKENodePool(_ context.Context, clusterID, poolID int) 
 	return *pool, err
 }
 
-// nolint:gocyclo // fix this later
+//nolint:gocognit,cyclop // fix this later
 func (l *LinodeClient) UpdateLKENodePool(_ context.Context, clusterID, poolID int, opts linodego.LKENodePoolUpdateOptions) (*linodego.LKENodePool, error) {
 	params := struct {
 		ClusterID int
@@ -710,6 +721,7 @@ func (l *LinodeClient) DeleteLKENodePool(_ context.Context, clusterID, poolID in
 		}
 		l.NodePools.Delete(key)
 
+		//nolint:nilnil // this is intentional
 		return nil, nil
 	})
 
@@ -793,13 +805,14 @@ func (l *LinodeClient) DeleteLKENodePoolNode(_ context.Context, clusterID int, n
 			}
 
 			for i, node := range pool.Linodes {
-				if node.ID == params.NodeID {
-					foundPoolKey = key
-					foundPool = pool
-					nodeIndex = i
-					nodeInstanceID = node.InstanceID
-					return false
+				if node.ID != params.NodeID {
+					continue
 				}
+				foundPoolKey = key
+				foundPool = pool
+				nodeIndex = i
+				nodeInstanceID = node.InstanceID
+				return false
 			}
 			return true
 		})
@@ -820,6 +833,7 @@ func (l *LinodeClient) DeleteLKENodePoolNode(_ context.Context, clusterID int, n
 			l.NodePools.Delete(foundPoolKey)
 		}
 
+		//nolint:nilnil // this is intentional
 		return nil, nil
 	})
 

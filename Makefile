@@ -196,7 +196,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.19.0
 GOVULNC_VERSION          ?= v1.1.4
 
 # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
-GOLANGCI_LINT_VERSION    ?= v2.9.0
+GOLANGCI_LINT_VERSION    ?= v2.10.1
 
 .PHONY: tools
 tools: $(CONTROLLER_GEN) $(ENVTEST) $(GOVULNC) $(GOLANGCI_LINT)

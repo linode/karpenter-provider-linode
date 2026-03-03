@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/mitchellh/hashstructure/v2"
-	"github.com/patrickmn/go-cache"
+	gocache "github.com/patrickmn/go-cache"
 	"github.com/samber/lo"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -36,8 +36,7 @@ import (
 )
 
 const (
-	requeueAfterTime                    = 10 * time.Minute
-	ConditionReasonDependenciesNotReady = "DependenciesNotReady"
+	requeueAfterTime = 10 * time.Minute
 )
 
 var ValidationConditionMessages = map[string]string{}
@@ -47,7 +46,7 @@ type Validation struct {
 	cloudProvider        cloudprovider.CloudProvider
 	linodeClient         sdk.LinodeAPI
 	instanceTypeProvider instancetype.Provider
-	cache                *cache.Cache
+	cache                *gocache.Cache
 	dryRunDisabled       bool
 }
 
@@ -56,7 +55,7 @@ func NewValidationReconciler(
 	cloudProvider cloudprovider.CloudProvider,
 	linodeClient sdk.LinodeAPI,
 	instanceTypeProvider instancetype.Provider,
-	cache *cache.Cache,
+	cache *gocache.Cache,
 	dryRunDisabled bool,
 ) *Validation {
 	return &Validation{
@@ -70,31 +69,6 @@ func NewValidationReconciler(
 }
 
 func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) (reconcile.Result, error) {
-	// We currently don't have any required conditions for the LinodeNodeClass so we skip any require condition checking
-	/* if _, ok := lo.Find(v.requiredConditions(), func(cond string) bool {
-		return nodeClass.StatusConditions().Get(cond).IsFalse()
-	}); ok {
-		// If any of the required status conditions are false, we know validation will fail regardless of the other values.
-		nodeClass.StatusConditions().SetFalse(
-			v1.ConditionTypeValidationSucceeded,
-			ConditionReasonDependenciesNotReady,
-			"required status conditions are not satisfied",
-		)
-		return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
-	}
-	if _, ok := lo.Find(v.requiredConditions(), func(cond string) bool {
-		return nodeClass.StatusConditions().Get(cond).IsUnknown()
-	}); ok {
-		// If none of the status conditions are false, but at least one is unknown, we should also consider the validation
-		// state to be unknown. Once all required conditions collapse to a true or false state, we can test validation.
-		nodeClass.StatusConditions().SetUnknownWithReason(
-			v1.ConditionTypeValidationSucceeded,
-			ConditionReasonDependenciesNotReady,
-			"required status conditions are not satisfied",
-		)
-		return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
-	} */
-
 	nodeClaim := &v1.NodeClaim{
 		Spec: v1.NodeClaimSpec{
 			NodeClassRef: &v1.NodeClassReference{
@@ -136,11 +110,6 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 	return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
 }
 
-// Currently no conditions are required
-/* func (*Validation) requiredConditions() []string {
-	return []string{}
-} */
-
 func (*Validation) cacheKey(nodeClass *v1alpha1.LinodeNodeClass, tags map[string]string) string {
 	hash := lo.Must(hashstructure.Hash([]any{
 		nodeClass.Spec,
@@ -167,35 +136,3 @@ func (v *Validation) clearCacheEntries(nodeClass *v1alpha1.LinodeNodeClass) {
 		v.cache.Delete(key)
 	}
 }
-
-// getInstanceTypesForNodeClass returns the set of instances which could be launched using this NodeClass based on the
-// requirements of linked NodePools.
-/* func (v *Validation) getInstanceTypesForNodeClass(ctx context.Context, nodeClass *v1.LinodeNodeClass) ([]*cloudprovider.InstanceType, error) {
-	instanceTypes, err := v.instanceTypeProvider.List(ctx, nodeClass)
-	if err != nil {
-		return nil, fmt.Errorf("listing instance types for nodeclass, %w", err)
-	}
-	nodePools, err := nodepoolutils.ListManaged(ctx, v.kubeClient, v.cloudProvider, nodepoolutils.ForNodeClass(nodeClass))
-	if err != nil {
-		return nil, fmt.Errorf("listing nodepools for nodeclass, %w", err)
-	}
-	var compatibleInstanceTypes []*cloudprovider.InstanceType
-	names := sets.New[string]()
-	for _, np := range nodePools {
-		reqs := scheduling.NewNodeSelectorRequirementsWithMinValues(np.Spec.Template.Spec.Requirements...)
-		if np.Spec.Template.Labels != nil {
-			reqs.Add(lo.Values(scheduling.NewLabelRequirements(np.Spec.Template.Labels))...)
-		}
-		for _, it := range instanceTypes {
-			if it.Requirements.Intersects(reqs) != nil {
-				continue
-			}
-			if names.Has(it.Name) {
-				continue
-			}
-			names.Insert(it.Name)
-			compatibleInstanceTypes = append(compatibleInstanceTypes, it)
-		}
-	}
-	return compatibleInstanceTypes, nil
-} */

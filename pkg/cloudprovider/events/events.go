@@ -16,7 +16,6 @@ package events
 
 import (
 	corev1 "k8s.io/api/core/v1"
-
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/events"
 )

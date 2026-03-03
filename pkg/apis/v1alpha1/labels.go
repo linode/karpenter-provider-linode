@@ -33,7 +33,6 @@ func init() {
 	karpv1.RestrictedLabelDomains = karpv1.RestrictedLabelDomains.Insert(RestrictedLabelDomains...)
 	karpv1.WellKnownLabels = karpv1.WellKnownLabels.Union(LinodeWellKnownLabels)
 	karpv1.WellKnownLabels = karpv1.WellKnownLabels.Delete(unused...)
-
 }
 
 var (

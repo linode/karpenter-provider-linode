@@ -20,12 +20,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/samber/lo"
-
 	"github.com/awslabs/operatorpkg/option"
 	"github.com/google/uuid"
 	"github.com/linode/linodego"
 	"github.com/patrickmn/go-cache"
+	"github.com/samber/lo"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
@@ -71,7 +70,6 @@ func NewDefaultProvider(
 	unavailableOfferings *linodecache.UnavailableOfferings,
 	instanceCache *cache.Cache,
 ) *DefaultProvider {
-
 	return &DefaultProvider{
 		region:               region,
 		recorder:             recorder,
@@ -140,7 +138,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		return nil, cloudprovider.NewCreateError(err, "InstanceCreationFailed", fmt.Sprintf("Failed to create Linode instance: %s", err.Error()))
 	}
 
-	return NewInstance(ctx, *instance), nil
+	return NewInstance(ctx, instance), nil
 }
 
 func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...Options) (*Instance, error) {
@@ -244,5 +242,5 @@ func instancesFromLinodeInstances(ctx context.Context, instances []linodego.Inst
 	if len(instances) == 0 {
 		return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("instance not found"))
 	}
-	return lo.Map(instances, func(i linodego.Instance, _ int) *Instance { return NewInstance(ctx, i) }), nil
+	return lo.Map(instances, func(i linodego.Instance, _ int) *Instance { inst := i; return NewInstance(ctx, &inst) }), nil
 }

@@ -49,6 +49,7 @@ var linodeEnv *test.Environment
 var cloudProvider *cloudprovider.CloudProvider
 
 func TestLinode(t *testing.T) {
+	t.Parallel()
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "InstanceProvider")

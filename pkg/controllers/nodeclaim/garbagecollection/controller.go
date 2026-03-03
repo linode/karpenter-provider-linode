@@ -31,11 +31,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/operator/injection"
 	nodeclaimutils "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
-
-	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 )
 
 type Controller struct {
@@ -74,7 +73,7 @@ func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 		return nc.Status.ProviderID, nc.Status.ProviderID != ""
 	})...)
 	nodeList := &corev1.NodeList{}
-	if err = c.kubeClient.List(ctx, nodeList); err != nil {
+	if err := c.kubeClient.List(ctx, nodeList); err != nil {
 		return reconciler.Result{}, err
 	}
 	errs := make([]error, len(cloudNodeClaims))
@@ -83,7 +82,7 @@ func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 			errs[i] = c.garbageCollect(ctx, cloudNodeClaims[i], nodeList)
 		}
 	})
-	if err = multierr.Combine(errs...); err != nil {
+	if err := multierr.Combine(errs...); err != nil {
 		return reconciler.Result{}, err
 	}
 	c.successfulCount++
