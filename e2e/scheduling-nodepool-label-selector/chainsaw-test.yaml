@@ -108,7 +108,6 @@ spec:
       try:
       - script:
           content: |
-            set -euo pipefail
             kubectl scale -n default deployment inflate --replicas 0
 
     - name: Wait for NodeClaims to be deleted

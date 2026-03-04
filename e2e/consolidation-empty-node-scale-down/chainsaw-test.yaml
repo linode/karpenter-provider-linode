@@ -81,7 +81,6 @@ spec:
       try:
       - script:
           content: |
-            set -euo pipefail
             kubectl -n default scale deployment inflate --replicas 1
 
     - name: Check for g6-standard-2 NodeClaim to be ready
@@ -112,7 +111,6 @@ spec:
       try:
       - script:
           content: |
-            set -euo pipefail
             kubectl -n default scale deployment inflate --replicas 0
 
     - name: Wait for NodeClaims to be deleted
