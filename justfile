@@ -90,9 +90,9 @@ pre-e2e-cleanup-and-sanity:
 	KUBECONFIG={{ KUBECONFIG }} kubectl -n default delete pod -l e2e.linode.dev/cleanup=true --ignore-not-found=true
 	KUBECONFIG={{ KUBECONFIG }} kubectl delete nodepool -l e2e.linode.dev/cleanup=true --ignore-not-found=true
 	KUBECONFIG={{ KUBECONFIG }} kubectl delete linodenodeclass -l e2e.linode.dev/cleanup=true --ignore-not-found=true
-	KUBECONFIG={{ KUBECONFIG }} kubectl delete nodeclaims -l e2e.linode.dev/cleanup=true --ignore-not-found=true
+	KUBECONFIG={{ KUBECONFIG }} kubectl delete nodeclaims --all --ignore-not-found=true
 	for _ in $(seq 1 10); do
-		count=$(KUBECONFIG={{ KUBECONFIG }} kubectl get nodeclaims -l e2e.linode.dev/cleanup=true -o jsonpath='{.items[*].metadata.name}' | wc -w | tr -d ' ')
+		count=$(KUBECONFIG={{ KUBECONFIG }} kubectl get nodeclaims -o jsonpath='{.items[*].metadata.name}' | wc -w | tr -d ' ')
 		if [ "$count" = "0" ]; then
 			echo "NodeClaims are clean"
 			exit 0
