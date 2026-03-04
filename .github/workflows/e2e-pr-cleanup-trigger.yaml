@@ -25,6 +25,11 @@ jobs:
       CLUSTER_NAME: ${{ format('karpl-pr-{0}', github.event.pull_request.number) }}
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: E2E Cleanup on PR Close
         uses: ./.github/actions/e2e
         with:
