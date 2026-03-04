@@ -1,0 +1,25 @@
+name: e2e-nightly-trigger
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-nightly:
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      cluster_name: ${{ format('karpl-nightly-{0}', github.run_id) }}
+      chainsaw_selector: all
+      cleanup: true
+      timeout_minutes: 90
+      cleanup_timeout_minutes: 20
+    secrets: inherit

@@ -1,0 +1,31 @@
+name: e2e-pr-cleanup-trigger
+
+on:
+  pull_request: # TODO: change this to pull_request_target so people don't need to set their own LINODE_TOKEN secret in their forks
+    types: [closed]
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cleanup-pr-close:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    env:
+      LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
+      LINODE_CLI_TOKEN: ${{ secrets.LINODE_TOKEN }}
+      CLUSTER_NAME: ${{ format('karpl-pr-{0}', github.event.pull_request.number) }}
+
+    steps:
+      - name: E2E Cleanup on PR Close
+        uses: ./.github/actions/e2e
+        with:
+          cleanup_cluster: "true"

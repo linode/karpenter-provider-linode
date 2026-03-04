@@ -1,0 +1,29 @@
+name: e2e-manual-trigger
+
+on:
+  workflow_dispatch:
+    inputs:
+      chainsaw_selector:
+        description: Chainsaw selector to run for manual dispatch
+        required: false
+        default: all
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-manual:
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      cluster_name: ${{ format('karpl-manual-{0}', github.run_id) }}
+      chainsaw_selector: ${{ github.event.inputs.chainsaw_selector || 'all' }}
+      cleanup: true
+      timeout_minutes: 60
+      cleanup_timeout_minutes: 20
+    secrets: inherit
