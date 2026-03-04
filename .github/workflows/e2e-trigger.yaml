@@ -1,0 +1,120 @@
+name: e2e-trigger
+
+on:
+  workflow_dispatch:
+    inputs:
+      chainsaw_selector:
+        description: Chainsaw selector to run for manual dispatch
+        required: false
+        default: all
+  pull_request: # TODO: change this to pull_request_target so people don't need to set their own LINODE_TOKEN secret in their forks
+    types: [opened, reopened, synchronize, closed]
+    branches:
+      - '**'
+  schedule:
+    - cron: '0 0 * * *'
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    outputs:
+      paths: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: .github/filters.yml
+
+  e2e-pr:
+    needs: [changes]
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && contains(fromJSON(needs.changes.outputs.paths), 'src')
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      cluster_name: ${{ format('karpl-pr-{0}', github.event.pull_request.number) }}
+      chainsaw_selector: pr
+      cleanup: false
+      timeout_minutes: 60
+      cleanup_timeout_minutes: 20
+    secrets: inherit
+
+  e2e-nightly:
+    if: github.event_name == 'schedule'
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      cluster_name: ${{ format('karpl-nightly-{0}', github.run_id) }}
+      chainsaw_selector: all
+      cleanup: true
+      timeout_minutes: 90
+      cleanup_timeout_minutes: 20
+    secrets: inherit
+
+  e2e-manual:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      cluster_name: ${{ format('karpl-manual-{0}', github.run_id) }}
+      chainsaw_selector: ${{ github.event.inputs.chainsaw_selector || 'all' }}
+      cleanup: true
+      timeout_minutes: 60
+      cleanup_timeout_minutes: 20
+    secrets: inherit
+
+  cleanup-pr-close:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    env:
+      LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
+      LINODE_CLI_TOKEN: ${{ secrets.LINODE_TOKEN }}
+      CLUSTER_NAME: ${{ format('karpl-pr-{0}', github.event.pull_request.number) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Install linode-cli
+        run: pipx install linode-cli==5.65.0
+
+      - name: Install devbox
+        uses: jetify-com/devbox-install-action@v0.14.0
+        with:
+          enable-cache: 'true'
+          refresh-cli: 'false'
+
+      - name: Delete LKE cluster for closed PR
+        run: |
+          CLUSTER_ID=$(devbox run get-lke-cluster-id)
+          if [ -n "$CLUSTER_ID" ]; then
+            devbox run destroy-lke-cluster "$CLUSTER_ID"
+          else
+            echo "No PR cluster found for cleanup"
+          fi

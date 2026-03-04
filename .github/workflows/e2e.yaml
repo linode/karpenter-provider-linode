@@ -1,31 +1,46 @@
-name: e2e-nightly
+name: e2e
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 6 * * *'
+  workflow_call:
+    inputs:
+      cluster_name:
+        type: string
+        required: true
+      chainsaw_selector:
+        type: string
+        required: true
+      cleanup:
+        type: boolean
+        required: true
+      timeout_minutes:
+        type: number
+        required: false
+        default: 60
+      cleanup_timeout_minutes:
+        type: number
+        required: false
+        default: 20
+      chainsaw_flags:
+        type: string
+        required: false
+        default: --config .chainsaw.yaml
 
 permissions:
   contents: read
   pull-requests: read
   actions: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     env:
       LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
       LINODE_CLI_TOKEN: ${{ secrets.LINODE_TOKEN }}
       LINODE_REGION: us-sea
-      CLUSTER_NAME: karpl-nightly-${{ github.run_id }}
-      KUBECONFIG: nightly-${{ github.run_id }}-kubeconfig
-      CHAINSAW_SELECTOR: all
-      CHAINSAW_FLAGS: --config .chainsaw.yaml
+      CLUSTER_NAME: ${{ inputs.cluster_name }}
+      CHAINSAW_SELECTOR: ${{ inputs.chainsaw_selector }}
+      CHAINSAW_FLAGS: ${{ inputs.chainsaw_flags }}
 
     steps:
       - name: Checkout code
@@ -55,19 +70,17 @@ jobs:
           refresh-cli: 'false'
 
       - name: Run E2E
-        run: |
-          devbox run setup-and-test-e2e
+        run: devbox run setup-and-test-e2e
 
   cleanup:
-    if: ${{ always() }}
+    if: ${{ inputs.cleanup && always() }}
     needs: [e2e]
-    timeout-minutes: 20
+    timeout-minutes: ${{ inputs.cleanup_timeout_minutes }}
     runs-on: ubuntu-latest
-
     env:
       LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
       LINODE_CLI_TOKEN: ${{ secrets.LINODE_TOKEN }}
-      CLUSTER_NAME: karpl-nightly-${{ github.run_id }}
+      CLUSTER_NAME: ${{ inputs.cluster_name }}
 
     steps:
       - name: Checkout code
@@ -88,11 +101,11 @@ jobs:
           enable-cache: 'true'
           refresh-cli: 'false'
 
-      - name: Delete nightly LKE cluster
+      - name: Delete LKE cluster after E2E
         run: |
           CLUSTER_ID=$(devbox run get-lke-cluster-id)
           if [ -n "$CLUSTER_ID" ]; then
             devbox run destroy-lke-cluster "$CLUSTER_ID"
           else
-            echo "No nightly cluster found for cleanup"
+            echo "No cluster found for cleanup"
           fi
