@@ -6,7 +6,6 @@ metadata:
   name: scheduling-taints-tolerations
   labels:
     all:
-    pr:
     nightly:
     category.scheduling:
 spec:

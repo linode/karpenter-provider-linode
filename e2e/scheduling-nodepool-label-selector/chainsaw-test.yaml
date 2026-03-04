@@ -6,7 +6,6 @@ metadata:
   name: scheduling-nodepool-label-selector
   labels:
     all:
-    pr:
     nightly:
     category.scheduling:
 spec:

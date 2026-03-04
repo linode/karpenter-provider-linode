@@ -10,6 +10,9 @@ metadata:
   name: default
 spec:
   template:
+    metadata:
+      labels:
+        e2e.linode.dev/cleanup: "true"
     spec:
       requirements:
         - key: kubernetes.io/arch
