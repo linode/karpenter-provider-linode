@@ -1,0 +1,73 @@
+name: E2E setup
+description: Common setup steps for E2E workflows
+
+inputs:
+  docker_username:
+    description: Docker Hub username
+    required: false
+  docker_password:
+    description: Docker Hub password
+    required: false
+  checkout_fetch_depth:
+    description: Checkout fetch depth
+    required: false
+    default: "0"
+  linode_cli_version:
+    description: linode-cli version
+    required: false
+    default: "5.65.0"
+  devbox_command:
+    description: Optional devbox command to run (without the leading "devbox run")
+    required: false
+    default: ""
+  cleanup_cluster:
+    description: Whether to delete the LKE cluster via devbox
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: ${{ inputs.checkout_fetch_depth }}
+
+    - name: Login to Docker Hub
+      if: ${{ inputs.docker_username != '' && inputs.docker_password != '' }}
+      uses: docker/login-action@v3
+      with:
+        username: ${{ inputs.docker_username }}
+        password: ${{ inputs.docker_password }}
+
+    - name: Setup Go
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: go.mod
+        check-latest: true
+
+    - name: Install linode-cli
+      run: pipx install linode-cli==${{ inputs.linode_cli_version }}
+      shell: bash
+
+    - name: Install devbox
+      uses: jetify-com/devbox-install-action@v0.14.0
+      with:
+        enable-cache: 'true'
+        refresh-cli: 'false'
+
+    - name: Run devbox command
+      if: ${{ inputs.devbox_command != '' }}
+      run: devbox run ${{ inputs.devbox_command }}
+      shell: bash
+
+    - name: Delete LKE cluster
+      if: ${{ inputs.cleanup_cluster == 'true' }}
+      run: |
+        CLUSTER_ID=$(devbox run get-lke-cluster-id)
+        if [ -n "$CLUSTER_ID" ]; then
+          devbox run destroy-lke-cluster "$CLUSTER_ID"
+        else
+          echo "No cluster found for cleanup"
+        fi
+      shell: bash

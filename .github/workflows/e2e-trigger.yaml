@@ -92,29 +92,7 @@ jobs:
       CLUSTER_NAME: ${{ format('karpl-pr-{0}', github.event.pull_request.number) }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
+      - name: E2E Cleanup on PR Close
+        uses: ./.github/actions/e2e
         with:
-          go-version-file: go.mod
-          check-latest: true
-
-      - name: Install linode-cli
-        run: pipx install linode-cli==5.65.0
-
-      - name: Install devbox
-        uses: jetify-com/devbox-install-action@v0.14.0
-        with:
-          enable-cache: 'true'
-          refresh-cli: 'false'
-
-      - name: Delete LKE cluster for closed PR
-        run: |
-          CLUSTER_ID=$(devbox run get-lke-cluster-id)
-          if [ -n "$CLUSTER_ID" ]; then
-            devbox run destroy-lke-cluster "$CLUSTER_ID"
-          else
-            echo "No PR cluster found for cleanup"
-          fi
+          cleanup_cluster: "true"
