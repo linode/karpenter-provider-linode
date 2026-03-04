@@ -95,7 +95,7 @@ var _ = Describe("NormalizeNodeClaimTagValue", func() {
 	})
 
 	It("should return name unchanged when exactly at max value length", func() {
-		maxValueLength := 50 - len("karpenter.sh/nodeclaim") - 1
+		maxValueLength := 50 - len(v1.NodeClaimTagKey) - 1
 		name := strings.Repeat("a", maxValueLength)
 
 		result := utils.NormalizeNodeClaimTagValue(name)
@@ -131,7 +131,8 @@ var _ = Describe("NormalizeNodeClaimTagValue", func() {
 		result := utils.NormalizeNodeClaimTagValue(veryLongName)
 
 		Expect(result).ToNot(BeEmpty())
-		Expect(len(result)).To(BeNumerically("<=", 50))
+		maxValueLength := 50 - len(v1.NodeClaimTagKey) - 1
+		Expect(len(result)).To(BeNumerically("<=", maxValueLength))
 	})
 
 	It("should produce consistent hash for the same input", func() {
