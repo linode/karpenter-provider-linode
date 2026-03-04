@@ -2,11 +2,14 @@ apiVersion: karpenter.sh/v1
 kind: NodePool
 metadata:
   name: tainted
+  labels:
+    e2e.linode.dev/cleanup: "true"
 spec:
   template:
     metadata:
       labels:
         e2e.linode.dev/dedicated: tainted
+        e2e.linode.dev/cleanup: "true"
     spec:
       requirements:
         - key: e2e.linode.dev/dedicated

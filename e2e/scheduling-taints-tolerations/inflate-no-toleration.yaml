@@ -3,6 +3,8 @@ kind: Deployment
 metadata:
   name: inflate-no-toleration
   namespace: default
+  labels:
+    e2e.linode.dev/cleanup: "true"
 spec:
   replicas: 1
   selector:
@@ -12,6 +14,7 @@ spec:
     metadata:
       labels:
         app: inflate-no-toleration
+        e2e.linode.dev/cleanup: "true"
     spec:
       terminationGracePeriodSeconds: 0
       securityContext:

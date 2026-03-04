@@ -55,6 +55,7 @@ spec:
     - name: Check for two g6-standard-4 NodeClaims to be ready
       try:
       - script:
+          timeout: 15m
           content: |
             set -euo pipefail
             count=$(kubectl get nodeclaim \
