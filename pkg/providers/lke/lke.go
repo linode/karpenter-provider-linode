@@ -160,7 +160,7 @@ func (p *DefaultProvider) lookupExistingInstance(ctx context.Context, nodeClaim 
 	if err != nil {
 		return nil, err
 	}
-	log.FromContext(ctx).Info("found existing instance for nodeclaim", "instanceID", existingInstance.ID, "nodeclaim", nodeClaim.Name)
+	log.FromContext(ctx).V(1).Info("found existing instance for nodeclaim", "instanceID", existingInstance.ID, "nodeclaim", nodeClaim.Name)
 	return p.hydrateInstanceFromLinode(ctx, existingInstance)
 }
 
