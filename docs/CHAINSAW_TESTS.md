@@ -14,7 +14,7 @@ Key references:
 - `run-e2e` command: `justfile`
 - default selector and flags: `justfile`
 - reusable workflow: `.github/workflows/e2e.yaml`
-- PR trigger workflow selector (`pr`): `.github/workflows/e2e-trigger.yaml`
+- PR trigger workflow selector (`pr`): `.github/workflows/e2e-pr-trigger.yaml`
 - nightly trigger workflow selector (`all`): `.github/workflows/e2e-nightly-trigger.yaml`
 - manual trigger workflow selector (input): `.github/workflows/e2e-manual-trigger.yaml`
 
