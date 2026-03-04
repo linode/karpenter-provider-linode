@@ -11,10 +11,10 @@ This repo uses label selectors for `just run-e2e`:
 - Additional Chainsaw options can be passed through `CHAINSAW_FLAGS`
 
 Key references:
-- `run-e2e` command: @/Users/komer/Documents/Workspace/karpenter-provider-linode/justfile#125-127
-- default selector and flags: @/Users/komer/Documents/Workspace/karpenter-provider-linode/justfile#8-10
-- PR workflow selector (`pr`): @/Users/komer/Documents/Workspace/karpenter-provider-linode/.github/workflows/e2e-pr.yaml#47-54
-- nightly workflow selector (`all`): @/Users/komer/Documents/Workspace/karpenter-provider-linode/.github/workflows/e2e-nightly.yaml#21-29
+- `run-e2e` command: `justfile`
+- default selector and flags: `justfile`
+- PR workflow selector (`pr`): `.github/workflows/e2e-pr.yaml`
+- nightly workflow selector (`all`): `.github/workflows/e2e-nightly.yaml`
 
 ## Selector matrix
 
