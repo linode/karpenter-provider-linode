@@ -123,12 +123,6 @@ func GetTagsForLKE(nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeCl
 	return lo.Assign(TagListToMap(nodeClass.Spec.Tags), staticTags)
 }
 
-func GetInstanceTagsForLKE(nodeClaimName string) map[string]string {
-	return map[string]string{
-		v1alpha1.NodeClaimTagKey: NormalizeNodeClaimTagValue(nodeClaimName),
-	}
-}
-
 func NodeClaimTag(nodeClaimName string) string {
 	return fmt.Sprintf("%s=%s", v1alpha1.NodeClaimTagKey, NormalizeNodeClaimTagValue(nodeClaimName))
 }
