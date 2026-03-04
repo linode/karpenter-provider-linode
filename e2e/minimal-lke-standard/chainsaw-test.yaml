@@ -7,7 +7,6 @@ metadata:
   labels:
     all:
     pr:
-    nightly:
     category.baseline:
 spec:
   steps:

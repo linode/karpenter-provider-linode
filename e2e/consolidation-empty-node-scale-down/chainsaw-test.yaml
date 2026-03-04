@@ -6,7 +6,6 @@ metadata:
   name: consolidation-empty-node-scale-down
   labels:
     all:
-    nightly:
     category.consolidation:
 spec:
   steps:

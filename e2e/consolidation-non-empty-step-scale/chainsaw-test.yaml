@@ -6,7 +6,6 @@ metadata:
   name: consolidation-non-empty-step-scale
   labels:
     all:
-    nightly:
     category.consolidation:
 spec:
   steps:
