@@ -46,7 +46,7 @@ run: ## Run Karpenter controller binary against your local cluster
 
 test: envtest ## Run tests
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use ${ENVTEST_K8S_VERSION#v} --bin-dir $(CACHE_BIN) -p path)" \
-		go test ./pkg/... \
+		go test $$(go list ./pkg/... | grep -v ./pkg/fake$$) \
 		-cover -coverprofile=coverage.out -outputdir=. -coverpkg=./...
 
 deflake: ## Run randomized, racing tests until the test fails to catch flakes
