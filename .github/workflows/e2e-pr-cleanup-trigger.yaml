@@ -22,7 +22,7 @@ jobs:
     env:
       LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
       LINODE_CLI_TOKEN: ${{ secrets.LINODE_TOKEN }}
-      CLUSTER_NAME: ${{ format('karpl-pr-{0}', github.event.pull_request.number) }}
+      CLUSTER_NAME: ${{ format('kpr-{0}', github.event.pull_request.number) }}
 
     steps:
       - name: Checkout code

@@ -41,10 +41,11 @@ spec:
               replicas: 5
               availableReplicas: 5
       catch:
-      - describe:
-          apiVersion: karpenter.sh/v1
-          kind: NodeClaim
       - script:
+          timeout: 30s
+          content: kubectl get nodeclaims.v1.karpenter.sh -A -o wide
+      - script:
+          timeout: 30s
           content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
