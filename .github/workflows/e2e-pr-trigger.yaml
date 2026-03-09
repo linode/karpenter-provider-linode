@@ -45,7 +45,7 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.action != 'closed' && contains(fromJSON(needs.changes.outputs.paths), 'src')
     uses: ./.github/workflows/e2e.yaml
     with:
-      cluster_name: ${{ format('karpl-pr-{0}', github.event.pull_request.number) }}
+      cluster_name: ${{ format('kpr-{0}', github.event.pull_request.number) }}
       chainsaw_selector: pr
       cleanup: false
       timeout_minutes: 60

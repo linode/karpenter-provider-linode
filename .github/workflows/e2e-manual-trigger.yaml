@@ -21,7 +21,7 @@ jobs:
   e2e-manual:
     uses: ./.github/workflows/e2e.yaml
     with:
-      cluster_name: ${{ format('karpl-manual-{0}', github.run_id) }}
+      cluster_name: ${{ format('km-{0}', github.run_id) }}
       chainsaw_selector: ${{ github.event.inputs.chainsaw_selector || 'all' }}
       cleanup: true
       timeout_minutes: 90
