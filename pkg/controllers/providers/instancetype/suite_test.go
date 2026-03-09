@@ -81,7 +81,7 @@ var _ = Describe("InstanceType", func() {
 		linodeInstanceTypeInfo := fake.MakeInstances()
 		linodeOfferings := fake.MakeInstanceOfferings(linodeInstanceTypeInfo)
 		linodeEnv.LinodeAPI.ListTypesOutput.Set(&linodeInstanceTypeInfo)
-		linodeEnv.LinodeAPI.ListRegionsAvailabilityOutput.Set(&linodeOfferings)
+		linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Set(&linodeOfferings)
 
 		ExpectSingletonReconciled(ctx, controller)
 		instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, &v1.LinodeNodeClass{})
@@ -92,11 +92,11 @@ var _ = Describe("InstanceType", func() {
 			Expect(lo.ContainsBy(linodeInstanceTypeInfo, func(i linodego.LinodeType) bool { return i.ID == it.Name })).To(BeTrue())
 		}
 	})
-	It("should update instance type offering date with response from the ListRegionsAvailability API", func() {
+	It("should update instance type offering date with response from the GetRegionAvailability API", func() {
 		linodeInstanceTypeInfo := fake.MakeInstances()
 		linodeOfferings := fake.MakeInstanceOfferings(linodeInstanceTypeInfo)
 		linodeEnv.LinodeAPI.ListTypesOutput.Set(&linodeInstanceTypeInfo)
-		linodeEnv.LinodeAPI.ListRegionsAvailabilityOutput.Set(&linodeOfferings)
+		linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Set(&linodeOfferings)
 
 		ExpectSingletonReconciled(ctx, controller)
 		instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, &v1.LinodeNodeClass{})
@@ -115,14 +115,14 @@ var _ = Describe("InstanceType", func() {
 	})
 	It("should not update instance type date with response from the ListTypes API is empty", func() {
 		linodeEnv.LinodeAPI.ListTypesOutput.Set(nil)
-		linodeEnv.LinodeAPI.ListRegionsAvailabilityOutput.Set(nil)
+		linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Set(nil)
 		ExpectSingletonReconciled(ctx, controller)
 		_, err := linodeEnv.InstanceTypesProvider.List(ctx, &v1.LinodeNodeClass{})
 		Expect(err).ToNot(BeNil())
 	})
-	It("should not update instance type offering date with response from the ListRegionsAvailability API", func() {
+	It("should not update instance type offering date with response from the GetRegionAvailability API", func() {
 		linodeEnv.LinodeAPI.ListTypesOutput.Set(nil)
-		linodeEnv.LinodeAPI.ListRegionsAvailabilityOutput.Set(nil)
+		linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Set(nil)
 		ExpectSingletonReconciled(ctx, controller)
 		_, err := linodeEnv.InstanceTypesProvider.List(ctx, &v1.LinodeNodeClass{})
 		Expect(err).ToNot(BeNil())

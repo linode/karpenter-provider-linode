@@ -172,5 +172,5 @@ func (env *Environment) Reset() {
 func (env *Environment) SetDefaults() {
 	instances := fake.MakeInstances()
 	env.LinodeAPI.ListTypesOutput.Set(ptr.To(instances))
-	env.LinodeAPI.ListRegionsAvailabilityOutput.Set(ptr.To(fake.MakeInstanceOfferings(instances)))
+	env.LinodeAPI.GetRegionAvailabilityOutput.Set(ptr.To(fake.MakeInstanceOfferings(instances)))
 }
