@@ -114,18 +114,18 @@ type CapacityPool struct {
 // LinodeAPIBehavior must be reset between tests otherwise tests will
 // pollute each other.
 type LinodeAPIBehavior struct {
-	ListTypesOutput                 AtomicPtr[[]linodego.LinodeType]
-	ListRegionsAvailabilityOutput   AtomicPtr[[]linodego.RegionAvailability]
-	GetTypeBehavior                 MockedFunction[string, *linodego.LinodeType]
-	ListRegionsAvailabilityBehavior MockedFunction[linodego.ListOptions, []linodego.RegionAvailability]
-	CreateInstanceBehavior          MockedFunction[linodego.InstanceCreateOptions, *linodego.Instance]
-	GetInstanceBehavior             MockedFunction[int, *linodego.Instance]
-	DeleteInstanceBehavior          MockedFunction[int, error]
-	ListInstancesBehavior           MockedFunction[linodego.ListOptions, []linodego.Instance]
-	CreateTagsBehavior              MockedFunction[linodego.TagCreateOptions, linodego.Tag]
-	ListTypesBehavior               MockedFunction[linodego.ListOptions, []linodego.LinodeType]
-	Instances                       sync.Map
-	InsufficientCapacityPools       atomic.Slice[CapacityPool]
+	ListTypesOutput               AtomicPtr[[]linodego.LinodeType]
+	GetRegionAvailabilityOutput   AtomicPtr[[]linodego.RegionAvailability]
+	GetTypeBehavior               MockedFunction[string, *linodego.LinodeType]
+	GetRegionAvailabilityBehavior MockedFunction[linodego.ListOptions, []linodego.RegionAvailability]
+	CreateInstanceBehavior        MockedFunction[linodego.InstanceCreateOptions, *linodego.Instance]
+	GetInstanceBehavior           MockedFunction[int, *linodego.Instance]
+	DeleteInstanceBehavior        MockedFunction[int, error]
+	ListInstancesBehavior         MockedFunction[linodego.ListOptions, []linodego.Instance]
+	CreateTagsBehavior            MockedFunction[linodego.TagCreateOptions, linodego.Tag]
+	ListTypesBehavior             MockedFunction[linodego.ListOptions, []linodego.LinodeType]
+	Instances                     sync.Map
+	InsufficientCapacityPools     atomic.Slice[CapacityPool]
 	// NodePool storage and behaviors
 	NodePools                 sync.Map // key: "clusterID-poolID", value: *linodego.LKENodePool
 	CreateLKENodePoolBehavior MockedFunction[struct {
@@ -179,11 +179,11 @@ func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.Lino
 	return *linodeType, err
 }
 
-func (l *LinodeClient) ListRegionsAvailability(_ context.Context, _ *linodego.ListOptions) ([]linodego.RegionAvailability, error) {
-	if l.ListRegionsAvailabilityOutput.IsNil() {
+func (l *LinodeClient) GetRegionAvailability(_ context.Context, _ string) ([]linodego.RegionAvailability, error) {
+	if l.GetRegionAvailabilityOutput.IsNil() {
 		return nil, nil
 	}
-	return *l.ListRegionsAvailabilityOutput.Clone(), nil
+	return *l.GetRegionAvailabilityOutput.Clone(), nil
 }
 
 func (l *LinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.Instance, error) {
@@ -210,9 +210,9 @@ func NewLinodeClient() *LinodeClient {
 
 func (l *LinodeClient) Reset() {
 	l.ListTypesOutput.Reset()
-	l.ListRegionsAvailabilityOutput.Reset()
+	l.GetRegionAvailabilityOutput.Reset()
 	l.GetTypeBehavior.Reset()
-	l.ListRegionsAvailabilityBehavior.Reset()
+	l.GetRegionAvailabilityBehavior.Reset()
 	l.CreateInstanceBehavior.Reset()
 	l.GetInstanceBehavior.Reset()
 	l.DeleteInstanceBehavior.Reset()

@@ -233,18 +233,9 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 	p.muInstanceTypesOfferings.Lock()
 	defer p.muInstanceTypesOfferings.Unlock()
 
-	filter := linodego.Filter{}
-	filter.AddField(linodego.Contains, "region", options.FromContext(ctx).ClusterRegion)
-	filterJSON, err := filter.MarshalJSON()
+	regionAvail, err := p.linodeAPI.GetRegionAvailability(ctx, options.FromContext(ctx).ClusterRegion)
 	if err != nil {
-		return fmt.Errorf("failed to marshal filter: %w", err)
-	}
-	regionAvail, err := p.linodeAPI.ListRegionsAvailability(ctx, &linodego.ListOptions{
-		PageSize: maxPageSize,
-		Filter:   string(filterJSON),
-	})
-	if err != nil {
-		return fmt.Errorf("listing region availability %w", err)
+		return fmt.Errorf("getting region availability %w", err)
 	}
 
 	instanceTypeOfferings := map[string]sets.Set[string]{}

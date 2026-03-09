@@ -249,7 +249,7 @@ var _ = Describe("CloudProvider", func() {
 			linodeInstanceTypeInfo := fake.MakeInstances()
 			linodeEnv.LinodeAPI.ListTypesOutput.Set(&linodeInstanceTypeInfo)
 			linodeOfferings := fake.MakeInstanceOfferings(linodeInstanceTypeInfo)
-			linodeEnv.LinodeAPI.ListRegionsAvailabilityOutput.Set(&linodeOfferings)
+			linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Set(&linodeOfferings)
 			Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypes(ctx)).To(Succeed())
 			Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeOfferings(ctx)).To(Succeed())
 			instanceNames := lo.Map(linodeInstanceTypeInfo, func(info linodego.LinodeType, _ int) string { return info.ID })
