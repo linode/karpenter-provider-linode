@@ -27,12 +27,12 @@ concurrency:
 
 jobs:
   e2e-manual:
-    name: Manual E2E (${{ github.event.inputs.cluster_tier || 'standard' }})
+    name: Manual E2E (${{ inputs.cluster_tier }})
     uses: ./.github/workflows/e2e.yaml
     with:
       cluster_name: ${{ format('km-{0}', github.run_id) }}
-      cluster_tier: ${{ github.event.inputs.cluster_tier || 'standard' }}
-      chainsaw_selector: ${{ github.event.inputs.chainsaw_selector || 'all' }}
+      cluster_tier: ${{ inputs.cluster_tier }}
+      chainsaw_selector: ${{ inputs.chainsaw_selector }}
       cleanup: true
       timeout_minutes: 90
       cleanup_timeout_minutes: 20
