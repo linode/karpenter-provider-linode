@@ -11,7 +11,7 @@ inputs:
   linode_cli_version:
     description: linode-cli version
     required: false
-    default: "5.65.0"
+    default: "5.65.1"
   devbox_command:
     description: Optional devbox command to run (without the leading "devbox run")
     required: false
