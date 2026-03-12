@@ -7,6 +7,14 @@ on:
         description: Chainsaw selector to run for manual dispatch
         required: false
         default: all
+      cluster_tier:
+        description: LKE cluster tier to run for manual dispatch
+        required: false
+        default: standard
+        type: choice
+        options:
+          - standard
+          - enterprise
 
 permissions:
   contents: read
@@ -19,9 +27,11 @@ concurrency:
 
 jobs:
   e2e-manual:
+    name: Manual E2E (${{ github.event.inputs.cluster_tier || 'standard' }})
     uses: ./.github/workflows/e2e.yaml
     with:
       cluster_name: ${{ format('km-{0}', github.run_id) }}
+      cluster_tier: ${{ github.event.inputs.cluster_tier || 'standard' }}
       chainsaw_selector: ${{ github.event.inputs.chainsaw_selector || 'all' }}
       cleanup: true
       timeout_minutes: 90

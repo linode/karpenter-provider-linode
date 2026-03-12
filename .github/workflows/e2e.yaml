@@ -6,6 +6,10 @@ on:
       cluster_name:
         type: string
         required: true
+      cluster_tier:
+        type: string
+        required: false
+        default: standard
       chainsaw_selector:
         type: string
         required: true
@@ -32,6 +36,7 @@ permissions:
 
 jobs:
   e2e:
+    name: E2E (${{ inputs.cluster_tier }})
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
     env:
@@ -39,6 +44,7 @@ jobs:
       LINODE_CLI_TOKEN: ${{ secrets.LINODE_TOKEN }}
       LINODE_REGION: us-sea
       CLUSTER_NAME: ${{ inputs.cluster_name }}
+      CLUSTER_TIER: ${{ inputs.cluster_tier }}
       CHAINSAW_SELECTOR: ${{ inputs.chainsaw_selector }}
       CHAINSAW_FLAGS: ${{ inputs.chainsaw_flags }}
 
@@ -56,6 +62,7 @@ jobs:
           devbox_command: setup-and-test-e2e
 
   cleanup:
+    name: Cleanup (${{ inputs.cluster_tier }})
     if: ${{ inputs.cleanup && always() }}
     needs: [e2e]
     timeout-minutes: ${{ inputs.cleanup_timeout_minutes }}
@@ -64,6 +71,7 @@ jobs:
       LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
       LINODE_CLI_TOKEN: ${{ secrets.LINODE_TOKEN }}
       CLUSTER_NAME: ${{ inputs.cluster_name }}
+      CLUSTER_TIER: ${{ inputs.cluster_tier }}
 
     steps:
       - name: Checkout code
