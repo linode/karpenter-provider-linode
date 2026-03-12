@@ -3,4 +3,6 @@ src:
  - 'charts/**'
  - 'e2e/**'
  - 'Tiltfile'
+ - 'justfile'
+ - 'Makefile'
  - 'go.mod'
