@@ -1,0 +1,36 @@
+apiVersion: karpenter.k8s.linode/v1alpha1
+kind: LinodeNodeClass
+metadata:
+  name: ml
+  labels:
+    e2e.linode.dev/cleanup: "true"
+spec: {}
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: ml
+  labels:
+    e2e.linode.dev/cleanup: "true"
+spec:
+  template:
+    metadata:
+      labels:
+        e2e.linode.dev/m: "true"
+    spec:
+      requirements:
+        - key: e2e.linode.dev/m
+          operator: Exists
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+      nodeClassRef:
+        group: karpenter.k8s.linode
+        kind: LinodeNodeClass
+        name: ml
+      expireAfter: 720h
+  limits:
+    cpu: 1000

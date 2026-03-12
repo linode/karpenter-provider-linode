@@ -13,10 +13,16 @@ spec:
     - name: Make sure there are no lingering NodeClaims
       try:
       - script:
-          content: kubectl get nodeclaim -o json
+          timeout: 30s
+          content: kubectl get nodeclaim -l karpenter.sh/nodepool=ml -o json
           check:
             ($error): ~
             (json_parse($stdout).items | length(@)): 0
+
+    - name: Create minimal test NodePool
+      try:
+      - apply:
+          file: nodepool-minimal.yaml
 
     - name: Create 5-replica inflate deployment (can't schedule)
       try:
@@ -32,6 +38,7 @@ spec:
             kind: NodeClaim
             metadata:
               labels:
+                karpenter.sh/nodepool: ml
                 node.kubernetes.io/instance-type: g6-standard-6
             status:
               (conditions[?type == 'Ready']):
@@ -77,6 +84,7 @@ spec:
             kind: NodeClaim
             metadata:
               labels:
+                karpenter.sh/nodepool: ml
                 node.kubernetes.io/instance-type: g6-standard-4
             status:
               (conditions[?type == 'Ready']):
@@ -111,7 +119,7 @@ spec:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
           timeout: 10m
-          selector: node.kubernetes.io/instance-type=g6-standard-6
+          selector: karpenter.sh/nodepool=ml,node.kubernetes.io/instance-type=g6-standard-6
           for:
             deletion: {}
       catch:
@@ -139,7 +147,7 @@ spec:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
           timeout: 10m
-          selector: node.kubernetes.io/instance-type=g6-standard-4
+          selector: karpenter.sh/nodepool=ml,node.kubernetes.io/instance-type=g6-standard-4
           for:
             deletion: {}
       catch:
@@ -148,6 +156,27 @@ spec:
           kind: NodeClaim
       - script:
           content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
+
+    - name: Wait for all test NodeClaims to be deleted
+      try:
+      - wait:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+          timeout: 10m
+          selector: karpenter.sh/nodepool=ml
+          for:
+            deletion: {}
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - script:
+          timeout: 30s
+          content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter

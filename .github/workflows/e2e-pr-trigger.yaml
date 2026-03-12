@@ -41,6 +41,7 @@ jobs:
           filters: .github/filters.yml
 
   e2e-pr:
+    name: PR E2E (standard)
     needs: [changes]
     if: github.event_name == 'pull_request' && github.event.action != 'closed' && contains(fromJSON(needs.changes.outputs.paths), 'src')
     uses: ./.github/workflows/e2e.yaml

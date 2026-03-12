@@ -1,7 +1,7 @@
 LINODE_REGION := env('LINODE_REGION', 'us-ord')
 CLUSTER_NAME := env('CLUSTER_NAME', "karpl-dev")
 KUBECONFIG := env('KUBECONFIG', CLUSTER_NAME + "-kubeconfig")
-LINODE_CLI_API_VERSION := env('LINODE_CLI_API_VERSION', "v4")
+LINODE_CLI_API_VERSION := env('LINODE_CLI_API_VERSION', "v4beta")
 LINODE_CLI_API_HOST := env('LINODE_CLI_API_HOST', "api.linode.com")
 LINODE_TYPE := env('LINODE_TYPE', 'g6-standard-1')
 TILT_MODE := env('TILT_MODE', 'ci')
@@ -10,11 +10,11 @@ CHAINSAW_SELECTOR := env('CHAINSAW_SELECTOR', 'all')
 CLUSTER_ID := env("CLUSTER_ID", "")
 CLUSTER_TIER := env("CLUSTER_TIER", "standard")
 CLUSTER_ACL_FLAGS := env("CLUSTER_ACL_FLAGS", '--acl.enabled true --acl.addresses.ipv4=$(curl --silent ipv4.icanhazip.com)')
-K8S_VERSION := if CLUSTER_TIER == "standard" {
+K8S_VERSION := env("K8S_VERSION", if CLUSTER_TIER == "standard" {
     "1.34"
 } else {
     "v1.31.9+lke7"
-}
+})
 
 ## Inject the app version into operator.Version
 WITH_GOFLAGS := "GOFLAGS=\"-ldflags=-X=sigs.k8s.io/karpenter/pkg/operator.Version=$(git describe --tags --always | cut -d\"v\" -f2)\""
@@ -26,33 +26,37 @@ ONESHELL:
 
 # Create an LKE test cluster
 create-lke-cluster:
-	set -eu; \
-	existing_id=$(linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d'); \
+	set -euo pipefail; \
+	existing_id=$(LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d'); \
 	if [ -n "$existing_id" ]; then echo "LKE cluster '{{ CLUSTER_NAME }}' already exists (id: $existing_id); skipping create"; exit 0; fi; \
-	linode-cli lke cluster-create --label '{{ CLUSTER_NAME }}' --region '{{ LINODE_REGION }}' --k8s_version {{ K8S_VERSION }} --node_pools.type {{ LINODE_TYPE }} --node_pools.count 2 --tier {{ CLUSTER_TIER }} --no-defaults
+	LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke cluster-create --label '{{ CLUSTER_NAME }}' --region '{{ LINODE_REGION }}' --k8s_version {{ K8S_VERSION }} --node_pools.type {{ LINODE_TYPE }} --node_pools.count 2 --tier {{ CLUSTER_TIER }} --no-defaults
 
 # Retrying logic to wait for LKE cluster kubeconfig to be ready
 wait-for-lke-cluster-readiness cluster_id:
-	until OUTPUT=$(linode-cli lke kubeconfig-view "{{ cluster_id }}" --text 2>&1) && ! echo "$OUTPUT" | grep -q 503; do echo "Kubeconfig is not ready yet, retrying in 10s..."; sleep 10; done
+	until OUTPUT=$(LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke kubeconfig-view "{{ cluster_id }}" --text 2>&1) && ! echo "$OUTPUT" | grep -q 503; do echo "Kubeconfig is not ready yet, retrying in 10s..."; sleep 10; done
 
 # Get the kubeconfig for your LKE cluster
 get-lke-kubeconfig cluster_id: (wait-for-lke-cluster-readiness cluster_id)
-	linode-cli lke kubeconfig-view {{ cluster_id }} --text | sed '1d' | base64 -d > {{ KUBECONFIG }} && chmod 0600 {{ KUBECONFIG }}
+	LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke kubeconfig-view {{ cluster_id }} --text | sed '1d' | base64 -d > {{ KUBECONFIG }} && chmod 0600 {{ KUBECONFIG }}
 
 # Get the ID of your LKE development cluster
 get-lke-cluster-id:
-	@linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d'
+	@LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d'
 
 init-lke-cluster:
 	#!/usr/bin/env bash
-	set -e -o pipefail
-	CLUSTER_ID=$(just get-lke-cluster-id)
-	linode-cli lke cluster-acl-update $CLUSTER_ID {{ CLUSTER_ACL_FLAGS }}
+	set -euo pipefail
+	CLUSTER_ID=$(LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d')
+	if [ -z "$CLUSTER_ID" ]; then
+		echo "Unable to determine LKE cluster ID for '{{ CLUSTER_NAME }}'"
+		exit 1
+	fi
+	LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke cluster-acl-update "$CLUSTER_ID" {{ CLUSTER_ACL_FLAGS }}
 	just get-lke-kubeconfig $CLUSTER_ID
 
 # Destroy your LKE test cluster
 destroy-lke-cluster cluster_id:
-	linode-cli lke cluster-delete '{{ cluster_id }}'
+	LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke cluster-delete '{{ cluster_id }}'
 	-rm {{ KUBECONFIG }}
 
 build-karpl-image:
