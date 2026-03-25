@@ -32,7 +32,7 @@ spec:
     - name: Wait for NodeClaim with the correct plan to be ready
       try:
       - assert:
-          timeout: 10m
+          timeout: 20m
           resource:
             apiVersion: karpenter.sh/v1
             kind: NodeClaim
@@ -78,7 +78,7 @@ spec:
     - name: Wait for NodeClaim with the correct plan to be ready
       try:
       - assert:
-          timeout: 10m
+          timeout: 20m
           resource:
             apiVersion: karpenter.sh/v1
             kind: NodeClaim

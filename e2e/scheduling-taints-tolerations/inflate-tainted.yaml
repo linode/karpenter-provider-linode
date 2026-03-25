@@ -24,6 +24,10 @@ spec:
       nodeSelector:
         e2e.linode.dev/dedicated: tainted
       tolerations:
+      - key: e2e.linode.dev/test
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
       - key: e2e.linode.dev/dedicated
         operator: Equal
         value: tainted
