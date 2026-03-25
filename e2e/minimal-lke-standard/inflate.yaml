@@ -23,6 +23,11 @@ spec:
         fsGroup: 2000
       nodeSelector:
         e2e.linode.dev/m: "true"
+      tolerations:
+      - key: e2e.linode.dev/test
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
       containers:
       - name: inflate
         image: mirror.registry.linodelke.net/k8s/pause:3.9

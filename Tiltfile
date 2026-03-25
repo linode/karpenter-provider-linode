@@ -32,10 +32,10 @@ local_resource(
     resource_deps=["karpenter-crd"],
 )
 
-k8s_yaml("./examples/v1/simple.yaml")
+k8s_yaml("./examples/v1/default-linodenodeclass.yaml")
 k8s_resource(
-    new_name="karpl-nodepool-nodeclass",
-    objects=["default:linodenodeclass", "default:nodepool"],
+    new_name="karpl-default-linodenodeclass",
+    objects=["default:linodenodeclass"],
     labels=["karpenter"],
     resource_deps=["karpenter-crd"],
 )

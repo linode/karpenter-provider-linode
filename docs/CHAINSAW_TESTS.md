@@ -74,8 +74,10 @@ When adding/updating an E2E test:
 2. Keep manifests close to ownership:
    - put scenario-specific manifests next to that scenario's `chainsaw-test.yaml`
    - reserve `e2e/common/` for manifests reused by multiple scenarios
-3. Keep test cleanup explicit to avoid cross-test leftovers.
-4. Update this document:
+3. Treat the bootstrap cluster as having only the shared default `LinodeNodeClass`; each Chainsaw scenario must create its own Karpenter `NodePool`.
+4. Add the shared e2e isolation taint `e2e.linode.dev/test=true:NoSchedule` to each test-owned `NodePool`, and add the matching toleration to every workload that should run on that pool.
+5. Keep test cleanup explicit to avoid cross-test leftovers.
+6. Update this document:
    - add/update row in **Selector matrix** if a new selector is introduced
    - add/update row in **Test inventory and justification**
-5. Ensure workflow selectors (`pr`/`all`) still match intended scope.
+7. Ensure workflow selectors (`pr`/`all`) still match intended scope.

@@ -27,6 +27,10 @@ spec:
         - key: kubernetes.io/os
           operator: In
           values: ["linux"]
+      taints:
+        - key: e2e.linode.dev/test
+          value: "true"
+          effect: NoSchedule
       nodeClassRef:
         group: karpenter.k8s.linode
         kind: LinodeNodeClass
