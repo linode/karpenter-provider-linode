@@ -4,7 +4,7 @@ KUBECONFIG := env('KUBECONFIG', CLUSTER_NAME + "-kubeconfig")
 LINODE_CLI_API_VERSION := env('LINODE_CLI_API_VERSION', "v4beta")
 LINODE_CLI_API_HOST := env('LINODE_CLI_API_HOST', "api.linode.com")
 LINODE_TYPE := env('LINODE_TYPE', 'g6-standard-1')
-BOOTSTRAP_NODEPOOL_COUNT := env('BOOTSTRAP_NODEPOOL_COUNT', '3')
+NODEPOOL_SIZE := env('NODEPOOL_SIZE', '3')
 TILT_MODE := env('TILT_MODE', 'ci')
 CHAINSAW_FLAGS := env('CHAINSAW_FLAGS', '--config .chainsaw.yaml')
 CHAINSAW_SELECTOR := env('CHAINSAW_SELECTOR', 'all')
@@ -30,7 +30,7 @@ create-lke-cluster:
 	set -euo pipefail; \
 	existing_id=$(LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d'); \
 	if [ -n "$existing_id" ]; then echo "LKE cluster '{{ CLUSTER_NAME }}' already exists (id: $existing_id); skipping create"; exit 0; fi; \
-	LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke cluster-create --label '{{ CLUSTER_NAME }}' --region '{{ LINODE_REGION }}' --k8s_version {{ K8S_VERSION }} --node_pools.type {{ LINODE_TYPE }} --node_pools.count {{ BOOTSTRAP_NODEPOOL_COUNT }} --tier {{ CLUSTER_TIER }} --no-defaults
+	LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke cluster-create --label '{{ CLUSTER_NAME }}' --region '{{ LINODE_REGION }}' --k8s_version {{ K8S_VERSION }} --node_pools.type {{ LINODE_TYPE }} --node_pools.count {{ NODEPOOL_SIZE }} --tier {{ CLUSTER_TIER }} --no-defaults
 
 # Retrying logic to wait for LKE cluster kubeconfig to be ready
 wait-for-lke-cluster-readiness cluster_id:
