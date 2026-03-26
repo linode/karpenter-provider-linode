@@ -15,6 +15,9 @@ spec:
         - key: e2e.linode.dev/dedicated
           operator: Exists
       taints:
+        - key: e2e.linode.dev/test
+          value: "true"
+          effect: NoSchedule
         - key: e2e.linode.dev/dedicated
           value: tainted
           effect: NoSchedule

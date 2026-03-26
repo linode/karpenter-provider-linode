@@ -17,6 +17,10 @@ spec:
         - key: karpenter.k8s.linode/instance-memory
           operator: Lt
           values: ["8193"]
+      taints:
+        - key: e2e.linode.dev/test
+          value: "true"
+          effect: NoSchedule
       nodeClassRef:
         group: karpenter.k8s.linode
         kind: LinodeNodeClass

@@ -14,10 +14,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e-nightly:
+  e2e-nightly-standard:
+    name: Nightly E2E (standard)
     uses: ./.github/workflows/e2e.yaml
     with:
       cluster_name: ${{ format('kn-{0}', github.run_id) }}
+      cluster_tier: standard
+      chainsaw_selector: all
+      cleanup: true
+      timeout_minutes: 90
+      cleanup_timeout_minutes: 20
+    secrets: inherit
+
+  e2e-nightly-enterprise:
+    name: Nightly E2E (enterprise)
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      cluster_name: ${{ format('kn-{0}', github.run_id) }}
+      cluster_tier: enterprise
       chainsaw_selector: all
       cleanup: true
       timeout_minutes: 90
