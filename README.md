@@ -285,4 +285,3 @@ This project follows the [Linode Community Code of Conduct](https://www.linode.c
 Come discuss Karpenter in the [#karpenter](https://kubernetes.slack.com/archives/C02SFFZSA2K) channel in the [Kubernetes slack](https://slack.k8s.io/)!
 
 Check out the [Docs](https://karpenter.sh/) to learn more.
-
