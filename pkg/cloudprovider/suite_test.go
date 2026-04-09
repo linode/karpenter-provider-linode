@@ -401,6 +401,21 @@ var _ = Describe("CloudProvider", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(isDrifted).To(BeEmpty())
 			})
+			It("should not return drifted when only tags change", func() {
+				nodeClass.Annotations = map[string]string{
+					v1.AnnotationLinodeNodeClassHash:        nodeClass.Hash(),
+					v1.AnnotationLinodeNodeClassHashVersion: v1.LinodeNodeClassHashVersion,
+				}
+				nodeClaim.Annotations = map[string]string{
+					v1.AnnotationLinodeNodeClassHash:        nodeClass.Hash(),
+					v1.AnnotationLinodeNodeClassHashVersion: v1.LinodeNodeClassHashVersion,
+				}
+				nodeClass.Spec.Tags = []string{"updated=value"}
+				ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+				isDrifted, err := cloudProvider.IsDrifted(ctx, nodeClaim)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(isDrifted).To(BeEmpty())
+			})
 			It("should not return drifted if the NodeClaim's karpenter.k8s.linode/LinodeNodeclass-hash-version annotation does not match the LinodeNodeClass's", func() {
 				nodeClass.Annotations = map[string]string{
 					v1.AnnotationLinodeNodeClassHash:        "test-hash-111111",
@@ -523,6 +538,7 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(corecloudprovider.IsNodeClassNotReadyError(err)).To(BeTrue())
 		})
+
 	})
 
 	Context("Get", func() {

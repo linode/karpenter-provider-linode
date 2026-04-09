@@ -508,9 +508,13 @@ type LinodeNodeClass struct {
 // 3. A field is removed from the hash calculations
 const LinodeNodeClassHashVersion = "v1alpha1"
 
+// Hash generates a hash of the LinodeNodeClass spec and annotations, excluding fields that can we update in-place (e.g. tags).
+// This is used to determine if a NodeClaim needs to be replaced due to changes in the NodeClass.
 func (in *LinodeNodeClass) Hash() string {
+	hashableSpec := in.Spec
+	hashableSpec.Tags = nil // Tags are not part of the hash calculation since we do in-place updates for it
 	return fmt.Sprint(lo.Must(hashstructure.Hash([]interface{}{
-		in.Spec,
+		hashableSpec,
 	}, hashstructure.FormatV2, &hashstructure.HashOptions{
 		SlicesAsSets:    true,
 		IgnoreZeroValue: true,
