@@ -47,6 +47,15 @@ var (
 
 const maxLinodeTagLength = 50
 
+var restrictedTagKeys = map[string]struct{}{
+	karpv1.NodePoolLabelKey:       {},
+	v1alpha1.LabelNodeClass:       {},
+	v1alpha1.LabelLKEManaged:      {},
+	v1alpha1.NodeClaimTagKey:      {},
+	v1alpha1.LKEClusterNameTagKey: {},
+	v1alpha1.NameTagKey:           {},
+}
+
 // ParseInstanceID parses the provider ID stored on the node to get the instance ID
 // associated with a node
 func ParseInstanceID(providerID string) (string, error) {
@@ -120,7 +129,7 @@ func GetTagsForLKE(nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeCl
 		v1alpha1.LabelLKEManaged:                             "true",
 	}
 
-	return lo.Assign(TagListToMap(nodeClass.Spec.Tags), staticTags)
+	return staticTags
 }
 
 func NodeClaimTag(nodeClaimName string) string {
@@ -150,6 +159,40 @@ func NormalizeNodeClaimTagValue(nodeClaimName string) string {
 
 func GetNodeClassHash(nodeClass *v1alpha1.LinodeNodeClass) string {
 	return fmt.Sprintf("%s-%d", nodeClass.UID, nodeClass.Generation)
+}
+
+func ValidateTags(tags []string) error {
+	invalidTags := []string{}
+	seen := map[string]struct{}{}
+	for _, tag := range tags {
+		key, _, ok := splitTag(tag)
+		switch {
+		case strings.HasPrefix(tag, "kubernetes.io/cluster/"):
+			if _, exists := seen[tag]; !exists {
+				invalidTags = append(invalidTags, tag)
+				seen[tag] = struct{}{}
+			}
+		case ok && strings.HasPrefix(key, "kubernetes.io/cluster/"):
+			if _, exists := seen[tag]; !exists {
+				invalidTags = append(invalidTags, tag)
+				seen[tag] = struct{}{}
+			}
+		case ok:
+			if _, restricted := restrictedTagKeys[key]; restricted {
+				if _, exists := seen[tag]; !exists {
+					invalidTags = append(invalidTags, tag)
+					seen[tag] = struct{}{}
+				}
+			}
+		}
+	}
+	if len(invalidTags) == 0 {
+		return nil
+	}
+	quotedTags := lo.Map(invalidTags, func(tag string, _ int) string {
+		return fmt.Sprintf("%q", tag)
+	})
+	return serrors.Wrap(fmt.Errorf("tags failed validation requirements"), "tags", strings.Join(quotedTags, ", "))
 }
 
 func TagListToMap(tags []string) map[string]string {
@@ -186,6 +229,17 @@ func DedupeTags(tags []string) []string {
 		uniqueTags = append(uniqueTags, tag)
 	}
 	return uniqueTags
+}
+
+func OpaqueTags(tags []string) []string {
+	opaqueTags := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if _, _, ok := splitTag(tag); ok {
+			continue
+		}
+		opaqueTags = append(opaqueTags, tag)
+	}
+	return opaqueTags
 }
 
 func splitTag(tag string) (key, value string, ok bool) {

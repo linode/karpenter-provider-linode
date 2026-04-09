@@ -227,8 +227,8 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(poolInstance.ID).ToNot(BeZero())
 				})
 
-				It("should include NodeClass tags in pool tags", func() {
-					nodeClass.Spec.Tags = []string{"env=production", "team=platform"}
+				It("should include NodeClass tags on claimed instances", func() {
+					nodeClass.Spec.Tags = []string{"env=production", "team=platform", "opaque-user-tag"}
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 
@@ -241,6 +241,7 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(poolInstance).ToNot(BeNil())
 					Expect(poolInstance.Tags).To(ContainElement("env=production"))
 					Expect(poolInstance.Tags).To(ContainElement("team=platform"))
+					Expect(poolInstance.Tags).To(ContainElement("opaque-user-tag"))
 				})
 
 				It("should include caller-provided tags in pool tags", func() {
@@ -760,8 +761,8 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(poolInstance.ID).ToNot(BeZero())
 				})
 
-				It("should include NodeClass tags in pool tags", func() {
-					nodeClass.Spec.Tags = []string{"env=production", "team=platform"}
+				It("should keep NodeClass tags off the pool and apply them to claimed instances", func() {
+					nodeClass.Spec.Tags = []string{"env=production", "team=platform", "opaque-user-tag"}
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 
@@ -778,10 +779,98 @@ var _ = Describe("LKENodeProvider", func() {
 					poolInstance, err := enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(poolInstance).ToNot(BeNil())
+					Expect(poolInstance.Tags).To(ContainElement("env=production"))
+					Expect(poolInstance.Tags).To(ContainElement("team=platform"))
+					Expect(poolInstance.Tags).To(ContainElement("opaque-user-tag"))
 
 					input := linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.CalledWithInput.At(0)
-					Expect(input.Opts.Tags).To(ContainElement("env=production"))
-					Expect(input.Opts.Tags).To(ContainElement("team=platform"))
+					Expect(input.Opts.Tags).ToNot(ContainElement("env=production"))
+					Expect(input.Opts.Tags).ToNot(ContainElement("team=platform"))
+					Expect(input.Opts.Tags).ToNot(ContainElement("opaque-user-tag"))
+				})
+
+				It("should handle tag conflicts with correct precedence (pool > nodeClass > instance)", func() {
+					nodeClass.Spec.Tags = []string{"env=production", "conflict=nodeclass-value"}
+					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+					Expect(err).ToNot(HaveOccurred())
+					cheapestType, err := utils.CheapestInstanceType(instanceTypes)
+					Expect(err).ToNot(HaveOccurred())
+					poolID := 100
+					instanceID := 1000 + poolID*10
+					now := time.Now()
+					// Instance has a conflicting KV tag
+					instanceTags := append(enterpriseInstanceTags(nodePoolObj.Name, poolID), "conflict=instance-value")
+					claimable := linodego.Instance{ID: instanceID, Type: cheapestType.Name, Label: "node-0", Tags: instanceTags, Created: &now, LKEClusterID: fake.DefaultClusterID}
+					enqueueListInstances(linodeEnv, []linodego.Instance{}, []linodego.Instance{claimable})
+
+					poolInstance, err := enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(poolInstance).ToNot(BeNil())
+					// NodeClass tag should override instance tag
+					Expect(poolInstance.Tags).To(ContainElement("conflict=nodeclass-value"))
+					Expect(poolInstance.Tags).ToNot(ContainElement("conflict=instance-value"))
+					// Other tags should be preserved
+					Expect(poolInstance.Tags).To(ContainElement("env=production"))
+				})
+
+				It("should preserve instance opaque tags when claiming", func() {
+					nodeClass.Spec.Tags = []string{"env=production"}
+					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+					Expect(err).ToNot(HaveOccurred())
+					cheapestType, err := utils.CheapestInstanceType(instanceTypes)
+					Expect(err).ToNot(HaveOccurred())
+					poolID := 100
+					instanceID := 1000 + poolID*10
+					now := time.Now()
+					// Instance has opaque tags that should be preserved
+					instanceTags := append(enterpriseInstanceTags(nodePoolObj.Name, poolID), "custom-opaque-tag-1", "custom-opaque-tag-2")
+					claimable := linodego.Instance{ID: instanceID, Type: cheapestType.Name, Label: "node-0", Tags: instanceTags, Created: &now, LKEClusterID: fake.DefaultClusterID}
+					enqueueListInstances(linodeEnv, []linodego.Instance{}, []linodego.Instance{claimable})
+
+					poolInstance, err := enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(poolInstance).ToNot(BeNil())
+					// Opaque tags from instance should be preserved
+					Expect(poolInstance.Tags).To(ContainElement("custom-opaque-tag-1"))
+					Expect(poolInstance.Tags).To(ContainElement("custom-opaque-tag-2"))
+					// NodeClass tags should also be added
+					Expect(poolInstance.Tags).To(ContainElement("env=production"))
+				})
+
+				It("should deduplicate tags when sources have duplicates", func() {
+					nodeClass.Spec.Tags = []string{"env=production", "dedup=test"}
+					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+					Expect(err).ToNot(HaveOccurred())
+					cheapestType, err := utils.CheapestInstanceType(instanceTypes)
+					Expect(err).ToNot(HaveOccurred())
+					poolID := 100
+					instanceID := 1000 + poolID*10
+					now := time.Now()
+					// Instance has the same KV tag as nodeClass
+					instanceTags := append(enterpriseInstanceTags(nodePoolObj.Name, poolID), "dedup=test")
+					claimable := linodego.Instance{ID: instanceID, Type: cheapestType.Name, Label: "node-0", Tags: instanceTags, Created: &now, LKEClusterID: fake.DefaultClusterID}
+					enqueueListInstances(linodeEnv, []linodego.Instance{}, []linodego.Instance{claimable})
+
+					poolInstance, err := enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(poolInstance).ToNot(BeNil())
+					// Tag should appear only once
+					count := 0
+					for _, tag := range poolInstance.Tags {
+						if tag == "dedup=test" {
+							count++
+						}
+					}
+					Expect(count).To(Equal(1))
 				})
 
 				It("should include caller-provided tags in pool tags", func() {

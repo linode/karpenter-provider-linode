@@ -39,7 +39,13 @@ const (
 	requeueAfterTime = 10 * time.Minute
 )
 
-var ValidationConditionMessages = map[string]string{}
+const (
+	ConditionReasonTagValidationFailed = "TagValidationFailed"
+)
+
+var ValidationConditionMessages = map[string]string{
+	ConditionReasonTagValidationFailed: "LinodeNodeClass spec.tags contains restricted provider-managed tags",
+}
 
 type Validation struct {
 	kubeClient           client.Client
@@ -85,6 +91,10 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 		tags = utils.GetTags(nodeClass, nodeClaim, options.FromContext(ctx).ClusterName)
 	}
 
+	if err := v.validateTags(nodeClass); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	if val, ok := v.cache.Get(v.cacheKey(nodeClass, tags)); ok {
 		// We still update the status condition even if it's cached since we may have had a conflict error previously
 		if val == "" {
@@ -108,6 +118,14 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 	v.cache.SetDefault(v.cacheKey(nodeClass, tags), "")
 	nodeClass.StatusConditions().SetTrue(v1.ConditionTypeValidationSucceeded)
 	return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
+}
+
+func (v *Validation) validateTags(nodeClass *v1alpha1.LinodeNodeClass) error {
+	if err := utils.ValidateTags(nodeClass.Spec.Tags); err != nil {
+		nodeClass.StatusConditions().SetFalse(v1.ConditionTypeValidationSucceeded, ConditionReasonTagValidationFailed, err.Error())
+		return reconcile.TerminalError(fmt.Errorf("validating tags, %w", err))
+	}
+	return nil
 }
 
 func (*Validation) cacheKey(nodeClass *v1alpha1.LinodeNodeClass, tags map[string]string) string {

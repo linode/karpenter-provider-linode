@@ -58,6 +58,7 @@ var (
 
 	TerminationFinalizer                     = apis.Group + "/termination"
 	AnnotationInstanceTagged                 = apis.Group + "/tagged"
+	AnnotationLastAppliedUserTags            = apis.Group + "/last-applied-user-tags"
 	NodeClaimTagKey                          = coreapis.Group + "/nodeclaim"
 	NameTagKey                               = "Name"
 	LabelNodeClass                           = apis.Group + "/linodenodeclass"

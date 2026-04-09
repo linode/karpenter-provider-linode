@@ -47,6 +47,7 @@ type Provider interface {
 	List(context.Context) ([]*Instance, error)
 	Delete(context.Context, string) error
 	CreateTags(context.Context, string, map[string]string) error
+	UpdateTags(context.Context, string, []string) error
 }
 
 type options struct {
@@ -235,6 +236,21 @@ func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[st
 		}
 	}
 
+	return nil
+}
+
+func (p *DefaultProvider) UpdateTags(ctx context.Context, id string, tags []string) error {
+	intID, err := strconv.Atoi(id)
+	if err != nil {
+		return fmt.Errorf("invalid instance id %s, %w", id, err)
+	}
+	if _, err := p.client.UpdateInstance(ctx, intID, linodego.InstanceUpdateOptions{Tags: &tags}); err != nil {
+		if linodego.IsNotFound(err) {
+			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("updating instance tags, %w", err))
+		}
+		return fmt.Errorf("updating instance tags, %w", err)
+	}
+	p.instanceCache.Delete(id)
 	return nil
 }
 

@@ -535,7 +535,9 @@ func (in *LinodeNodeClass) SetConditions(conditions []status.Condition) {
 }
 
 func (in *LinodeNodeClass) StatusConditions() status.ConditionSet {
-	conds := []string{}
+	conds := []string{
+		ConditionTypeValidationSucceeded,
+	}
 	return status.NewReadyConditions(conds...).For(in)
 }
 

@@ -42,7 +42,7 @@ The `LinodeNodeClass` allows you to configure specific settings for the nodes ma
 
 | Field | Type | Supported Modes | Description |
 |-------|------|-----------------|-------------|
-| `tags` | `[]string` | **All** | List of tags to apply to the Instance or Node Pool. |
+| `tags` | `[]string` | **All** | List of tags to apply to instances. In LKE mode, Karpenter-managed pools keep only core provider tags. |
 | `firewallID` | `int` | **All** | The ID of the Cloud Firewall to attach. |
 | `lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for the node (e.g., "1.29"). This is only available for LKE-E |
 | `lkeUpdateStrategy` | `string` | **LKE** | Strategy for pool updates: `rolling_update` or `on_recycle`. This is only available for LKE-E |
