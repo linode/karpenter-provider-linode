@@ -18,7 +18,7 @@ jobs:
     name: Nightly E2E (standard)
     uses: ./.github/workflows/e2e.yaml
     with:
-      cluster_name: ${{ format('kn-{0}', github.run_id) }}
+      cluster_name: ${{ format('kns-{0}', github.run_id) }}
       cluster_tier: standard
       chainsaw_selector: all
       cleanup: true
@@ -30,7 +30,7 @@ jobs:
     name: Nightly E2E (enterprise)
     uses: ./.github/workflows/e2e.yaml
     with:
-      cluster_name: ${{ format('kn-{0}', github.run_id) }}
+      cluster_name: ${{ format('kne-{0}', github.run_id) }}
       cluster_tier: enterprise
       chainsaw_selector: all
       cleanup: true
