@@ -33,3 +33,13 @@ func WaitingOnNodeClaimTerminationEvent(nodeClass *v1alpha1.LinodeNodeClass, nam
 		DedupeValues:   []string{string(nodeClass.UID)},
 	}
 }
+
+func LKEK8sVersionValidationFailedEvent(nodeClass *v1alpha1.LinodeNodeClass, reason, message string) events.Event {
+	return events.Event{
+		InvolvedObject: nodeClass,
+		Type:           corev1.EventTypeWarning,
+		Reason:         reason,
+		Message:        message,
+		DedupeValues:   []string{string(nodeClass.UID), reason},
+	}
+}

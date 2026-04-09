@@ -63,6 +63,7 @@ func main() {
 		WithControllers(ctx, controllers.NewControllers(
 			ctx,
 			options.FromContext(ctx).ClusterRegion,
+			op.ClusterID,
 			op.Manager,
 			op.LinodeClient,
 			op.GetClient(),

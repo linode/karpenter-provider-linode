@@ -61,6 +61,7 @@ func NewController(
 	cloudProvider cloudprovider.CloudProvider,
 	recorder events.Recorder,
 	region string,
+	clusterID int,
 	instanceTypeProvider instancetype.Provider,
 	linodeClient sdk.LinodeAPI,
 	validationCache *cache.Cache,
@@ -69,6 +70,8 @@ func NewController(
 	validation := NewValidationReconciler(
 		kubeClient,
 		cloudProvider,
+		recorder,
+		clusterID,
 		linodeClient,
 		instanceTypeProvider,
 		validationCache,

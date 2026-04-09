@@ -101,15 +101,11 @@ type LinodeNodeClassSpec struct {
 
 	// lkeK8sVersion is the Kubernetes version for LKE node pools.
 	// Only used in LKE mode. Only available for Enterprise LKE clusters.
+	// The LKE cluster control plane version must already be upgraded to this version
+	// before setting this field. Otherwise pool reconciliation fails and replacement
+	// NodeClaims won't become ready on the requested worker version.
 	// +optional
 	LKEK8sVersion *string `json:"lkeK8sVersion,omitempty"`
-
-	// lkeUpdateStrategy defines how nodes are updated when the LKE node pool is modified.
-	// Only used in LKE mode.
-	// Valid values are "rolling_update" and "on_recycle".
-	// +optional
-	// +kubebuilder:validation:Enum=rolling_update;on_recycle
-	LKEUpdateStrategy *linodego.LKENodePoolUpdateStrategy `json:"lkeUpdateStrategy,omitempty"`
 }
 
 type InstanceCreatePlacementGroupOptions struct {

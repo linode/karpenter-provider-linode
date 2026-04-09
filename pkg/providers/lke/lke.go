@@ -47,6 +47,8 @@ const (
 	DefaultRetryDelay             = 2 * time.Second
 )
 
+var defaultPoolUpdateStrategy = linodego.LKENodePoolOnRecycle
+
 var ErrNodesProvisioning = errors.New("nodes provisioning")
 var ErrNoClaimableInstance = errors.New("no claimable instance")
 var ErrClaimFailed = errors.New("claim failed")
@@ -224,6 +226,9 @@ func (p *DefaultProvider) findOrCreatePool(ctx context.Context, nodeClass *v1alp
 	for i := range pools {
 		pool := &pools[i]
 		if p.matchesPoolKey(pool, instanceType, karpenterNodePoolName) {
+			if err := p.reconcilePoolVersion(ctx, nodeClass, pool); err != nil {
+				return nil, err
+			}
 			return pool, nil
 		}
 	}
@@ -246,8 +251,8 @@ func (p *DefaultProvider) findOrCreatePool(ctx context.Context, nodeClass *v1alp
 	if nodeClass.Spec.LKEK8sVersion != nil {
 		createOpts.K8sVersion = nodeClass.Spec.LKEK8sVersion
 	}
-	if nodeClass.Spec.LKEUpdateStrategy != nil {
-		createOpts.UpdateStrategy = nodeClass.Spec.LKEUpdateStrategy
+	if p.clusterTier == linodego.LKEVersionEnterprise {
+		createOpts.UpdateStrategy = &defaultPoolUpdateStrategy
 	}
 
 	pool, err := p.client.CreateLKENodePool(ctx, p.clusterID, createOpts)
@@ -269,6 +274,24 @@ func (p *DefaultProvider) matchesPoolKey(pool *linodego.LKENodePool, instanceTyp
 	}
 	tags := utils.TagListToMap(pool.Tags)
 	return tags[karpv1.NodePoolLabelKey] == nodePoolName
+}
+
+func (p *DefaultProvider) reconcilePoolVersion(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, pool *linodego.LKENodePool) error {
+	if nodeClass.Spec.LKEK8sVersion == nil {
+		return nil
+	}
+	if pool.K8sVersion != nil && *pool.K8sVersion == *nodeClass.Spec.LKEK8sVersion {
+		return nil
+	}
+	_, err := p.client.UpdateLKENodePool(ctx, p.clusterID, pool.ID, linodego.LKENodePoolUpdateOptions{
+		K8sVersion:     nodeClass.Spec.LKEK8sVersion,
+		UpdateStrategy: &defaultPoolUpdateStrategy,
+	})
+	if err != nil {
+		return fmt.Errorf("updating node pool %d kubernetes version: %w", pool.ID, err)
+	}
+	p.nodeCache.Delete(fmt.Sprintf("%d-%d", p.clusterID, pool.ID))
+	return nil
 }
 
 func (p *DefaultProvider) findClaimableInstance(ctx context.Context, pool *linodego.LKENodePool) (*linodego.Instance, error) {

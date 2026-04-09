@@ -49,6 +49,7 @@ type Operator struct {
 	InstanceTypesProvider     *instancetype.DefaultProvider
 	NodeProvider              instance.Provider
 	LinodeClient              sdk.LinodeAPI
+	ClusterID                 int
 }
 
 // allow passing a custom Linode client for testing
@@ -68,6 +69,7 @@ func NewOperator(ctx context.Context, op *operator.Operator, linodeClient sdk.Li
 
 	opts := options.FromContext(ctx)
 	var nodeProvider instance.Provider
+	clusterID := 0
 
 	// Initialize only the provider needed for the configured mode
 	switch opts.Mode {
@@ -89,6 +91,7 @@ func NewOperator(ctx context.Context, op *operator.Operator, linodeClient sdk.Li
 		if len(clusterList) != 1 {
 			return nil, fmt.Errorf("could not determine LKE cluster with name: %s", opts.ClusterName)
 		}
+		clusterID = clusterList[0].ID
 
 		if opts.ClusterRegion == "" {
 			opts.ClusterRegion = clusterList[0].Region
@@ -141,6 +144,7 @@ func NewOperator(ctx context.Context, op *operator.Operator, linodeClient sdk.Li
 		InstanceTypesProvider:     instanceTypeProvider,
 		NodeProvider:              nodeProvider,
 		LinodeClient:              linodeClient,
+		ClusterID:                 clusterID,
 	}, nil
 }
 

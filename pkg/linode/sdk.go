@@ -37,6 +37,7 @@ type LinodeAPI interface {
 	UpdateInstance(ctx context.Context, linodeID int, opts linodego.InstanceUpdateOptions) (*linodego.Instance, error)
 
 	// LKE Cluster methods for LKE cluster management
+	GetLKECluster(ctx context.Context, clusterID int) (*linodego.LKECluster, error)
 	ListLKEClusters(ctx context.Context, opts *linodego.ListOptions) ([]linodego.LKECluster, error)
 	// NodePool methods for LKE cluster management
 

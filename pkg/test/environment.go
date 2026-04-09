@@ -147,6 +147,7 @@ func (env *Environment) Reset() {
 	env.Clock.SetTime(time.Time{})
 
 	env.LinodeAPI.Reset()
+	env.EventRecorder.Reset()
 
 	env.LinodeCache.Flush()
 	env.InstanceCache.Flush()

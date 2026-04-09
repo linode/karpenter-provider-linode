@@ -43,6 +43,7 @@ import (
 func NewControllers(
 	ctx context.Context,
 	region string,
+	clusterID int,
 	mgr manager.Manager,
 	linodeClient sdk.LinodeAPI,
 	kubeClient client.Client,
@@ -52,12 +53,13 @@ func NewControllers(
 	nodeProvider instance.Provider,
 	instanceTypeProvider *instancetype.DefaultProvider,
 ) []controller.Controller {
-	return []controller.Controller{
+	controllers := []controller.Controller{
 		nodeclass.NewController(
 			kubeClient,
 			cloudProvider,
 			recorder,
 			region,
+			clusterID,
 			instanceTypeProvider,
 			linodeClient,
 			validationCache,
@@ -72,4 +74,5 @@ func NewControllers(
 		status.NewController[*v1alpha1.LinodeNodeClass](kubeClient, mgr.GetEventRecorderFor("karpenter"), status.EmitDeprecatedMetrics),
 		metrics.NewController(kubeClient, cloudProvider),
 	}
+	return controllers
 }

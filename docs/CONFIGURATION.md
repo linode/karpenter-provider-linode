@@ -44,8 +44,7 @@ The `LinodeNodeClass` allows you to configure specific settings for the nodes ma
 |-------|------|-----------------|-------------|
 | `tags` | `[]string` | **All** | List of tags to apply to instances. In LKE mode, Karpenter-managed pools keep only core provider tags. |
 | `firewallID` | `int` | **All** | The ID of the Cloud Firewall to attach. |
-| `lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for the node (e.g., "1.29"). This is only available for LKE-E |
-| `lkeUpdateStrategy` | `string` | **LKE** | Strategy for pool updates: `rolling_update` or `on_recycle`. This is only available for LKE-E |
+| `lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for LKE Enterprise worker nodes. Upgrade the cluster control plane to this version first; otherwise reconciliation fails and replacement NodeClaims will not come up on the requested version. For Enterprise clusters, the update strategy automatically defaults to `on_recycle`. |
 | `image` | `string` | **Instance** | The Image ID to deploy (default: `linode/ubuntu22.04`). |
 | `authorizedKeys` | `[]string` | **Instance** | SSH Public Keys to add to the `root` user. |
 | `authorizedUsers` | `[]string` | **Instance** | List of Linode usernames whose SSH keys will be added. |

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/linode/linodego"
 	"github.com/mitchellh/hashstructure/v2"
 	gocache "github.com/patrickmn/go-cache"
 	"github.com/samber/lo"
@@ -27,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	v1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+	"sigs.k8s.io/karpenter/pkg/events"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
@@ -37,19 +39,28 @@ import (
 
 const (
 	requeueAfterTime = 10 * time.Minute
+	// Requeue invalid lkeK8sVersion checks quickly so readiness flips soon after an
+	// external LKE control plane upgrade becomes visible in the Linode API.
+	lkeVersionRequeueAfterTime = time.Minute
 )
 
 const (
-	ConditionReasonTagValidationFailed = "TagValidationFailed"
+	ConditionReasonTagValidationFailed               = "TagValidationFailed"
+	ConditionReasonLKEK8sVersionUnsupported          = "LKEK8sVersionUnsupported"
+	ConditionReasonLKEK8sVersionControlPlaneMismatch = "LKEK8sVersionControlPlaneMismatch"
 )
 
 var ValidationConditionMessages = map[string]string{
-	ConditionReasonTagValidationFailed: "LinodeNodeClass spec.tags contains restricted provider-managed tags",
+	ConditionReasonTagValidationFailed:               "LinodeNodeClass spec.tags contains restricted provider-managed tags",
+	ConditionReasonLKEK8sVersionUnsupported:          "lkeK8sVersion is only supported for LKE Enterprise clusters",
+	ConditionReasonLKEK8sVersionControlPlaneMismatch: "lkeK8sVersion requires the LKE cluster control plane to already be on the same version",
 }
 
 type Validation struct {
 	kubeClient           client.Client
 	cloudProvider        cloudprovider.CloudProvider
+	recorder             events.Recorder
+	clusterID            int
 	linodeClient         sdk.LinodeAPI
 	instanceTypeProvider instancetype.Provider
 	cache                *gocache.Cache
@@ -59,6 +70,8 @@ type Validation struct {
 func NewValidationReconciler(
 	kubeClient client.Client,
 	cloudProvider cloudprovider.CloudProvider,
+	recorder events.Recorder,
+	clusterID int,
 	linodeClient sdk.LinodeAPI,
 	instanceTypeProvider instancetype.Provider,
 	cache *gocache.Cache,
@@ -67,6 +80,8 @@ func NewValidationReconciler(
 	return &Validation{
 		kubeClient:           kubeClient,
 		cloudProvider:        cloudProvider,
+		recorder:             recorder,
+		clusterID:            clusterID,
 		linodeClient:         linodeClient,
 		instanceTypeProvider: instanceTypeProvider,
 		cache:                cache,
@@ -91,6 +106,9 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 		tags = utils.GetTags(nodeClass, nodeClaim, options.FromContext(ctx).ClusterName)
 	}
 
+	if res, err := v.validateLKEK8sVersion(ctx, nodeClass); err != nil || !lo.IsEmpty(res) {
+		return res, err
+	}
 	if err := v.validateTags(nodeClass); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -126,6 +144,38 @@ func (v *Validation) validateTags(nodeClass *v1alpha1.LinodeNodeClass) error {
 		return reconcile.TerminalError(fmt.Errorf("validating tags, %w", err))
 	}
 	return nil
+}
+
+func (v *Validation) validateLKEK8sVersion(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) (reconcile.Result, error) {
+	if options.FromContext(ctx).Mode != "lke" || nodeClass.Spec.LKEK8sVersion == nil {
+		return reconcile.Result{}, nil
+	}
+	if v.clusterID == 0 {
+		return reconcile.Result{}, fmt.Errorf("validating lkeK8sVersion, LKE cluster ID is not configured")
+	}
+
+	cluster, err := v.linodeClient.GetLKECluster(ctx, v.clusterID)
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("getting LKE cluster %d: %w", v.clusterID, err)
+	}
+
+	desiredVersion := *nodeClass.Spec.LKEK8sVersion
+	switch linodego.LKEVersionTier(cluster.Tier) {
+	case linodego.LKEVersionEnterprise:
+		if cluster.K8sVersion == desiredVersion {
+			return reconcile.Result{}, nil
+		}
+		message := fmt.Sprintf("lkeK8sVersion %q requires the LKE cluster control plane to already be on %q, current cluster version is %q", desiredVersion, desiredVersion, cluster.K8sVersion)
+		nodeClass.StatusConditions().SetFalse(v1alpha1.ConditionTypeValidationSucceeded, ConditionReasonLKEK8sVersionControlPlaneMismatch, message)
+		v.recorder.Publish(LKEK8sVersionValidationFailedEvent(nodeClass, ConditionReasonLKEK8sVersionControlPlaneMismatch, message))
+		return reconcile.Result{RequeueAfter: lkeVersionRequeueAfterTime}, nil
+	case linodego.LKEVersionStandard:
+		message := "lkeK8sVersion is only supported for LKE Enterprise clusters"
+		nodeClass.StatusConditions().SetFalse(v1alpha1.ConditionTypeValidationSucceeded, ConditionReasonLKEK8sVersionUnsupported, message)
+		v.recorder.Publish(LKEK8sVersionValidationFailedEvent(nodeClass, ConditionReasonLKEK8sVersionUnsupported, message))
+		return reconcile.Result{RequeueAfter: lkeVersionRequeueAfterTime}, nil
+	}
+	return reconcile.Result{}, fmt.Errorf("validating lkeK8sVersion, unsupported LKE version tier %q", cluster.Tier)
 }
 
 func (*Validation) cacheKey(nodeClass *v1alpha1.LinodeNodeClass, tags map[string]string) string {

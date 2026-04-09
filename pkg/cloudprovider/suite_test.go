@@ -43,6 +43,7 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
+	nodeclasscontroller "github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclass"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/test"
@@ -539,6 +540,31 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 			Expect(corecloudprovider.IsNodeClassNotReadyError(err)).To(BeTrue())
 		})
 
+		It("should return NodeClassNotReady when lkeK8sVersion validation marks the NodeClass not ready", func() {
+			lkeNodeClass.Spec.LKEK8sVersion = lo.ToPtr("v1.32.8+lke13")
+			linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
+
+			nodeClassController := nodeclasscontroller.NewController(
+				env.Client,
+				cloudProvider,
+				linodeEnv.EventRecorder,
+				fake.DefaultRegion,
+				fake.DefaultClusterID,
+				linodeEnv.InstanceTypesProvider,
+				linodeEnv.LinodeAPI,
+				linodeEnv.ValidationCache,
+				options.FromContext(ctx).DisableDryRun,
+			)
+			ExpectApplied(ctx, env.Client, lkeNodePool, lkeNodeClass, lkeNodeClaim)
+			ExpectObjectReconciled(ctx, env.Client, nodeClassController, lkeNodeClass)
+
+			lkeNodeClass = ExpectExists(ctx, env.Client, lkeNodeClass)
+			Expect(lkeNodeClass.StatusConditions().Get(opstatus.ConditionReady).IsFalse()).To(BeTrue())
+
+			_, err := cloudProvider.Create(ctx, lkeNodeClaim)
+			Expect(err).To(HaveOccurred())
+			Expect(corecloudprovider.IsNodeClassNotReadyError(err)).To(BeTrue())
+		})
 	})
 
 	Context("Get", func() {

@@ -29,10 +29,11 @@ import (
 )
 
 const (
-	DefaultRegion      = "us-east"
-	DefaultClusterID   = 12345
-	DefaultClusterName = "test-cluster"
-	DefaultClusterTier = linodego.LKEVersionStandard
+	DefaultRegion         = "us-east"
+	DefaultClusterID      = 12345
+	DefaultClusterName    = "test-cluster"
+	DefaultClusterTier    = linodego.LKEVersionStandard
+	DefaultClusterVersion = "1.31"
 )
 
 var (
@@ -132,6 +133,7 @@ type LinodeAPIBehavior struct {
 		ClusterID int
 		Opts      linodego.LKENodePoolCreateOptions
 	}, *linodego.LKENodePool]
+	GetLKEClusterBehavior    MockedFunction[int, *linodego.LKECluster]
 	ListLKENodePoolsBehavior MockedFunction[int, []linodego.LKENodePool]
 	GetLKENodePoolBehavior   MockedFunction[struct {
 		ClusterName int
@@ -158,6 +160,8 @@ type LinodeAPIBehavior struct {
 
 type LinodeClient struct {
 	LinodeAPIBehavior
+	ClusterTier    linodego.LKEVersionTier
+	ClusterVersion string
 }
 
 func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.LinodeType, error) {
@@ -205,7 +209,10 @@ func (l *LinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.I
 }
 
 func NewLinodeClient() *LinodeClient {
-	return &LinodeClient{}
+	return &LinodeClient{
+		ClusterTier:    DefaultClusterTier,
+		ClusterVersion: DefaultClusterVersion,
+	}
 }
 
 func (l *LinodeClient) Reset() {
@@ -230,12 +237,15 @@ func (l *LinodeClient) Reset() {
 		return true
 	})
 	l.CreateLKENodePoolBehavior.Reset()
+	l.GetLKEClusterBehavior.Reset()
 	l.ListLKENodePoolsBehavior.Reset()
 	l.GetLKENodePoolBehavior.Reset()
 	l.UpdateLKENodePoolBehavior.Reset()
 	l.DeleteLKENodePoolBehavior.Reset()
 	l.DeleteLKENodePoolNodeBehavior.Reset()
 	l.UpdateInstanceBehavior.Reset()
+	l.ClusterTier = DefaultClusterTier
+	l.ClusterVersion = DefaultClusterVersion
 }
 
 //nolint:gocritic // can't change signature to take a pointer receiver for opts since it needs to satisfy the linodego interface
@@ -730,7 +740,36 @@ func (l *LinodeClient) DeleteLKENodePool(_ context.Context, clusterID, poolID in
 
 func (l *LinodeClient) ListLKEClusters(_ context.Context, _ *linodego.ListOptions) ([]linodego.LKECluster, error) {
 	// For simplicity, return a canned response
-	return []linodego.LKECluster{{ID: DefaultClusterID, Tier: string(DefaultClusterTier)}}, nil
+	return []linodego.LKECluster{{
+		ID:         DefaultClusterID,
+		Label:      DefaultClusterName,
+		Region:     DefaultRegion,
+		K8sVersion: l.ClusterVersion,
+		Tier:       string(l.ClusterTier),
+	}}, nil
+}
+
+func (l *LinodeClient) GetLKECluster(_ context.Context, clusterID int) (*linodego.LKECluster, error) {
+	cluster, err := l.GetLKEClusterBehavior.Invoke(&clusterID, func(clusterID *int) (**linodego.LKECluster, error) {
+		if *clusterID != DefaultClusterID {
+			return nil, &linodego.Error{
+				Code:    http.StatusNotFound,
+				Message: fmt.Sprintf("cluster does not exist with id %d", *clusterID),
+			}
+		}
+		cluster := linodego.LKECluster{
+			ID:         DefaultClusterID,
+			Label:      DefaultClusterName,
+			Region:     DefaultRegion,
+			K8sVersion: l.ClusterVersion,
+			Tier:       string(l.ClusterTier),
+		}
+		return ptr.To(&cluster), nil
+	})
+	if cluster == nil {
+		return nil, err
+	}
+	return *cluster, err
 }
 
 func (l *LinodeClient) UpdateInstance(_ context.Context, linodeID int, opts linodego.InstanceUpdateOptions) (*linodego.Instance, error) {

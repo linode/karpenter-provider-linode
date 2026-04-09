@@ -84,8 +84,9 @@ var _ = BeforeEach(func() {
 	controller = nodeclass.NewController(
 		env.Client,
 		cloudProvider,
-		events.NewRecorder(&record.FakeRecorder{}),
+		linodeEnv.EventRecorder,
 		fake.DefaultRegion,
+		fake.DefaultClusterID,
 		linodeEnv.InstanceTypesProvider,
 		linodeEnv.LinodeAPI,
 		linodeEnv.ValidationCache,
