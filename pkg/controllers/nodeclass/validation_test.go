@@ -47,7 +47,6 @@ var _ = Describe("NodeClass Validation", func() {
 		Expect(nodeClass.StatusConditions().Get(status.ConditionReady).IsFalse()).To(BeTrue())
 		Expect(linodeEnv.EventRecorder.Events()).To(BeEmpty())
 	},
-		Entry("cluster ownership prefix", "kubernetes.io/cluster/test-cluster=owned"),
 		Entry("nodepool key", "karpenter.sh/nodepool=test"),
 		Entry("nodeclass key", "karpenter.k8s.linode/linodenodeclass=test"),
 		Entry("lke managed key", "karpenter.k8s.linode/lke-managed=true"),

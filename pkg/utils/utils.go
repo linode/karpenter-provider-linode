@@ -167,16 +167,6 @@ func ValidateTags(tags []string) error {
 	for _, tag := range tags {
 		key, _, ok := splitTag(tag)
 		switch {
-		case strings.HasPrefix(tag, "kubernetes.io/cluster/"):
-			if _, exists := seen[tag]; !exists {
-				invalidTags = append(invalidTags, tag)
-				seen[tag] = struct{}{}
-			}
-		case ok && strings.HasPrefix(key, "kubernetes.io/cluster/"):
-			if _, exists := seen[tag]; !exists {
-				invalidTags = append(invalidTags, tag)
-				seen[tag] = struct{}{}
-			}
 		case ok:
 			if _, restricted := restrictedTagKeys[key]; restricted {
 				if _, exists := seen[tag]; !exists {
