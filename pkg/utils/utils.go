@@ -166,15 +166,17 @@ func ValidateTags(tags []string) error {
 	seen := map[string]struct{}{}
 	for _, tag := range tags {
 		key, _, ok := splitTag(tag)
-		switch {
-		case ok:
-			if _, restricted := restrictedTagKeys[key]; restricted {
-				if _, exists := seen[tag]; !exists {
-					invalidTags = append(invalidTags, tag)
-					seen[tag] = struct{}{}
-				}
-			}
+		if !ok {
+			continue
 		}
+		if _, restricted := restrictedTagKeys[key]; !restricted {
+			continue
+		}
+		if _, exists := seen[tag]; exists {
+			continue
+		}
+		invalidTags = append(invalidTags, tag)
+		seen[tag] = struct{}{}
 	}
 	if len(invalidTags) == 0 {
 		return nil
