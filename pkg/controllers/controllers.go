@@ -30,6 +30,7 @@ import (
 	nodeclaimgarbagecollection "github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclaim/garbagecollection"
 	nodeclaimtagging "github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclaim/tagging"
 	"github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclass"
+	nodeclasshash "github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclass/hash"
 	controllersinstancetype "github.com/linode/karpenter-provider-linode/pkg/controllers/providers/instancetype"
 	controllersinstancetypecapacity "github.com/linode/karpenter-provider-linode/pkg/controllers/providers/instancetype/capacity"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
@@ -61,6 +62,7 @@ func NewControllers(
 			validationCache,
 			options.FromContext(ctx).DisableDryRun,
 		),
+		nodeclasshash.NewController(kubeClient),
 		nodeclaimgarbagecollection.NewController(kubeClient, cloudProvider),
 		nodeclaimtagging.NewController(kubeClient, cloudProvider, nodeProvider),
 		controllersinstancetype.NewController(instanceTypeProvider),
