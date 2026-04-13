@@ -73,7 +73,7 @@ destroy-lke-cluster cluster_id:
 		fi
 	fi
 	LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke cluster-delete '{{ cluster_id }}'
-	-rm {{ KUBECONFIG }}
+	rm -f {{ KUBECONFIG }}
 
 build-karpl-image:
 	{{ WITH_GOFLAGS }} KOCACHE={{ KOCACHE }} KO_DOCKER_REPO={{ KO_DOCKER_REPO }} ko build -t $(git rev-parse --abbrev-ref HEAD) --bare github.com/linode/karpenter-provider-linode/cmd/controller
@@ -108,7 +108,7 @@ install-cloud-firewall-controller:
 		--namespace kube-system \
 		--create-namespace \
 		--version {{ CLOUD_FIREWALL_CONTROLLER_CHART_VERSION }} \
-		--values hack/e2e/cloud-firewall/values-standard.yaml \
+		--set-json 'firewall={"inbound":[]}' \
 		--wait
 	if ! KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system rollout status deployment/cloud-firewall-controller --timeout=5m; then
 		KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system get deployment cloud-firewall-controller -o yaml
