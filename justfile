@@ -22,6 +22,8 @@ WITH_GOFLAGS := "GOFLAGS=\"-ldflags=-X=sigs.k8s.io/karpenter/pkg/operator.Versio
 
 KO_DOCKER_REPO := env("KO_DOCKER_REPO", "docker.io/linode/karpenter-provider-linode")
 KOCACHE := env("KOCACHE", "~/.ko")
+CLOUD_FIREWALL_CRD_CHART_VERSION := "0.2.0"
+CLOUD_FIREWALL_CONTROLLER_CHART_VERSION := "0.2.1"
 
 ONESHELL:
 
@@ -57,6 +59,19 @@ init-lke-cluster:
 
 # Destroy your LKE test cluster
 destroy-lke-cluster cluster_id:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	if [ "{{ CLUSTER_TIER }}" = "standard" ] && [ -f "{{ KUBECONFIG }}" ]; then
+		if KUBECONFIG={{ KUBECONFIG }} kubectl get \
+			crd/cloudfirewalls.networking.linode.com >/dev/null 2>&1; then
+			KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system delete \
+				cloudfirewall.networking.linode.com/primary \
+				--ignore-not-found=true
+			KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system wait \
+				--for=delete cloudfirewall.networking.linode.com/primary \
+				--timeout=5m || true
+		fi
+	fi
 	LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke cluster-delete '{{ cluster_id }}'
 	-rm {{ KUBECONFIG }}
 
@@ -71,8 +86,42 @@ run-tilt-lke: build-karpl-image
 cleanup-tilt-lke:
 	tilt down
 
+# Install the cloud firewall controller for standard-tier LKE clusters
+install-cloud-firewall-controller:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	if [ "{{ CLUSTER_TIER }}" != "standard" ]; then
+		echo "Skipping cloud firewall install for cluster tier '{{ CLUSTER_TIER }}'"
+		exit 0
+	fi
+	KUBECONFIG={{ KUBECONFIG }} helm repo add linode-cfw https://linode.github.io/cloud-firewall-controller
+	KUBECONFIG={{ KUBECONFIG }} helm repo update linode-cfw
+	KUBECONFIG={{ KUBECONFIG }} helm upgrade --install cloud-firewall-crd \
+		linode-cfw/cloud-firewall-crd \
+		--namespace kube-system \
+		--create-namespace \
+		--version {{ CLOUD_FIREWALL_CRD_CHART_VERSION }} \
+		--wait
+	KUBECONFIG={{ KUBECONFIG }} kubectl wait --for=condition=established --timeout=60s crd/cloudfirewalls.networking.linode.com
+	KUBECONFIG={{ KUBECONFIG }} helm upgrade --install cloud-firewall-controller \
+		linode-cfw/cloud-firewall-controller \
+		--namespace kube-system \
+		--create-namespace \
+		--version {{ CLOUD_FIREWALL_CONTROLLER_CHART_VERSION }} \
+		--values hack/e2e/cloud-firewall/values-standard.yaml \
+		--wait
+	if ! KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system rollout status deployment/cloud-firewall-controller --timeout=5m; then
+		KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system get deployment cloud-firewall-controller -o yaml
+		KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system logs deployment/cloud-firewall-controller --tail=100
+		exit 1
+	fi
+	if ! KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system get cloudfirewall.networking.linode.com/primary -o yaml; then
+		KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system logs deployment/cloud-firewall-controller --tail=100
+		exit 1
+	fi
+
 # Configures the vanilla LKE cluster with KARPL code
-configure-lke-cluster: init-lke-cluster run-tilt-lke
+configure-lke-cluster: init-lke-cluster install-cloud-firewall-controller run-tilt-lke
 
 # Collect useful diagnostics for E2E failures
 collect-e2e-diagnostics:
