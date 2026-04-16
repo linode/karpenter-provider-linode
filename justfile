@@ -29,50 +29,83 @@ ONESHELL:
 
 # Create an LKE test cluster
 create-lke-cluster:
-	set -euo pipefail; \
-	existing_id=$(LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d'); \
-	if [ -n "$existing_id" ]; then echo "LKE cluster '{{ CLUSTER_NAME }}' already exists (id: $existing_id); skipping create"; exit 0; fi; \
-	LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke cluster-create --label '{{ CLUSTER_NAME }}' --region '{{ LINODE_REGION }}' --k8s_version {{ K8S_VERSION }} --node_pools.type {{ LINODE_TYPE }} --node_pools.count {{ NODEPOOL_SIZE }} --tier {{ CLUSTER_TIER }} --no-defaults
+	#!/usr/bin/env bash
+	set -euo pipefail
+	export LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }}
+	export LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }}
+	existing_id=$(linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d')
+	if [ -n "$existing_id" ]; then
+		echo "LKE cluster '{{ CLUSTER_NAME }}' already exists (id: $existing_id); skipping create"
+		exit 0
+	fi
+	linode-cli lke cluster-create \
+		--label '{{ CLUSTER_NAME }}' \
+		--region '{{ LINODE_REGION }}' \
+		--k8s_version {{ K8S_VERSION }} \
+		--node_pools.type {{ LINODE_TYPE }} \
+		--node_pools.count {{ NODEPOOL_SIZE }} \
+		--tier {{ CLUSTER_TIER }} \
+		--no-defaults
 
 # Retrying logic to wait for LKE cluster kubeconfig to be ready
 wait-for-lke-cluster-readiness cluster_id:
-	until OUTPUT=$(LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke kubeconfig-view "{{ cluster_id }}" --text 2>&1) && ! echo "$OUTPUT" | grep -q 503; do echo "Kubeconfig is not ready yet, retrying in 10s..."; sleep 10; done
+	#!/usr/bin/env bash
+	set -euo pipefail
+	export LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }}
+	export LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }}
+	until OUTPUT=$(linode-cli lke kubeconfig-view "{{ cluster_id }}" --text 2>&1) && ! echo "$OUTPUT" | grep -q 503; do
+		echo "Kubeconfig is not ready yet, retrying in 10s..."
+		sleep 10
+	done
 
 # Get the kubeconfig for your LKE cluster
 get-lke-kubeconfig cluster_id: (wait-for-lke-cluster-readiness cluster_id)
-	LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke kubeconfig-view {{ cluster_id }} --text | sed '1d' | base64 -d > {{ KUBECONFIG }} && chmod 0600 {{ KUBECONFIG }}
+	#!/usr/bin/env bash
+	set -euo pipefail
+	export LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }}
+	export LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }}
+	linode-cli lke kubeconfig-view {{ cluster_id }} --text | sed '1d' | base64 -d > {{ KUBECONFIG }}
+	chmod 0600 {{ KUBECONFIG }}
 
 # Get the ID of your LKE development cluster
 get-lke-cluster-id:
-	@LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d'
+	#!/usr/bin/env bash
+	set -euo pipefail
+	export LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }}
+	export LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }}
+	linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d'
 
 init-lke-cluster:
 	#!/usr/bin/env bash
 	set -euo pipefail
-	CLUSTER_ID=$(LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d')
+	export LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }}
+	export LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }}
+	CLUSTER_ID=$(linode-cli lke clusters-list --label '{{ CLUSTER_NAME }}' --format id --text | sed '1d')
 	if [ -z "$CLUSTER_ID" ]; then
 		echo "Unable to determine LKE cluster ID for '{{ CLUSTER_NAME }}'"
 		exit 1
 	fi
-	LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke cluster-acl-update "$CLUSTER_ID" {{ CLUSTER_ACL_FLAGS }}
+	linode-cli lke cluster-acl-update "$CLUSTER_ID" {{ CLUSTER_ACL_FLAGS }}
 	just get-lke-kubeconfig $CLUSTER_ID
 
 # Destroy your LKE test cluster
 destroy-lke-cluster cluster_id:
 	#!/usr/bin/env bash
 	set -euo pipefail
+	export KUBECONFIG={{ KUBECONFIG }}
+	export LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }}
+	export LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }}
 	if [ "{{ CLUSTER_TIER }}" = "standard" ] && [ -f "{{ KUBECONFIG }}" ]; then
-		if KUBECONFIG={{ KUBECONFIG }} kubectl get \
-			crd/cloudfirewalls.networking.linode.com >/dev/null 2>&1; then
-			KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system delete \
+		if kubectl get crd/cloudfirewalls.networking.linode.com >/dev/null 2>&1; then
+			kubectl -n kube-system delete \
 				cloudfirewall.networking.linode.com/primary \
 				--ignore-not-found=true
-			KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system wait \
+			kubectl -n kube-system wait \
 				--for=delete cloudfirewall.networking.linode.com/primary \
 				--timeout=5m || true
 		fi
 	fi
-	LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }} LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }} linode-cli lke cluster-delete '{{ cluster_id }}'
+	linode-cli lke cluster-delete '{{ cluster_id }}'
 	rm -f {{ KUBECONFIG }}
 
 build-karpl-image:
@@ -80,7 +113,10 @@ build-karpl-image:
 
 # Run tilt against the LKE cluster in kubeconfig
 run-tilt-lke: build-karpl-image
-	KUBECONFIG={{ KUBECONFIG }} tilt {{ TILT_MODE }}
+	#!/usr/bin/env bash
+	set -euo pipefail
+	export KUBECONFIG={{ KUBECONFIG }}
+	tilt {{ TILT_MODE }}
 
 # Run tilt down against the LKE cluster in kubeconfig
 cleanup-tilt-lke:
@@ -90,33 +126,34 @@ cleanup-tilt-lke:
 install-cloud-firewall-controller:
 	#!/usr/bin/env bash
 	set -euo pipefail
+	export KUBECONFIG={{ KUBECONFIG }}
 	if [ "{{ CLUSTER_TIER }}" != "standard" ]; then
 		echo "Skipping cloud firewall install for cluster tier '{{ CLUSTER_TIER }}'"
 		exit 0
 	fi
-	KUBECONFIG={{ KUBECONFIG }} helm repo add linode-cfw https://linode.github.io/cloud-firewall-controller
-	KUBECONFIG={{ KUBECONFIG }} helm repo update linode-cfw
-	KUBECONFIG={{ KUBECONFIG }} helm upgrade --install cloud-firewall-crd \
+	helm repo add linode-cfw https://linode.github.io/cloud-firewall-controller
+	helm repo update linode-cfw
+	helm upgrade --install cloud-firewall-crd \
 		linode-cfw/cloud-firewall-crd \
 		--namespace kube-system \
 		--create-namespace \
 		--version {{ CLOUD_FIREWALL_CRD_CHART_VERSION }} \
 		--wait
-	KUBECONFIG={{ KUBECONFIG }} kubectl wait --for=condition=established --timeout=60s crd/cloudfirewalls.networking.linode.com
-	KUBECONFIG={{ KUBECONFIG }} helm upgrade --install cloud-firewall-controller \
+	kubectl wait --for=condition=established --timeout=60s crd/cloudfirewalls.networking.linode.com
+	helm upgrade --install cloud-firewall-controller \
 		linode-cfw/cloud-firewall-controller \
 		--namespace kube-system \
 		--create-namespace \
 		--version {{ CLOUD_FIREWALL_CONTROLLER_CHART_VERSION }} \
 		--set-json 'firewall={"inbound":[]}' \
 		--wait
-	if ! KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system rollout status deployment/cloud-firewall-controller --timeout=5m; then
-		KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system get deployment cloud-firewall-controller -o yaml
-		KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system logs deployment/cloud-firewall-controller --tail=100
+	if ! kubectl -n kube-system rollout status deployment/cloud-firewall-controller --timeout=5m; then
+		kubectl -n kube-system get deployment cloud-firewall-controller -o yaml
+		kubectl -n kube-system logs deployment/cloud-firewall-controller --tail=100
 		exit 1
 	fi
-	if ! KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system get cloudfirewall.networking.linode.com/primary -o yaml; then
-		KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system logs deployment/cloud-firewall-controller --tail=100
+	if ! kubectl -n kube-system get cloudfirewall.networking.linode.com/primary -o yaml; then
+		kubectl -n kube-system logs deployment/cloud-firewall-controller --tail=100
 		exit 1
 	fi
 
@@ -127,26 +164,28 @@ configure-lke-cluster: init-lke-cluster install-cloud-firewall-controller run-ti
 collect-e2e-diagnostics:
 	#!/usr/bin/env bash
 	set +e
+	export KUBECONFIG={{ KUBECONFIG }}
 	echo "=== NodeClaims ==="
-	KUBECONFIG={{ KUBECONFIG }} kubectl get nodeclaims -A -o wide
+	kubectl get nodeclaims -A -o wide
 	echo "=== Nodes ==="
-	KUBECONFIG={{ KUBECONFIG }} kubectl get nodes -o wide
+	kubectl get nodes -o wide
 	echo "=== Events (last 50) ==="
-	KUBECONFIG={{ KUBECONFIG }} kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+	kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
 	echo "=== Karpenter logs ==="
-	KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system logs -l app.kubernetes.io/name=karpenter --tail=100
+	kubectl -n kube-system logs -l app.kubernetes.io/name=karpenter --tail=100
 
 # Cleanup common test leftovers and enforce a clean NodeClaim starting point
 pre-e2e-cleanup-and-sanity:
 	#!/usr/bin/env bash
 	set -euo pipefail
-	KUBECONFIG={{ KUBECONFIG }} kubectl -n default delete deployment -l e2e.linode.dev/cleanup=true --ignore-not-found=true
-	KUBECONFIG={{ KUBECONFIG }} kubectl -n default delete pod -l e2e.linode.dev/cleanup=true --ignore-not-found=true
-	KUBECONFIG={{ KUBECONFIG }} kubectl delete nodepool -l e2e.linode.dev/cleanup=true --ignore-not-found=true
-	KUBECONFIG={{ KUBECONFIG }} kubectl delete linodenodeclass -l e2e.linode.dev/cleanup=true --ignore-not-found=true
-	KUBECONFIG={{ KUBECONFIG }} kubectl delete nodeclaims --all --ignore-not-found=true
+	export KUBECONFIG={{ KUBECONFIG }}
+	kubectl -n default delete deployment -l e2e.linode.dev/cleanup=true --ignore-not-found=true
+	kubectl -n default delete pod -l e2e.linode.dev/cleanup=true --ignore-not-found=true
+	kubectl delete nodepool -l e2e.linode.dev/cleanup=true --ignore-not-found=true
+	kubectl delete linodenodeclass -l e2e.linode.dev/cleanup=true --ignore-not-found=true
+	kubectl delete nodeclaims --all --ignore-not-found=true
 	for _ in $(seq 1 10); do
-		count=$(KUBECONFIG={{ KUBECONFIG }} kubectl get nodeclaims -o jsonpath='{.items[*].metadata.name}' | wc -w | tr -d ' ')
+		count=$(kubectl get nodeclaims -o jsonpath='{.items[*].metadata.name}' | wc -w | tr -d ' ')
 		if [ "$count" = "0" ]; then
 			echo "NodeClaims are clean"
 			exit 0
@@ -162,15 +201,16 @@ pre-e2e-cleanup-and-sanity:
 restart-karpenter-before-e2e:
 	#!/usr/bin/env bash
 	set -euo pipefail
-	deployment_name=$(KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system get deployment -l app.kubernetes.io/name=karpenter -o jsonpath='{.items[0].metadata.name}')
+	export KUBECONFIG={{ KUBECONFIG }}
+	deployment_name=$(kubectl -n kube-system get deployment -l app.kubernetes.io/name=karpenter -o jsonpath='{.items[0].metadata.name}')
 	if [ -z "$deployment_name" ]; then
 		echo "Unable to locate Karpenter deployment in kube-system"
 		just collect-e2e-diagnostics
 		exit 1
 	fi
 	echo "Restarting deployment/$deployment_name in kube-system"
-	KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system rollout restart deployment/"$deployment_name"
-	if ! KUBECONFIG={{ KUBECONFIG }} kubectl -n kube-system rollout status deployment/"$deployment_name" --timeout=5m; then
+	kubectl -n kube-system rollout restart deployment/"$deployment_name"
+	if ! kubectl -n kube-system rollout status deployment/"$deployment_name" --timeout=5m; then
 		echo "Karpenter rollout did not become healthy"
 		just collect-e2e-diagnostics
 		exit 1
@@ -178,7 +218,10 @@ restart-karpenter-before-e2e:
 
 # Run chainsaw tests on an existing LKE cluster
 run-e2e:
-	KUBECONFIG={{ KUBECONFIG }} chainsaw test e2e --selector {{ CHAINSAW_SELECTOR }} {{ CHAINSAW_FLAGS }}
+	#!/usr/bin/env bash
+	set -euo pipefail
+	export KUBECONFIG={{ KUBECONFIG }}
+	chainsaw test e2e --selector {{ CHAINSAW_SELECTOR }} {{ CHAINSAW_FLAGS }}
 
 # Set up and run e2e tests
 setup-and-test-e2e: create-lke-cluster configure-lke-cluster pre-e2e-cleanup-and-sanity restart-karpenter-before-e2e run-e2e
