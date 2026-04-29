@@ -35,7 +35,7 @@ jobs:
   e2e-main-standard:
     name: Main E2E (standard)
     needs: [changes]
-    if: ${{ contains(fromJSON(needs.changes.outputs.paths), 'src') }}
+    if: ${{ contains(fromJSON(needs.changes.outputs.paths), 'src') || contains(fromJSON(needs.changes.outputs.paths), 'e2e_ci') }}
     uses: ./.github/workflows/e2e.yaml
     with:
       cluster_name: ${{ format('kps-{0}', github.run_id) }}
@@ -49,7 +49,7 @@ jobs:
   e2e-main-enterprise:
     name: Main E2E (enterprise)
     needs: [changes]
-    if: ${{ contains(fromJSON(needs.changes.outputs.paths), 'src') }}
+    if: ${{ contains(fromJSON(needs.changes.outputs.paths), 'src') || contains(fromJSON(needs.changes.outputs.paths), 'e2e_ci') }}
     uses: ./.github/workflows/e2e.yaml
     with:
       cluster_name: ${{ format('kpe-{0}', github.run_id) }}

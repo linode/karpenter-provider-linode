@@ -6,3 +6,13 @@ src:
  - 'justfile'
  - 'Makefile'
  - 'go.mod'
+
+workflow:
+ - '.github/workflows/**'
+ - '.github/actions/**'
+ - '.github/filters.yml'
+
+e2e_ci:
+ - '.github/workflows/e2e*.y*ml'
+ - '.github/actions/e2e/**'
+ - '.github/filters.yml'

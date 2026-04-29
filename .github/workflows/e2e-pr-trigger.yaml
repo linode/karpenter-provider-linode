@@ -41,7 +41,7 @@ jobs:
   e2e-pr:
     name: PR E2E (standard)
     needs: [changes]
-    if: github.event_name == 'pull_request' && github.event.action != 'closed' && contains(fromJSON(needs.changes.outputs.paths), 'src')
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && (contains(fromJSON(needs.changes.outputs.paths), 'src') || contains(fromJSON(needs.changes.outputs.paths), 'e2e_ci'))
     uses: ./.github/workflows/e2e.yaml
     with:
       cluster_name: ${{ format('kpr-{0}', github.event.pull_request.number) }}
