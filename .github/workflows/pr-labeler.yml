@@ -12,16 +12,17 @@ jobs:
   label-pr:
     name: Update PR labels
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+      - name: Harden Runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
         with:
-          fetch-depth: 0
+          disable-sudo: true
+          egress-policy: audit
       - name: Label PR
-        uses: release-drafter/release-drafter@v6
+        uses: release-drafter/release-drafter@5de93583980a40bd78603b6dfdcda5b4df377b32 # v7.2.0
         with:
           disable-releaser: github.ref != 'refs/heads/main'
         env:
