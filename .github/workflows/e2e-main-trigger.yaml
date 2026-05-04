@@ -10,47 +10,6 @@ permissions:
   pull-requests: read
   actions: read
 
-env:
-  E2E_STANDARD_ALLOWED_ENDPOINTS: >-
-    *.us-sea-2-gw.linodelke.net:443
-    api.github.com:443
-    api.linode.com:443
-    api.segment.io:443
-    artifacts.nixos.org:443
-    auth.docker.io:443
-    cache.nixos.org:443
-    files.pythonhosted.org:443
-    gcr.io:443
-    github.com:443
-    index.docker.io:443
-    ipv4.icanhazip.com:443
-    linode.github.io:443
-    pypi.org:443
-    registry-1.docker.io:443
-    release-assets.githubusercontent.com:443
-    releases.jetify.com:443
-    releases.jetpack.io:443
-  E2E_ENTERPRISE_ALLOWED_ENDPOINTS: >-
-    *.api.us-sea.enterprise.linodelke.net:6443
-    api.github.com:443
-    api.linode.com:443
-    api.segment.io:443
-    artifacts.nixos.org:443
-    auth.docker.io:443
-    cache.nixos.org:443
-    cloud.tilt.dev:443
-    files.pythonhosted.org:443
-    gcr.io:443
-    github.com:443
-    index.docker.io:443
-    ipv4.icanhazip.com:443
-    linode.github.io:443
-    pypi.org:443
-    registry-1.docker.io:443
-    release-assets.githubusercontent.com:443
-    releases.jetify.com:443
-    releases.jetpack.io:443
-
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -89,7 +48,25 @@ jobs:
       timeout_minutes: 60
       cleanup_timeout_minutes: 20
       harden_runner_egress_policy: block
-      harden_runner_allowed_endpoints: ${{ env.E2E_STANDARD_ALLOWED_ENDPOINTS }}
+      harden_runner_allowed_endpoints: >-
+        *.us-sea-2-gw.linodelke.net:443
+        api.github.com:443
+        api.linode.com:443
+        api.segment.io:443
+        artifacts.nixos.org:443
+        auth.docker.io:443
+        cache.nixos.org:443
+        files.pythonhosted.org:443
+        gcr.io:443
+        github.com:443
+        index.docker.io:443
+        ipv4.icanhazip.com:443
+        linode.github.io:443
+        pypi.org:443
+        registry-1.docker.io:443
+        release-assets.githubusercontent.com:443
+        releases.jetify.com:443
+        releases.jetpack.io:443
     secrets: inherit
 
   e2e-main-enterprise:
@@ -105,5 +82,24 @@ jobs:
       timeout_minutes: 90
       cleanup_timeout_minutes: 20
       harden_runner_egress_policy: block
-      harden_runner_allowed_endpoints: ${{ env.E2E_ENTERPRISE_ALLOWED_ENDPOINTS }}
+      harden_runner_allowed_endpoints: >-
+        *.api.us-sea.enterprise.linodelke.net:6443
+        api.github.com:443
+        api.linode.com:443
+        api.segment.io:443
+        artifacts.nixos.org:443
+        auth.docker.io:443
+        cache.nixos.org:443
+        cloud.tilt.dev:443
+        files.pythonhosted.org:443
+        gcr.io:443
+        github.com:443
+        index.docker.io:443
+        ipv4.icanhazip.com:443
+        linode.github.io:443
+        pypi.org:443
+        registry-1.docker.io:443
+        release-assets.githubusercontent.com:443
+        releases.jetify.com:443
+        releases.jetpack.io:443
     secrets: inherit
