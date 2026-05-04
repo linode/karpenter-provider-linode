@@ -10,7 +10,7 @@ CHAINSAW_FLAGS := env('CHAINSAW_FLAGS', '--config .chainsaw.yaml')
 CHAINSAW_SELECTOR := env('CHAINSAW_SELECTOR', 'all')
 CLUSTER_ID := env("CLUSTER_ID", "")
 CLUSTER_TIER := env("CLUSTER_TIER", "standard")
-CLUSTER_ACL_FLAGS := env("CLUSTER_ACL_FLAGS", '--acl.enabled true --acl.addresses.ipv4=$(curl --silent ipv4.icanhazip.com)')
+CLUSTER_ACL_FLAGS := env("CLUSTER_ACL_FLAGS", '--acl.enabled true --acl.addresses.ipv4=$(curl --fail --silent --show-error https://ipv4.icanhazip.com)')
 K8S_VERSION := env("K8S_VERSION", if CLUSTER_TIER == "standard" {
     "1.34"
 } else {

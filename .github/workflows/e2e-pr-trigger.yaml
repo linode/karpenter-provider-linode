@@ -15,6 +15,27 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  E2E_STANDARD_ALLOWED_ENDPOINTS: >-
+    *.us-sea-2-gw.linodelke.net:443
+    api.github.com:443
+    api.linode.com:443
+    api.segment.io:443
+    artifacts.nixos.org:443
+    auth.docker.io:443
+    cache.nixos.org:443
+    files.pythonhosted.org:443
+    gcr.io:443
+    github.com:443
+    index.docker.io:443
+    ipv4.icanhazip.com:443
+    linode.github.io:443
+    pypi.org:443
+    registry-1.docker.io:443
+    release-assets.githubusercontent.com:443
+    releases.jetify.com:443
+    releases.jetpack.io:443
+
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -22,12 +43,8 @@ jobs:
     outputs:
       paths: ${{ steps.filter.outputs.changes }}
     steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
       - name: Harden Runner
-        uses: step-security/harden-runner@v2
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
         with:
           disable-sudo: true
           egress-policy: block
@@ -35,7 +52,12 @@ jobs:
             api.github.com:443
             github.com:443
 
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
           filters: .github/filters.yml
@@ -43,7 +65,7 @@ jobs:
   e2e-pr:
     name: PR E2E (standard)
     needs: [changes]
-    if: github.event_name == 'pull_request' && github.event.action != 'closed' && contains(fromJSON(needs.changes.outputs.paths), 'src')
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && (contains(fromJSON(needs.changes.outputs.paths), 'src') || contains(fromJSON(needs.changes.outputs.paths), 'e2e_ci'))
     uses: ./.github/workflows/e2e.yaml
     with:
       cluster_name: ${{ format('kpr-{0}', github.event.pull_request.number) }}
@@ -51,4 +73,6 @@ jobs:
       cleanup: false
       timeout_minutes: 60
       cleanup_timeout_minutes: 20
+      harden_runner_egress_policy: block
+      harden_runner_allowed_endpoints: ${{ env.E2E_STANDARD_ALLOWED_ENDPOINTS }}
     secrets: inherit
