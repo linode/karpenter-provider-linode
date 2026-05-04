@@ -44,6 +44,8 @@ var env *coretest.Environment
 var controller *hash.Controller
 var nodeClass *v1alpha1.LinodeNodeClass
 
+const oldHash = "old-hash"
+
 func TestAPIs(t *testing.T) {
 	t.Parallel()
 	ctx = TestContextWithLogger(t)
@@ -95,7 +97,7 @@ var _ = Describe("Hash Controller", func() {
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations: map[string]string{
-					v1alpha1.AnnotationLinodeNodeClassHash: "old-hash",
+					v1alpha1.AnnotationLinodeNodeClassHash: oldHash,
 				},
 			},
 		})
@@ -110,7 +112,7 @@ var _ = Describe("Hash Controller", func() {
 
 	It("should update referenced NodeClaims on a hash version bump", func() {
 		nodeClass.Annotations = map[string]string{
-			v1alpha1.AnnotationLinodeNodeClassHash:        "old-hash",
+			v1alpha1.AnnotationLinodeNodeClassHash:        oldHash,
 			v1alpha1.AnnotationLinodeNodeClassHashVersion: "old-version",
 		}
 		nodeClaim := coretest.NodeClaim(karpv1.NodeClaim{
@@ -123,7 +125,7 @@ var _ = Describe("Hash Controller", func() {
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations: map[string]string{
-					v1alpha1.AnnotationLinodeNodeClassHash:        "old-hash",
+					v1alpha1.AnnotationLinodeNodeClassHash:        oldHash,
 					v1alpha1.AnnotationLinodeNodeClassHashVersion: "old-version",
 				},
 			},
