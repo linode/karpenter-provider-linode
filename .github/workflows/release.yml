@@ -3,6 +3,7 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -22,6 +23,8 @@ jobs:
             artifacts.nixos.org:443
             cache.nixos.org:443
             github.com:443
+            get.jetify.com:443
+            get.jetpack.io:443
             release-assets.githubusercontent.com:443
             releases.jetify.com:443
             releases.jetpack.io:443

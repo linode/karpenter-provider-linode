@@ -5,6 +5,7 @@ on:
       - "main"
     tags:
       - "*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -27,6 +28,8 @@ jobs:
             gcr.io:443
             github.com:443
             index.docker.io:443
+            get.jetify.com:443
+            get.jetpack.io:443
             proxy.golang.org:443
             registry-1.docker.io:443
             release-assets.githubusercontent.com:443
