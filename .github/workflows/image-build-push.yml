@@ -26,6 +26,7 @@ jobs:
             cache.nixos.org:443
             gcr.io:443
             github.com:443
+            index.docker.io:443
             proxy.golang.org:443
             registry-1.docker.io:443
             release-assets.githubusercontent.com:443
