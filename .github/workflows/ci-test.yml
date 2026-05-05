@@ -62,6 +62,7 @@ jobs:
             releases.jetify.com:443
             releases.jetpack.io:443
             get.jetify.com:443
+            get.jetpack.io:443
             cli.codecov.io:443
             api.codecov.io:443
             ingest.codecov.io:443
