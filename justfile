@@ -67,6 +67,21 @@ get-lke-kubeconfig cluster_id: (wait-for-lke-cluster-readiness cluster_id)
 	linode-cli lke kubeconfig-view {{ cluster_id }} --text | sed '1d' | base64 -d > {{ KUBECONFIG }}
 	chmod 0600 {{ KUBECONFIG }}
 
+# Wait for the Kubernetes API to accept requests after ACL/kubeconfig changes
+wait-for-lke-kube-api:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	export KUBECONFIG={{ KUBECONFIG }}
+	for _ in $(seq 1 12); do
+		if kubectl get --raw=/version >/dev/null 2>&1; then
+			exit 0
+		fi
+		echo "Kubernetes API is not reachable yet, retrying in 5s..."
+		sleep 5
+	done
+	echo "Timed out waiting for Kubernetes API reachability"
+	exit 1
+
 # Get the ID of your LKE development cluster
 get-lke-cluster-id:
 	#!/usr/bin/env bash
@@ -87,6 +102,7 @@ init-lke-cluster:
 	fi
 	linode-cli lke cluster-acl-update "$CLUSTER_ID" {{ CLUSTER_ACL_FLAGS }}
 	just get-lke-kubeconfig $CLUSTER_ID
+	just wait-for-lke-kube-api
 
 # Destroy your LKE test cluster
 destroy-lke-cluster cluster_id:
