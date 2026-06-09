@@ -54,7 +54,7 @@ jobs:
       cleanup_timeout_minutes: 20
       harden_runner_egress_policy: block
       harden_runner_allowed_endpoints: >-
-        *.us-sea-2-gw.linodelke.net:443
+        *.linodelke.net:443
         api.github.com:443
         api.linode.com:443
         api.segment.io:443
