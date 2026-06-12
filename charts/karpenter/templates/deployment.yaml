@@ -147,8 +147,10 @@ spec:
           {{- with .Values.controller.env }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.controller.envFrom }}
           envFrom:
+            - secretRef:
+                name: {{ .Values.credentialsSecretRef | default "karpl-credentials" }}
+          {{- with .Values.controller.envFrom }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
           ports:

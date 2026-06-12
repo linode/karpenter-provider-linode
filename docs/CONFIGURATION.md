@@ -15,6 +15,20 @@ This guide details the configuration options for the Karpenter Provider for Lino
 | `VM_MEMORY_OVERHEAD_PERCENT`| Additional memory overhead to simplify calculation (0.075 = 7.5%). | No | `0.075` |
 | `DISABLE_DRY_RUN` | Set to `true` to disable dry-run validation for LinodeNodeClasses. | No | `false` |
 
+These environment variables are injected into the controller pod via a Kubernetes Secret. By default, the Helm chart creates a secret called `karpl-credentials` from the `apiToken`, `apiURL`, `apiVersion`, and `region` values.
+
+> **Note: Using an external secret (GitOps)**
+>
+> For GitOps workflows where credentials should not be stored in Helm values, you can set `credentialsSecretRef` to point to a pre-existing Secret instead. When set, the chart skips creating its own secret and uses the referenced one. This is useful when secrets are managed externally via ExternalSecrets, SealedSecrets, Vault, or similar tools.
+>
+> The externally managed secret must contain the following keys: `LINODE_TOKEN`, `LINODE_URL`, `LINODE_API_VERSION`, and optionally `CLUSTER_REGION`.
+>
+> ```bash
+> helm upgrade --install karpenter charts/karpenter \
+>     --set settings.clusterName=my-cluster \
+>     --set credentialsSecretRef=my-linode-credentials
+> ```
+
 ## Modes
 
 The provider can operate in two distinct modes, controlled by the `KARPENTER_MODE` environment variable.
