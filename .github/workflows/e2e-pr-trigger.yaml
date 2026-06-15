@@ -1,10 +1,7 @@
 name: e2e-pr-trigger
 
 on:
-  pull_request: # TODO: change this to pull_request_target so people don't need to set their own LINODE_TOKEN secret in their forks
-    types: [opened, reopened, synchronize]
-    branches:
-      - '**'
+  pull_request_target:
 
 permissions:
   contents: read
@@ -47,6 +44,7 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.action != 'closed' && (contains(fromJSON(needs.changes.outputs.paths), 'src') || contains(fromJSON(needs.changes.outputs.paths), 'e2e_ci'))
     uses: ./.github/workflows/e2e.yaml
     with:
+      environment: ${{ (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && 'prod-external' || 'prod' }}
       cluster_name: ${{ format('kpr-{0}', github.event.pull_request.number) }}
       chainsaw_selector: pr
       cleanup: false
