@@ -48,6 +48,7 @@ env:
     release-assets.githubusercontent.com:443
     releases.jetify.com:443
     releases.jetpack.io:443
+    proxy.golang.org:443
   E2E_ENTERPRISE_CLEANUP_ALLOWED_ENDPOINTS: >-
     api.github.com:443
     api.linode.com:443
@@ -61,6 +62,7 @@ env:
     release-assets.githubusercontent.com:443
     releases.jetify.com:443
     releases.jetpack.io:443
+    proxy.golang.org:443
 
 permissions:
   contents: read
