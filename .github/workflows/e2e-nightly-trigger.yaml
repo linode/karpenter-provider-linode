@@ -59,6 +59,7 @@ jobs:
       harden_runner_egress_policy: block
       harden_runner_allowed_endpoints: >-
         *.linodelke.net:443
+        *.enterprise.linodelke.net:6443
         api.github.com:443
         api.linode.com:443
         api.segment.io:443
