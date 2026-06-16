@@ -3,6 +3,10 @@ name: e2e
 on:
   workflow_call:
     inputs:
+      environment:
+        required: false
+        type: string
+        default: ''
       cluster_name:
         type: string
         required: true
@@ -74,6 +78,7 @@ jobs:
     name: E2E (${{ inputs.cluster_tier }})
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
+    environment: ${{ inputs.environment }}
     env:
       LINODE_TOKEN: ${{ secrets.LINODE_TOKEN }}
       LINODE_CLI_TOKEN: ${{ secrets.LINODE_TOKEN }}
