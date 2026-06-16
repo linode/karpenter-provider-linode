@@ -3,6 +3,10 @@ name: e2e
 on:
   workflow_call:
     inputs:
+      environment:
+        required: false
+        type: string
+        default: ''
       cluster_name:
         type: string
         required: true
