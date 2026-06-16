@@ -127,6 +127,21 @@ helm upgrade --install --namespace "${KARPENTER_NAMESPACE}" --create-namespace k
   --set settings.mode=lke
   ```
 
+> **Tip: GitOps-friendly credential management**
+>
+> Instead of passing `apiToken` via Helm values, you can point the chart to a pre-existing Kubernetes Secret using `credentialsSecretRef`. This is recommended for GitOps workflows (e.g. ArgoCD, FluxCD) where credentials are managed externally via ExternalSecrets, SealedSecrets, or Vault.
+>
+> The secret must contain the keys: `LINODE_TOKEN`, `LINODE_URL`, `LINODE_API_VERSION` (and optionally `CLUSTER_REGION`).
+>
+> ```bash
+> helm upgrade --install --namespace "${KARPENTER_NAMESPACE}" --create-namespace karpenter charts/karpenter \
+>     --set settings.clusterName=${CLUSTER_NAME} \
+>     --set credentialsSecretRef=linode-credentials \
+>     --wait
+> ```
+>
+> When `credentialsSecretRef` is set, the chart will **not** create its own credentials secret. The `apiToken`, `apiURL`, `apiVersion`, and `region` values are ignored.
+
 Check karpenter deployed successfully:
 
 ```bash

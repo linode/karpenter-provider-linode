@@ -4,6 +4,11 @@ apiVersion: "v4beta"
 # -- The Linode region where the cluster is deployed.
 # Optional in 'lke' mode (auto-discovered from LKE API), required in 'instance' mode.
 region: ""
+# -- Reference to an existing Kubernetes Secret containing Linode credentials.
+# When set, the chart will not create its own credentials secret and will use this secret instead.
+# This is useful for GitOps workflows where secrets are managed externally (e.g. via ExternalSecrets, SealedSecrets, or Vault).
+# The secret must contain the keys: LINODE_TOKEN, LINODE_URL, LINODE_API_VERSION (and optionally CLUSTER_REGION).
+credentialsSecretRef: ""
 # Uncomment to enable debug logging for Linode API calls
 # linodeDebug: 1
 
@@ -110,9 +115,9 @@ controller:
   env: []
   # - name:
   #   value:
-  envFrom:
-    - secretRef:
-        name: karpl-credentials
+  envFrom: []
+  # - secretRef:
+  #     name: my-secret
   # -- Resources for the controller pod.
   resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
