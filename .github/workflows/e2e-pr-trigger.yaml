@@ -15,7 +15,6 @@ concurrency:
 jobs:
   changes:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
     outputs:
       paths: ${{ steps.filter.outputs.changes }}
     steps:
@@ -40,8 +39,8 @@ jobs:
 
   e2e-pr:
     name: PR E2E (standard)
-    needs: [changes]
-    if: github.event_name == 'pull_request' && github.event.action != 'closed' && (contains(fromJSON(needs.changes.outputs.paths), 'src') || contains(fromJSON(needs.changes.outputs.paths), 'e2e_ci'))
+    needs: changes
+    if: (contains(fromJSON(needs.changes.outputs.paths), 'src') || contains(fromJSON(needs.changes.outputs.paths), 'e2e_ci'))
     uses: ./.github/workflows/e2e.yaml
     with:
       environment: ${{ (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && 'prod-external' || 'prod' }}
