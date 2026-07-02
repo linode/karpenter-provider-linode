@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/awslabs/operatorpkg/object"
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 	"github.com/samber/lo"
 	"k8s.io/client-go/tools/record"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"

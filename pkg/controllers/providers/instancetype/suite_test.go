@@ -18,7 +18,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"

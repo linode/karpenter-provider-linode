@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 	"github.com/mitchellh/hashstructure/v2"
 	gocache "github.com/patrickmn/go-cache"
 	"github.com/samber/lo"

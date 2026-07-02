@@ -21,7 +21,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 )
 
 type LinodeAPI interface {
@@ -48,6 +48,9 @@ type LinodeAPI interface {
 	DeleteLKENodePool(ctx context.Context, clusterID, poolID int) error
 	DeleteLKENodePoolNode(ctx context.Context, clusterID int, nodeID string) error
 }
+
+// linodego.Client implements LinodeAPI
+var _ LinodeAPI = (*linodego.Client)(nil)
 
 const (
 	defaultClientTimeout = time.Second * 10
@@ -84,7 +87,10 @@ func CreateLinodeClient(config ClientConfig, opts ...Option) (LinodeAPI, error) 
 		},
 	}
 
-	newClient := linodego.NewClient(httpClient)
+	newClient, err := linodego.NewClient(httpClient)
+	if err != nil {
+		return nil, err
+	}
 	newClient.SetToken(config.Token)
 	newClient.SetUserAgent("KARPL")
 

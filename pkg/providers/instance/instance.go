@@ -22,7 +22,7 @@ import (
 
 	"github.com/awslabs/operatorpkg/option"
 	"github.com/google/uuid"
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 	"github.com/patrickmn/go-cache"
 	"github.com/samber/lo"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -244,7 +244,7 @@ func (p *DefaultProvider) UpdateTags(ctx context.Context, id string, tags []stri
 	if err != nil {
 		return fmt.Errorf("invalid instance id %s, %w", id, err)
 	}
-	if _, err := p.client.UpdateInstance(ctx, intID, linodego.InstanceUpdateOptions{Tags: &tags}); err != nil {
+	if _, err := p.client.UpdateInstance(ctx, intID, linodego.InstanceUpdateOptions{Tags: tags}); err != nil {
 		if linodego.IsNotFound(err) {
 			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("updating instance tags, %w", err))
 		}

@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/awslabs/operatorpkg/option"
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 	"github.com/patrickmn/go-cache"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
@@ -384,7 +384,7 @@ func (p *DefaultProvider) claimInstance(ctx context.Context, linodeInstance *lin
 	slices.Sort(finalTags)
 
 	_, err := p.client.UpdateInstance(ctx, linodeInstance.ID, linodego.InstanceUpdateOptions{
-		Tags: &finalTags,
+		Tags: finalTags,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("updating instance tags: %w", err)
@@ -566,7 +566,7 @@ func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[st
 	newTags = utils.DedupeTags(newTags)
 
 	_, err = p.client.UpdateInstance(ctx, instanceID, linodego.InstanceUpdateOptions{
-		Tags: &newTags,
+		Tags: newTags,
 	})
 	return err
 }
@@ -577,7 +577,7 @@ func (p *DefaultProvider) UpdateTags(ctx context.Context, id string, tags []stri
 		return fmt.Errorf("parsing instance ID: %w", err)
 	}
 
-	if _, err = p.client.UpdateInstance(ctx, instanceID, linodego.InstanceUpdateOptions{Tags: &tags}); err != nil {
+	if _, err = p.client.UpdateInstance(ctx, instanceID, linodego.InstanceUpdateOptions{Tags: tags}); err != nil {
 		if linodego.IsNotFound(err) {
 			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("updating instance tags, %w", err))
 		}

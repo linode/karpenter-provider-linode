@@ -27,7 +27,7 @@ import (
 	"strings"
 
 	"github.com/awslabs/operatorpkg/serrors"
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 	"github.com/samber/lo"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"

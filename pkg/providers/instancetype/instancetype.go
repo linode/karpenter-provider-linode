@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/patrickmn/go-cache"
 	"github.com/samber/lo"

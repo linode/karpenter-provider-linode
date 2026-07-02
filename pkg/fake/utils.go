@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	"github.com/Pallinder/go-randomdata"
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 )
 
 func InstanceID() int {

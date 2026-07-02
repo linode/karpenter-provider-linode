@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/karpenter/pkg/utils/atomic"
 )
@@ -571,7 +571,7 @@ func (l *LinodeClient) GetLKENodePool(_ context.Context, clusterID, poolID int) 
 	return *pool, err
 }
 
-//nolint:gocognit,cyclop // fix this later
+//nolint:gocognit,cyclop,gocritic // see https://pkg.go.dev/github.com/linode/linodego/v2#Client.UpdateLKENodePool for hugeParam
 func (l *LinodeClient) UpdateLKENodePool(_ context.Context, clusterID, poolID int, opts linodego.LKENodePoolUpdateOptions) (*linodego.LKENodePool, error) {
 	params := struct {
 		ClusterID int
@@ -668,13 +668,13 @@ func (l *LinodeClient) UpdateLKENodePool(_ context.Context, clusterID, poolID in
 
 		// Update other optional fields
 		if params.Opts.Tags != nil {
-			pool.Tags = *params.Opts.Tags
+			pool.Tags = params.Opts.Tags
 		}
 		if params.Opts.Labels != nil {
 			pool.Labels = *params.Opts.Labels
 		}
 		if params.Opts.Taints != nil {
-			pool.Taints = *params.Opts.Taints
+			pool.Taints = params.Opts.Taints
 		}
 		if params.Opts.Label != nil {
 			pool.Label = params.Opts.Label
@@ -798,7 +798,7 @@ func (l *LinodeClient) UpdateInstance(_ context.Context, linodeID int, opts lino
 			instance.Label = params.Opts.Label
 		}
 		if params.Opts.Tags != nil {
-			instance.Tags = *params.Opts.Tags
+			instance.Tags = params.Opts.Tags
 		}
 		l.Instances.Store(params.LinodeID, instance)
 

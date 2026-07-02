@@ -18,7 +18,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 )
 
 // Instance is an internal data representation of a linode.Instance

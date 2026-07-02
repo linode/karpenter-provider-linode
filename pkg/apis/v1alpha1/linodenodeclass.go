@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	"github.com/awslabs/operatorpkg/status"
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/resource"

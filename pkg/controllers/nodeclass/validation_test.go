@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/awslabs/operatorpkg/status"
-	"github.com/linode/linodego"
+	"github.com/linode/linodego/v2"
 	"github.com/samber/lo"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
