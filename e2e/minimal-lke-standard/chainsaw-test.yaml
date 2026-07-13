@@ -10,7 +10,7 @@ metadata:
     category.baseline:
 spec:
   steps:
-    - name: Make sure there are no lingering NodeClaims
+    - name: Make sure there are no lingering NodeClaims ~diffy diff
       try:
       - script:
           timeout: 30s
