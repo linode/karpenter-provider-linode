@@ -18,10 +18,12 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/linode/linodego/v2"
+	"sigs.k8s.io/karpenter/pkg/operator"
 )
 
 type LinodeAPI interface {
@@ -92,7 +94,7 @@ func CreateLinodeClient(config ClientConfig, opts ...Option) (LinodeAPI, error) 
 		return nil, err
 	}
 	newClient.SetToken(config.Token)
-	newClient.SetUserAgent("KARPL")
+	newClient.SetUserAgent(fmt.Sprintf("KARPL/%s", operator.Version))
 
 	for _, opt := range opts {
 		opt.set(&newClient)
