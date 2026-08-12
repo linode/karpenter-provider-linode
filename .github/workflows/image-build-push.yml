@@ -5,6 +5,7 @@ on:
       - "main"
     tags:
       - "*"
+  workflow_dispatch:
 
 permissions:
   contents: write
