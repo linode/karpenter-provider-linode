@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   actions: read
+  id-token: write
 
 jobs:
   release:
@@ -23,6 +24,7 @@ jobs:
             api.segment.io:443
             artifacts.nixos.org:443
             auth.docker.io:443
+            identity.docker.com:443
             cache.nixos.org:443
             gcr.io:443
             github.com:443
@@ -43,10 +45,11 @@ jobs:
           persist-credentials: false
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        env:
+          DOCKERHUB_OIDC_CONNECTIONID: ${{ secrets.DOCKERHUB_OIDC_CONNECTIONID }}
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ github.repository_owner }}
 
       - name: Install devbox
         uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
