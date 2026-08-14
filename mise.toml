@@ -13,7 +13,7 @@ tilt = "0.36.3"
 uv = "0.12.1"
 yq = "4.53.2"
 "aqua:kyverno/chainsaw" = "0.2.15"
-"pipx:linode-cli" = "5.65.1"
+"pipx:linode-cli" = "5.68.0"
 
 [tasks.ci-test]
 description = "Run unit tests and generate coverage reports"
