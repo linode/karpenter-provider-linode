@@ -3,7 +3,7 @@
 minimum_release_age = "7d"
 
 [tools]
-go = "1.26.5"
+go = "1.26.6"
 golangci-lint = "2.12.2"
 helm = "3.19.5"
 just = "1.52.0"
