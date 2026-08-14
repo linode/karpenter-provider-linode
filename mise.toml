@@ -1,0 +1,78 @@
+[settings]
+# only install versions released more than 7 days ago - https://mise.jdx.dev/configuration/settings.html#minimum_release_age
+minimum_release_age = "7d"
+
+[tools]
+go = "1.26.5"
+golangci-lint = "2.12.2"
+helm = "3.19.5"
+just = "1.52.0"
+kubectl = "1.35.5"
+ko = "0.18.1"
+tilt = "0.36.3"
+uv = "0.12.1"
+yq = "4.53.2"
+"aqua:kyverno/chainsaw" = "0.2.15"
+"pipx:linode-cli" = "5.65.1"
+
+[tasks.ci-test]
+description = "Run unit tests and generate coverage reports"
+run = "make ci-test"
+
+[tasks.ci-non-test]
+description = "Run verification and vulnerability checks"
+run = "make ci-non-test"
+
+[tasks.presubmit]
+description = "Run the full developer loop (verify + test)"
+run = "make presubmit"
+
+[tasks.set-chart-version]
+description = "Stamp a version into the chart metadata and the controller image tag"
+usage = 'arg "<version>" help="Version to stamp into the charts, e.g. v0.1.6"'
+run = 'make set-chart-version IMAGE_VERSION="$usage_version"'
+
+[tasks.release]
+description = "Create the Helm chart release artifacts"
+run = "make release"
+
+[tasks.build-karpl-image]
+description = "Build and push the controller image with ko"
+run = "just build-karpl-image"
+
+[tasks.create-lke-cluster]
+description = "Create an LKE test cluster"
+run = "just create-lke-cluster"
+
+[tasks.init-lke-cluster]
+description = "Fetch the kubeconfig and wait for the LKE cluster to be reachable"
+run = "just init-lke-cluster"
+
+[tasks.configure-lke-cluster]
+description = "Install the cloud firewall controller and Karpenter onto the LKE cluster"
+run = "just configure-lke-cluster"
+
+[tasks.get-lke-cluster-id]
+description = "Print the ID of the LKE test cluster"
+run = "just get-lke-cluster-id"
+
+[tasks.destroy-lke-cluster]
+description = "Destroy the LKE test cluster"
+usage = 'arg "<cluster_id>" help="ID of the LKE cluster to delete"'
+run = 'just destroy-lke-cluster "$usage_cluster_id"'
+
+[tasks.run-tilt-lke]
+description = "Run tilt against the LKE cluster in kubeconfig"
+run = "just run-tilt-lke"
+
+[tasks.cleanup-tilt-lke]
+description = "Run tilt down against the LKE cluster in kubeconfig"
+run = "just cleanup-tilt-lke"
+
+[tasks.run-e2e]
+description = "Run the chainsaw e2e suite against an existing LKE cluster"
+run = "just run-e2e"
+
+[tasks.setup-and-test-e2e]
+description = "Create an LKE cluster, deploy Karpenter, and run the chainsaw e2e suite"
+run = "just setup-and-test-e2e"

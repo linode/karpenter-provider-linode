@@ -1,5 +1,5 @@
 CLUSTER_NAME ?= $(shell kubectl config view --minify -o jsonpath='{.clusters[].name}' | rev | cut -d"/" -f1 | rev | cut -d"." -f1)
-ENVTEST_K8S_VERSION := $(shell go list -m -f '{{.Version}}' k8s.io/client-go)
+ENVTEST_K8S_VERSION = $(shell go list -m -f '{{.Version}}' k8s.io/client-go)
 
 ## Inject the app version into operator.Version
 LDFLAGS ?= -ldflags=-X=sigs.k8s.io/karpenter/pkg/operator.Version=$(shell git describe --tags --always | cut -d"v" -f2)
@@ -98,7 +98,7 @@ benchmark: envtest
 coverage:
 	go tool cover -html coverage.out -o coverage.html
 
-verify: tidy download controller-gen golangci-lint ## Verify code. Includes dependencies, linting, formatting, etc
+verify: tidy download controller-gen ## Verify code. Includes dependencies, linting, formatting, etc
 	go generate ./...
 	hack/boilerplate.sh
 	cp  $(KARPENTER_CORE_DIR)/pkg/apis/crds/* pkg/apis/crds
@@ -111,11 +111,22 @@ verify: tidy download controller-gen golangci-lint ## Verify code. Includes depe
 		fi;}
 
 vulncheck: govulncheck ## Verify code vulnerabilities
-	@govulncheck ./pkg/...
+	@$(GOVULNC) ./pkg/...
 
-release:
+set-chart-version: ## Stamp IMAGE_VERSION into the chart metadata and the controller image tag
+ifndef IMAGE_VERSION
+	$(error IMAGE_VERSION is required, e.g. "make set-chart-version IMAGE_VERSION=v0.1.6")
+endif
+	for chart in ./charts/*/Chart.yaml; do \
+		IMAGE_VERSION="$(IMAGE_VERSION)" yq -i \
+			'.version = strenv(IMAGE_VERSION) | .appVersion = strenv(IMAGE_VERSION)' "$$chart"; \
+	done
+	IMAGE_VERSION="$(IMAGE_VERSION)" yq -i \
+		'.controller.image.tag = strenv(IMAGE_VERSION)' \
+		./charts/karpenter/values.yaml
+
+release: set-chart-version ## Package the Helm charts for IMAGE_VERSION into $(RELEASE_DIR)
 	mkdir -p $(RELEASE_DIR)
-	sed -e 's/appVersion: "latest"/appVersion: "$(IMAGE_VERSION)"/g' ./charts/*/Chart.yaml
 	tar -czvf ./$(RELEASE_DIR)/karpenter-crd-$(IMAGE_VERSION).tgz -C ./charts/karpenter-crd .
 	tar -czvf ./$(RELEASE_DIR)/karpenter-$(IMAGE_VERSION).tgz -C ./charts/karpenter .
 
@@ -152,22 +163,12 @@ helm-uninstall: ## remove both charts from the existing cluster (requires k8s co
 ##@ Build Dependencies:
 
 ## Location to install dependencies to
-
-# Use CACHE_BIN for tools that cannot use devbox and LOCALBIN for tools that can use either method
+#
+# golangci-lint, ko, helm, kubectl, tilt and chainsaw are provided by mise (see mise.toml).
+# The tools below are pinned to the Go module graph, so they are still installed with `go install`.
 CACHE_BIN ?= $(CURDIR)/bin
-LOCALBIN ?= $(CACHE_BIN)
-
-DEVBOX_BIN ?= $(DEVBOX_PACKAGES_DIR)/bin
-
-# if the $DEVBOX_PACKAGES_DIR env variable exists that means we are within a devbox shell and can safely
-# use devbox's bin for our tools
-ifdef DEVBOX_PACKAGES_DIR
-	LOCALBIN = $(DEVBOX_BIN)
-endif
 
 export PATH := $(CACHE_BIN):$(PATH)
-$(LOCALBIN):
-	mkdir -p $(LOCALBIN)
 
 $(CACHE_BIN):
 	mkdir -p $(CACHE_BIN)
@@ -178,12 +179,10 @@ $(CACHE_BIN):
 ## --------------------------------------
 
 ##@ Tooling Binaries:
-# setup-envtest does not have devbox support so always use CACHE_BIN
 
 ENVTEST        ?= $(CACHE_BIN)/setup-envtest
 CONTROLLER_GEN ?= $(CACHE_BIN)/controller-gen
-GOVULNC        ?= $(LOCALBIN)/govulncheck
-GOLANGCI_LINT  ?= $(LOCALBIN)/golangci-lint
+GOVULNC        ?= $(CACHE_BIN)/govulncheck
 
 ## Tool Versions
 # renovate: datasource=go depName=sigs.k8s.io/controller-runtime/tools/setup-envtest
@@ -195,11 +194,8 @@ CONTROLLER_TOOLS_VERSION ?= v0.19.0
 # renovate: datasource=go depName=golang.org/x/vuln
 GOVULNC_VERSION          ?= v1.1.4
 
-# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2
-GOLANGCI_LINT_VERSION    ?= v2.12.2
-
 .PHONY: tools
-tools: $(CONTROLLER_GEN) $(ENVTEST) $(GOVULNC) $(GOLANGCI_LINT)
+tools: $(CONTROLLER_GEN) $(ENVTEST) $(GOVULNC)
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
@@ -208,18 +204,13 @@ $(ENVTEST): $(CACHE_BIN)
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
-$(CONTROLLER_GEN): $(LOCALBIN)
+$(CONTROLLER_GEN): $(CACHE_BIN)
 	GOBIN=$(CACHE_BIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
 
 .PHONY: govulncheck
 govulncheck: $(GOVULNC) ## Download govulncheck locally if necessary.
-$(GOVULNC): $(LOCALBIN)
-	GOBIN=$(LOCALBIN) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNC_VERSION)
-
-.PHONY: golangci-lint
-golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
-$(GOLANGCI_LINT): $(LOCALBIN)
-	GOBIN=$(LOCALBIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+$(GOVULNC): $(CACHE_BIN)
+	GOBIN=$(CACHE_BIN) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNC_VERSION)
 
 define newline
 

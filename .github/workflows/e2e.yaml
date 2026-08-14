@@ -44,29 +44,43 @@ env:
     api.github.com:443
     api.linode.com:443
     api.segment.io:443
-    artifacts.nixos.org:443
-    cache.nixos.org:443
     files.pythonhosted.org:443
     github.com:443
     pypi.org:443
     release-assets.githubusercontent.com:443
-    releases.jetify.com:443
-    releases.jetpack.io:443
     proxy.golang.org:443
+    cdn.dl.k8s.io:443
+    dl.google.com:443
+    dl.k8s.io:443
+    get.helm.sh:443
+    mise-versions.jdx.dev:443
+    mise.jdx.dev:443
+    storage.googleapis.com:443
+    sum.golang.org:443
+    tuf-repo-cdn.sigstore.dev:443
+    *.blob.core.windows.net:443
+    *.githubusercontent.com:443
   E2E_ENTERPRISE_CLEANUP_ALLOWED_ENDPOINTS: >-
     api.github.com:443
     api.linode.com:443
     api.segment.io:443
-    artifacts.nixos.org:443
-    cache.nixos.org:443
     cloud.tilt.dev:443
     files.pythonhosted.org:443
     github.com:443
     pypi.org:443
     release-assets.githubusercontent.com:443
-    releases.jetify.com:443
-    releases.jetpack.io:443
     proxy.golang.org:443
+    dl.k8s.io:443
+    dl.google.com:443
+    storage.googleapis.com:443
+    cdn.dl.k8s.io:443
+    sum.golang.org:443
+    get.helm.sh:443
+    mise-versions.jdx.dev:443
+    mise.jdx.dev:443
+    tuf-repo-cdn.sigstore.dev:443
+    *.blob.core.windows.net:443
+    *.githubusercontent.com:443
 
 permissions:
   contents: read
@@ -91,13 +105,13 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: ${{ inputs.harden_runner_egress_policy }}
           allowed-endpoints: ${{ inputs.harden_runner_allowed_endpoints }}
 
       - name: Checkout code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -108,7 +122,7 @@ jobs:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ secrets.DOCKERHUB_OIDC_CONNECTIONID }}
         with:
           docker_username: ${{ secrets.DOCKER_USERNAME }}
-          devbox_command: setup-and-test-e2e
+          mise_task: setup-and-test-e2e
 
   cleanup:
     name: Cleanup (${{ inputs.cluster_tier }})
@@ -124,18 +138,18 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: block
           allowed-endpoints: ${{ inputs.cluster_tier == 'enterprise' && env.E2E_ENTERPRISE_CLEANUP_ALLOWED_ENDPOINTS || env.E2E_STANDARD_CLEANUP_ALLOWED_ENDPOINTS }}
 
       - name: Checkout code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: E2E Cleanup 
+      - name: E2E Cleanup
         uses: ./.github/actions/e2e
         with:
           cleanup_cluster: "true"

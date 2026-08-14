@@ -8,6 +8,7 @@ permissions:
   contents: read
   pull-requests: read
   actions: read
+  id-token: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -30,10 +31,8 @@ jobs:
         api.github.com:443
         api.linode.com:443
         api.segment.io:443
-        artifacts.nixos.org:443
         auth.docker.io:443
         identity.docker.com:443
-        cache.nixos.org:443
         files.pythonhosted.org:443
         gcr.io:443
         github.com:443
@@ -43,8 +42,17 @@ jobs:
         pypi.org:443
         registry-1.docker.io:443
         release-assets.githubusercontent.com:443
-        releases.jetify.com:443
-        releases.jetpack.io:443
+        *.githubusercontent.com:443
+        cdn.dl.k8s.io:443
+        dl.google.com:443
+        dl.k8s.io:443
+        get.helm.sh:443
+        mise-versions.jdx.dev:443
+        mise.jdx.dev:443
+        proxy.golang.org:443
+        storage.googleapis.com:443
+        sum.golang.org:443
+        tuf-repo-cdn.sigstore.dev:443
     secrets: inherit
 
   e2e-nightly-enterprise:
@@ -64,10 +72,8 @@ jobs:
         api.github.com:443
         api.linode.com:443
         api.segment.io:443
-        artifacts.nixos.org:443
         auth.docker.io:443
         identity.docker.com:443
-        cache.nixos.org:443
         cloud.tilt.dev:443
         files.pythonhosted.org:443
         gcr.io:443
@@ -78,6 +84,15 @@ jobs:
         pypi.org:443
         registry-1.docker.io:443
         release-assets.githubusercontent.com:443
-        releases.jetify.com:443
-        releases.jetpack.io:443
+        cdn.dl.k8s.io:443
+        *.githubusercontent.com:443
+        dl.google.com:443
+        dl.k8s.io:443
+        get.helm.sh:443
+        mise-versions.jdx.dev:443
+        mise.jdx.dev:443
+        proxy.golang.org:443
+        storage.googleapis.com:443
+        sum.golang.org:443
+        tuf-repo-cdn.sigstore.dev:443
     secrets: inherit

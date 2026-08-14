@@ -5,16 +5,12 @@ inputs:
   docker_username:
     description: Docker Hub username
     required: false
-  linode_cli_version:
-    description: linode-cli version
-    required: false
-    default: "5.65.1"
-  devbox_command:
-    description: Optional devbox command to run (without the leading "devbox run")
+  mise_task:
+    description: Optional mise task to run (without the leading "mise run")
     required: false
     default: ""
   cleanup_cluster:
-    description: Whether to delete the LKE cluster via devbox
+    description: Whether to delete the LKE cluster via mise
     required: false
     default: "false"
 
@@ -27,33 +23,20 @@ runs:
       with:
         username: ${{ inputs.docker_username }}
 
-    - name: Setup Go
-      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-      with:
-        go-version-file: go.mod
-        check-latest: true
+    - name: Set up Mise
+      uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
 
-    - name: Install linode-cli
-      run: pipx install linode-cli==${{ inputs.linode_cli_version }}
-      shell: bash
-
-    - name: Install devbox
-      uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
-      with:
-        enable-cache: 'true'
-        refresh-cli: 'false'
-
-    - name: Run devbox command
-      if: ${{ inputs.devbox_command != '' }}
-      run: devbox run ${{ inputs.devbox_command }}
+    - name: Run mise task
+      if: ${{ inputs.mise_task != '' }}
+      run: mise run ${{ inputs.mise_task }}
       shell: bash
 
     - name: Delete LKE cluster
       if: ${{ inputs.cleanup_cluster == 'true' }}
       run: |
-        CLUSTER_ID=$(devbox run get-lke-cluster-id)
+        CLUSTER_ID=$(mise run get-lke-cluster-id)
         if [ -n "$CLUSTER_ID" ]; then
-          devbox run destroy-lke-cluster "$CLUSTER_ID"
+          mise run destroy-lke-cluster "$CLUSTER_ID"
         else
           echo "No cluster found for cleanup"
         fi

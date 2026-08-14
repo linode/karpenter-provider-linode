@@ -22,6 +22,8 @@ WITH_GOFLAGS := "GOFLAGS=\"-ldflags=-X=sigs.k8s.io/karpenter/pkg/operator.Versio
 
 KO_DOCKER_REPO := env("KO_DOCKER_REPO", "docker.io/linode/karpenter-provider-linode")
 KOCACHE := env("KOCACHE", "~/.ko")
+## Image tags to publish; defaults to the current branch name when unset
+IMAGE_TAGS := env("IMAGE_TAGS", "")
 CLOUD_FIREWALL_CRD_CHART_VERSION := "0.2.0"
 CLOUD_FIREWALL_CONTROLLER_CHART_VERSION := "0.2.1"
 
@@ -124,8 +126,27 @@ destroy-lke-cluster cluster_id:
 	linode-cli lke cluster-delete '{{ cluster_id }}'
 	rm -f {{ KUBECONFIG }}
 
+# Build and push the controller image with ko
 build-karpl-image:
-	{{ WITH_GOFLAGS }} KOCACHE={{ KOCACHE }} KO_DOCKER_REPO={{ KO_DOCKER_REPO }} ko build -t $(git rev-parse --abbrev-ref HEAD) --bare github.com/linode/karpenter-provider-linode/cmd/controller
+	#!/usr/bin/env bash
+	set -euo pipefail
+	tags="{{ IMAGE_TAGS }}"
+	if [ -z "$tags" ]; then
+		tags=$(git rev-parse --abbrev-ref HEAD)
+	fi
+	{{ WITH_GOFLAGS }} KOCACHE={{ KOCACHE }} KO_DOCKER_REPO={{ KO_DOCKER_REPO }} \
+		ko build --bare --tags "$tags" github.com/linode/karpenter-provider-linode/cmd/controller
+
+# Build the controller image with ko into the local docker daemon
+ko-build-local:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	tags="{{ IMAGE_TAGS }}"
+	if [ -z "$tags" ]; then
+		tags=$(git rev-parse --abbrev-ref HEAD)
+	fi
+	{{ WITH_GOFLAGS }} KOCACHE={{ KOCACHE }} KO_DOCKER_REPO={{ KO_DOCKER_REPO }} \
+		ko build --local --bare --tags "$tags" github.com/linode/karpenter-provider-linode/cmd/controller
 
 # Run tilt against the LKE cluster in kubeconfig
 run-tilt-lke: build-karpl-image

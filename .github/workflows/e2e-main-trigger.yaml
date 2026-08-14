@@ -9,6 +9,7 @@ permissions:
   contents: read
   pull-requests: read
   actions: read
+  id-token: write
 
 jobs:
   changes:
@@ -17,7 +18,7 @@ jobs:
       paths: ${{ steps.filter.outputs.changes }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           disable-sudo: true
           egress-policy: block
@@ -25,12 +26,12 @@ jobs:
             api.github.com:443
             github.com:443
 
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: .github/filters.yml
@@ -53,10 +54,8 @@ jobs:
         api.github.com:443
         api.linode.com:443
         api.segment.io:443
-        artifacts.nixos.org:443
         auth.docker.io:443
         identity.docker.com:443
-        cache.nixos.org:443
         files.pythonhosted.org:443
         gcr.io:443
         github.com:443
@@ -66,8 +65,17 @@ jobs:
         pypi.org:443
         registry-1.docker.io:443
         release-assets.githubusercontent.com:443
-        releases.jetify.com:443
-        releases.jetpack.io:443
+        *.githubusercontent.com:443
+        cdn.dl.k8s.io:443
+        dl.google.com:443
+        dl.k8s.io:443
+        get.helm.sh:443
+        mise-versions.jdx.dev:443
+        mise.jdx.dev:443
+        proxy.golang.org:443
+        storage.googleapis.com:443
+        sum.golang.org:443
+        tuf-repo-cdn.sigstore.dev:443
     secrets: inherit
 
   e2e-main-enterprise:
@@ -89,10 +97,8 @@ jobs:
         api.github.com:443
         api.linode.com:443
         api.segment.io:443
-        artifacts.nixos.org:443
         auth.docker.io:443
         identity.docker.com:443
-        cache.nixos.org:443
         cloud.tilt.dev:443
         files.pythonhosted.org:443
         gcr.io:443
@@ -103,6 +109,15 @@ jobs:
         pypi.org:443
         registry-1.docker.io:443
         release-assets.githubusercontent.com:443
-        releases.jetify.com:443
-        releases.jetpack.io:443
+        *.githubusercontent.com:443
+        cdn.dl.k8s.io:443
+        dl.google.com:443
+        dl.k8s.io:443
+        get.helm.sh:443
+        mise-versions.jdx.dev:443
+        mise.jdx.dev:443
+        proxy.golang.org:443
+        storage.googleapis.com:443
+        sum.golang.org:443
+        tuf-repo-cdn.sigstore.dev:443
     secrets: inherit

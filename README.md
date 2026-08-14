@@ -19,8 +19,8 @@
 <a href="https://github.com/linode/karpenter-provider-linode/actions/workflows/ci.yml">
 <img src="https://github.com/linode/karpenter-provider-linode/actions/workflows/ci.yml/badge.svg"></a>
 <!-- codecov badge -->
-<a href="https://codecov.io/github/linode/karpenter-provider-linode" > 
-<img src="https://codecov.io/github/linode/karpenter-provider-linode/graph/badge.svg?token=YQFKF86KJ6"/> 
+<a href="https://codecov.io/github/linode/karpenter-provider-linode" >
+<img src="https://codecov.io/github/linode/karpenter-provider-linode/graph/badge.svg?token=YQFKF86KJ6"/>
 </a>
 <!-- ko build CI -->
 <a href="https://github.com/linode/karpenter-provider-linode/actions/workflows/release.yml">
@@ -34,6 +34,7 @@
 ---
 
 Table of contents:
+
 - [Features Overview](#features-overview)
 - [Installation](#installation)
   - [Install utilities](#install-tools)
@@ -50,20 +51,21 @@ Table of contents:
 - [Known issues](#known-issues)
 
 ## Features Overview
+
 The LKE Karpenter Provider enables node autoprovisioning using [Karpenter](https://karpenter.sh/) on your LKE cluster.
 Karpenter improves the efficiency and cost of running workloads on Kubernetes clusters by:
 
-* **Watching** for pods that the Kubernetes scheduler has marked as unschedulable
-* **Evaluating** scheduling constraints (resource requests, nodeselectors, affinities, tolerations, and topology spread constraints) requested by the pods
-* **Provisioning** nodes that meet the requirements of the pods
-* **Removing** the nodes when the nodes are no longer needed
+- **Watching** for pods that the Kubernetes scheduler has marked as unschedulable
+- **Evaluating** scheduling constraints (resource requests, nodeselectors, affinities, tolerations, and topology spread constraints) requested by the pods
+- **Provisioning** nodes that meet the requirements of the pods
+- **Removing** the nodes when the nodes are no longer needed
 
 ## Provider Modes
 
 This provider supports two operating modes:
 
-1.  **LKE Mode (Default)**: Creates LKE Node Pools for each provisioned node. This is the simplest method and recommended for most users.
-2.  **Instance Mode**: Creates standard Linode Instances. This offers granular control over instance settings (SSH keys, placement groups, etc.) but requires more manual configuration. This is currently in **development and not yet fully functional**.
+1. **LKE Mode (Default)**: Creates LKE Node Pools for each provisioned node. This is the simplest method and recommended for most users.
+2. **Instance Mode**: Creates standard Linode Instances. This offers granular control over instance settings (SSH keys, placement groups, etc.) but requires more manual configuration. This is currently in **development and not yet fully functional**.
 
 See [Configuration Documentation](docs/CONFIGURATION.md) for full details on modes and available settings.
 
@@ -71,9 +73,19 @@ See [Configuration Documentation](docs/CONFIGURATION.md) for full details on mod
 
 ### Install tools
 
-Install these tools before proceeding:
-* [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
-* [Helm](https://helm.sh/docs/intro/install/)
+Local development uses [Mise](https://mise.jdx.dev/) to install and run the pinned toolchain in `mise.toml`. Install Mise, then provision the repository tools:
+
+```bash
+mise install
+```
+
+Run common checks through Mise:
+
+```bash
+mise run presubmit
+mise run ci-test
+mise run ci-non-test
+```
 
 ### Create a cluster
 
@@ -108,14 +120,15 @@ Use the configured environment variables to install Karpenter using Helm:
 ```bash
 helm upgrade --install --namespace "${KARPENTER_NAMESPACE}" --create-namespace karpenter-crd charts/karpenter-crd
 helm upgrade --install --namespace "${KARPENTER_NAMESPACE}" --create-namespace karpenter charts/karpenter \
-		--set settings.clusterName=${CLUSTER_NAME} \
-		--set apiToken=${LINODE_TOKEN} \
+  --set settings.clusterName=${CLUSTER_NAME} \
+  --set apiToken=${LINODE_TOKEN} \
         --wait
 ```
 
 **Optional Configuration:**
 
 - **Region**: Specify the region explicitly (only required for `instance` mode):
+
   ```bash
   --set region=${LINODE_REGION}
   ```
@@ -123,6 +136,7 @@ helm upgrade --install --namespace "${KARPENTER_NAMESPACE}" --create-namespace k
 - **Mode**: Choose the operating mode (default is `lke`):
   - `lke`: Provisions nodes using LKE NodePools (recommended for LKE clusters)
   - `instance`: Provisions nodes as direct Linode instances
+
   ```bash
   --set settings.mode=lke
   ```
@@ -274,7 +288,7 @@ A duplicate `NodeClaim` (Linode instance) MAY be temporarily provisioned on Lino
 - Time from instance creation to that instance actually joining the cluster is SLOW (can take over 3 minutes for even non-GPU instances)
 - LKE standard does not yet support adding start-up taints to Kubelet (`karpenter.sh/unregistered` in particular is needed) to tell Karpenter to not go and create an extra `NodeClaim` because registration for the original is taking so long.
 
-To address this gap in the meantime, we've configured the default `BATCH_IDLE_DURATION` and `BATCH_MAX_DURATION` for Karpenter to be quite long to avoid impatiently creating new `NodeClaim`s (see https://karpenter.sh/docs/reference/settings/ to read about these settings).
+To address this gap in the meantime, we've configured the default `BATCH_IDLE_DURATION` and `BATCH_MAX_DURATION` for Karpenter to be quite long to avoid impatiently creating new `NodeClaim`s (see <https://karpenter.sh/docs/reference/settings/> to read about these settings).
 
 The trade-off of this approach is that while duplicate `NodeClaim`s are less likely to be created, Pods will be stuck in `Pending` for an extra 1 minute before a `NodeClaim` is created and subsquent instance creation request kicked off (`BATCH_IDLE_DURATION=1m`)
 
@@ -290,14 +304,15 @@ If a duplicate is created still (less likely, but still possible if instances ta
 
 ### Source Attribution
 
-Notice: Files in this source code originated from a fork of https://github.com/aws/karpenter-provider-aws
+Notice: Files in this source code originated from a fork of <https://github.com/aws/karpenter-provider-aws>
 which is under an Apache 2.0 license. Those files have been modified to reflect environmental requirements in LKE and Linode.
 
 ---
+
 ### Community, discussion, contribution, and support
-This project follows the [Linode Community Code of Conduct](https://www.linode.com/community/questions/conduct). 
+
+This project follows the [Linode Community Code of Conduct](https://www.linode.com/community/questions/conduct).
 
 Come discuss Karpenter in the [#karpenter](https://kubernetes.slack.com/archives/C02SFFZSA2K) channel in the [Kubernetes slack](https://slack.k8s.io/)!
 
 Check out the [Docs](https://karpenter.sh/) to learn more.
-

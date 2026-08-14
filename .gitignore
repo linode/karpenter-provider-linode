@@ -12,6 +12,9 @@ go.work.sum
 .vscode
 .DS_Store
 .opencode/
+.envrc
+mise.local.toml
+.mise.local.toml
 
 # Project Specific
 *.csv
@@ -20,6 +23,7 @@ go.work.sum
 karpenter-provider-aws-*
 
 bin/
+release/
 
 # kubeconfigs for e2e tests
 *-kubeconfig

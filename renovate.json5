@@ -41,6 +41,11 @@
       "automerge": true,
     },
     {
+      "description": "Group development toolchain bumps from mise.toml.",
+      "matchManagers": ["mise"],
+      "groupName": "mise tools",
+    },
+    {
       "groupName": "kubernetes",
       "groupSlug": "kubernetes-go",
       "matchDatasources": [
