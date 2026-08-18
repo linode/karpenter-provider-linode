@@ -57,6 +57,7 @@ spec:
     - name: Check inflate pods are all scheduled
       try:
       - assert:
+          timeout: 5m
           resource:
             apiVersion: apps/v1
             kind: Deployment
@@ -66,6 +67,23 @@ spec:
             status:
               replicas: 5
               availableReplicas: 5
+      catch:
+      - script:
+          content: |
+            kubectl -n default get deployment inflate -o yaml
+            kubectl -n default get pods -l app=inflate -o wide
+            kubectl -n default describe pods -l app=inflate
+            kubectl get nodes -l karpenter.sh/nodepool=ml -o wide
+            kubectl describe nodes -l karpenter.sh/nodepool=ml
+            kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+      - podLogs:
+          namespace: default
+          selector: app=inflate
+          tail: 100
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
 
     - name: Scale down inflate deployment to 2
       try:
@@ -103,6 +121,7 @@ spec:
     - name: Check inflate pods are all scheduled
       try:
       - assert:
+          timeout: 5m
           resource:
             apiVersion: apps/v1
             kind: Deployment
@@ -112,6 +131,23 @@ spec:
             status:
               replicas: 2
               availableReplicas: 2
+      catch:
+      - script:
+          content: |
+            kubectl -n default get deployment inflate -o yaml
+            kubectl -n default get pods -l app=inflate -o wide
+            kubectl -n default describe pods -l app=inflate
+            kubectl get nodes -l karpenter.sh/nodepool=ml -o wide
+            kubectl describe nodes -l karpenter.sh/nodepool=ml
+            kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+      - podLogs:
+          namespace: default
+          selector: app=inflate
+          tail: 100
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
 
     - name: Wait for old NodeClaim to be deleted
       try:
