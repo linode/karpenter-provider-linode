@@ -163,9 +163,6 @@ helm-uninstall: ## remove both charts from the existing cluster (requires k8s co
 ##@ Build Dependencies:
 
 ## Location to install dependencies to
-#
-# golangci-lint, ko, helm, kubectl, tilt and chainsaw are provided by mise (see mise.toml).
-# The tools below are pinned to the Go module graph, so they are still installed with `go install`.
 CACHE_BIN ?= $(CURDIR)/bin
 
 export PATH := $(CACHE_BIN):$(PATH)
