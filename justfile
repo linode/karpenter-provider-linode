@@ -160,11 +160,6 @@ release version=IMAGE_VERSION: (set-chart-version version)
 binary:
 	{{ WITH_GOFLAGS }} go build -o "karpenter-provider-linode-$(go env GOARCH)" ./cmd/controller/...
 
-# Update the Karpenter dependency to its latest revision
-update-karpenter:
-	go get -u sigs.k8s.io/karpenter@HEAD
-	go mod tidy
-
 # Install Karpenter onto the current Kubernetes cluster
 helm-install:
 	helm upgrade --install --namespace karpenter --create-namespace karpenter-crd charts/karpenter-crd
