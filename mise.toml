@@ -2,6 +2,9 @@
 # only install versions released more than 7 days ago - https://mise.jdx.dev/configuration/settings.html#minimum_release_age
 minimum_release_age = "7d"
 
+[env]
+ENVTEST_K8S_VERSION = "1.36.2"
+
 [tools]
 go = "1.26.6"
 golangci-lint = "2.12.2"
@@ -14,27 +17,30 @@ uv = "0.12.1"
 yq = "4.53.2"
 "aqua:kyverno/chainsaw" = "0.2.15"
 "pipx:linode-cli" = "5.68.0"
+"go:golang.org/x/vuln/cmd/govulncheck" = "v1.1.4"
+kube-controller-tools = "0.19.0"
+setup-envtest = "0.24.1"
 
 [tasks.ci-test]
 description = "Run unit tests and generate coverage reports"
-run = "make ci-test"
+run = "just ci-test"
 
 [tasks.ci-non-test]
 description = "Run verification and vulnerability checks"
-run = "make ci-non-test"
+run = "just ci-non-test"
 
 [tasks.presubmit]
 description = "Run the full developer loop (verify + test)"
-run = "make presubmit"
+run = "just presubmit"
 
 [tasks.set-chart-version]
 description = "Stamp a version into the chart metadata and the controller image tag"
 usage = 'arg "<version>" help="Version to stamp into the charts, e.g. v0.1.6"'
-run = 'make set-chart-version IMAGE_VERSION="$usage_version"'
+run = 'just set-chart-version "$usage_version"'
 
 [tasks.release]
 description = "Create the Helm chart release artifacts"
-run = "make release"
+run = "just release"
 
 [tasks.build-karpl-image]
 description = "Build and push the controller image with ko"
