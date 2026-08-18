@@ -12,9 +12,9 @@ CLUSTER_ID := env("CLUSTER_ID", "")
 CLUSTER_TIER := env("CLUSTER_TIER", "standard")
 CLUSTER_ACL_FLAGS := env("CLUSTER_ACL_FLAGS", '--acl.enabled true --acl.addresses.ipv4=$(curl --fail --silent --show-error https://ipv4.icanhazip.com)')
 K8S_VERSION := env("K8S_VERSION", if CLUSTER_TIER == "standard" {
-    "1.34"
+    "1.36"
 } else {
-    "v1.31.9+lke7"
+    "v1.34.6+lke2"
 })
 
 ## Inject the app version into operator.Version
