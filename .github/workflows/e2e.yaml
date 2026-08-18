@@ -121,7 +121,7 @@ jobs:
         env:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ secrets.DOCKERHUB_OIDC_CONNECTIONID }}
         with:
-          docker_username: ${{ secrets.DOCKER_USERNAME }}
+          docker_username: ${{ github.repository_owner }}
           mise_task: setup-and-test-e2e
 
   cleanup:
