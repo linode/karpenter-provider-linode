@@ -93,8 +93,8 @@ test: tools
 deflake:
 	ginkgo --race --until-it-fails -v ./pkg/...
 
-# Run the e2e suite against a local cluster
-e2etests test_suite="...": tools
+# Run local Ginkgo e2e tests against a cluster
+ginkgo-e2e test_suite="...": tools
 	#!/usr/bin/env bash
 	set -euo pipefail
 	export KUBEBUILDER_ASSETS="$(setup-envtest use "{{ ENVTEST_K8S_VERSION }}" --bin-dir "{{ ENVTEST_BIN_DIR }}" -p path)"
@@ -104,8 +104,8 @@ e2etests test_suite="...": tools
 		INTERRUPTION_QUEUE="{{ CLUSTER_NAME }}" \
 		go test -p 1 -count 1 -timeout 3.25h -v "./suites/$(echo '{{ test_suite }}' | tr A-Z a-z)/..." --ginkgo.timeout=3h --ginkgo.grace-period=3m
 
-# Run upstream Karpenter e2e tests against the local cluster
-upstream-e2etests: tools
+# Run upstream Karpenter Ginkgo e2e tests against the local cluster
+upstream-ginkgo-e2e: tools
 	#!/usr/bin/env bash
 	set -euo pipefail
 	for mod_file in $(git ls-files 'go.mod' '**/go.mod' ':!website/**'); do
@@ -118,8 +118,8 @@ upstream-e2etests: tools
 	karpenter_core_dir=$(go list -m -json sigs.k8s.io/karpenter | awk -F '"' '/"Dir"/ { print $4 }')
 	CLUSTER_NAME="{{ CLUSTER_NAME }}" go test -count 1 -timeout 3.25h -v "$karpenter_core_dir"/test/suites/... --ginkgo.timeout=3h --ginkgo.grace-period=5m --default-nodeclass="$tmpfile" --default-nodepool="$PWD/test/pkg/environment/linode/default_nodepool.yaml"
 
-# Run e2e tests repeatedly until a failure occurs
-e2etests-deflake test_suite="...":
+# Run local Ginkgo e2e tests repeatedly until a failure occurs
+ginkgo-e2e-deflake test_suite="...":
 	cd test && CLUSTER_NAME="{{ CLUSTER_NAME }}" ginkgo --timeout=3h --grace-period=3m --until-it-fails --vv "./suites/$(echo '{{ test_suite }}' | tr A-Z a-z)"
 
 # Run performance benchmarks
