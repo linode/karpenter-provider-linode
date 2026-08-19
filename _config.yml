@@ -1,12 +1,40 @@
 remote_theme: just-the-docs/just-the-docs
 
+# GitHub Pages turns the plugins below on by default; a local `jekyll build`
+# does not, which is why pages that rely on them (markdown without front
+# matter, titles taken from the first heading) are missing from the local nav
+# unless they are listed here. Listing them changes nothing in production.
 plugins:
   - jekyll-remote-theme
+  - jekyll-default-layout
+  - jekyll-optional-front-matter
+  - jekyll-readme-index
+  - jekyll-relative-links
+  - jekyll-titles-from-headings
 
 title: Karpenter Provider Linode
 search_enabled: true
 heading_anchors: true
 color_scheme: dark
+
+# Everything that is not documentation. Without this the site carries the whole
+# Go tree, and a local build trips over the ko kodata symlinks under cmd/.
+exclude:
+  - Tiltfile
+  - bin/
+  - cmd/
+  - codecov.yml
+  - coverage.html
+  - coverage.out
+  - e2e/
+  - go.mod
+  - go.sum
+  - hack/
+  - justfile
+  - mise.toml
+  - pkg/
+  - release/
+  - renovate.json5
 
 mermaid:
   # Version of mermaid library

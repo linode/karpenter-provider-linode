@@ -82,3 +82,11 @@ run = "just run-e2e"
 [tasks.setup-and-test-e2e]
 description = "Create an LKE cluster, deploy Karpenter, and run the chainsaw e2e suite"
 run = "just setup-and-test-e2e"
+
+[tasks.serve-docs]
+description = "Serve the documentation site locally with live reload"
+run = "just serve-docs"
+
+[tasks.build-docs]
+description = "Build the documentation site the way GitHub Pages does"
+run = "just build-docs"

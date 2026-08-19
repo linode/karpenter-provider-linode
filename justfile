@@ -32,6 +32,12 @@ ENVTEST_K8S_VERSION := env("ENVTEST_K8S_VERSION")
 CLOUD_FIREWALL_CRD_CHART_VERSION := "0.2.0"
 CLOUD_FIREWALL_CONTROLLER_CHART_VERSION := "0.2.1"
 
+## Documentation site preview; the pages tag carries the same gem set GitHub Pages builds with
+DOCS_IMAGE := env("DOCS_IMAGE", "jekyll/jekyll:pages")
+DOCS_CONTAINER := env("DOCS_CONTAINER", "karpl-docs")
+DOCS_PORT := env("DOCS_PORT", "4000")
+DOCS_LIVERELOAD_PORT := env("DOCS_LIVERELOAD_PORT", "35729")
+
 ONESHELL:
 
 default: help
@@ -132,6 +138,22 @@ benchmark: tools
 # Generate the HTML coverage report
 coverage:
 	go tool cover -html coverage.out -o coverage.html
+
+# Serve the documentation site locally with live reload
+serve-docs:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	echo "Serving the docs on http://localhost:{{ DOCS_PORT }}, press ctrl-c to stop"
+	docker run --rm --interactive --tty --name {{ DOCS_CONTAINER }} \
+		--publish {{ DOCS_PORT }}:4000 \
+		--publish {{ DOCS_LIVERELOAD_PORT }}:35729 \
+		--volume "{{ justfile_directory() }}:/srv/jekyll" \
+		{{ DOCS_IMAGE }} \
+		jekyll serve --host 0.0.0.0 --livereload --force-polling
+
+# Build the documentation site the way GitHub Pages does
+build-docs:
+	docker run --rm --volume "{{ justfile_directory() }}:/srv/jekyll" {{ DOCS_IMAGE }} jekyll build
 
 # Run the controller against the local cluster
 run:
