@@ -116,12 +116,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: E2E setup and test
+      - name: Build & Push KARPL Image for e2e
         uses: ./.github/actions/e2e
         env:
           DOCKERHUB_OIDC_CONNECTIONID: ${{ secrets.DOCKERHUB_OIDC_CONNECTIONID }}
         with:
           docker_username: ${{ github.repository_owner }}
+          mise_task: build-karpl-image
+
+      - name: E2E setup and test
+        uses: ./.github/actions/e2e
+        with:
           mise_task: setup-and-test-e2e
 
   cleanup:

@@ -279,7 +279,7 @@ build-karpl-image:
 		ko build --bare --tags "$tags" github.com/linode/karpenter-provider-linode/cmd/controller
 
 # Run tilt against the LKE cluster in kubeconfig
-run-tilt-lke: build-karpl-image
+run-tilt-lke:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	export KUBECONFIG={{ KUBECONFIG }}
@@ -391,4 +391,4 @@ run-e2e:
 	chainsaw test e2e --selector {{ CHAINSAW_SELECTOR }} {{ CHAINSAW_FLAGS }}
 
 # Set up and run e2e tests
-setup-and-test-e2e: build-karpl-image create-lke-cluster configure-lke-cluster pre-e2e-cleanup-and-sanity restart-karpenter-before-e2e run-e2e
+setup-and-test-e2e: create-lke-cluster configure-lke-cluster pre-e2e-cleanup-and-sanity restart-karpenter-before-e2e run-e2e
