@@ -20,6 +20,7 @@ yq = "4.53.2"
 "go:golang.org/x/vuln/cmd/govulncheck" = "v1.1.4"
 kube-controller-tools = "0.19.0"
 setup-envtest = "0.24.1"
+mdbook = "0.5.4"
 
 [tasks.ci-test]
 description = "Run unit tests and generate coverage reports"

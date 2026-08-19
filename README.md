@@ -60,6 +60,10 @@ Karpenter improves the efficiency and cost of running workloads on Kubernetes cl
 - **Provisioning** nodes that meet the requirements of the pods
 - **Removing** the nodes when the nodes are no longer needed
 
+## Documentation
+
+For configuration, testing, and design documentation, see the [Karpenter Provider Linode documentation site](https://linode.github.io/karpenter-provider-linode/).
+
 ## Provider Modes
 
 This provider supports two operating modes:

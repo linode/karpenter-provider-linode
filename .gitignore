@@ -18,6 +18,7 @@ mise.local.toml
 
 # Project Specific
 *.csv
+docs/book
 
 # Binary output
 karpenter-provider-aws-*

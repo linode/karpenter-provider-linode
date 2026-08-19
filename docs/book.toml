@@ -1,0 +1,8 @@
+[book]
+authors = ["Linode"]
+language = "en"
+src = "src"
+title = "Karpenter Provider Linode"
+
+[output.html]
+git-repository-url = "https://github.com/linode/karpenter-provider-linode"
