@@ -81,6 +81,9 @@ spec:
     - name: Assert selector-constrained inflate workload is running on expected node label
       try:
       - script:
+          shell: bash
+          shellArgs:
+            - -c
           content: |
             set -euo pipefail
             node_name=$(kubectl -n default get pod -l app=inflate -o jsonpath='{.items[0].spec.nodeName}')

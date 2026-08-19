@@ -54,6 +54,9 @@ spec:
     - name: Drift on NodePool template labels/taints change
       try:
       - script:
+          shell: bash
+          shellArgs:
+            - -c
           timeout: 15m
           content: |
             set -euo pipefail

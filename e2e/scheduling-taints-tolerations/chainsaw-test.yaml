@@ -83,6 +83,9 @@ spec:
     - name: Assert toleration behavior
       try:
       - script:
+          shell: bash
+          shellArgs:
+            - -c
           content: |
             set -euo pipefail
             inflate_phase=$(kubectl -n default get pod -l app=inflate -o jsonpath='{.items[0].status.phase}')
