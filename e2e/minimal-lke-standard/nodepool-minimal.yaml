@@ -13,6 +13,8 @@ metadata:
   labels:
     e2e.linode.dev/cleanup: "true"
 spec:
+  disruption:
+    consolidateAfter: 2m
   template:
     metadata:
       labels:

@@ -57,7 +57,7 @@ spec:
     - name: Check inflate pods are all scheduled
       try:
       - assert:
-          timeout: 5m
+          timeout: 3m
           resource:
             apiVersion: apps/v1
             kind: Deployment
@@ -121,7 +121,7 @@ spec:
     - name: Check inflate pods are all scheduled
       try:
       - assert:
-          timeout: 5m
+          timeout: 3m
           resource:
             apiVersion: apps/v1
             kind: Deployment
