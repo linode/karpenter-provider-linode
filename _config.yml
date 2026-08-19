@@ -1,0 +1,9 @@
+remote_theme: just-the-docs/just-the-docs
+
+plugins:
+  - jekyll-remote-theme
+
+title: Karpenter Provider Linode
+search_enabled: true
+heading_anchors: true
+color_scheme: dark

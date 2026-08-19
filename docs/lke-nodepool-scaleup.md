@@ -1,19 +1,28 @@
+---
+layout: default
+nav_title: LKE NodePool Scale-up
+nav_order: 3
+---
+
 # LKE multi-node NodePool scale-up (Draft)
 
 This document summarizes the core assumptions, invariants, and high-level flow for scaling existing LKE node pools in LKE mode, optimized for fast review and feedback.
 
 ## Goals
+
 - Maintain a strict 1:1 mapping between a Karpenter `NodeClaim` and a Linode VM.
 - Set `nodeClaim.status.providerID` during `CloudProvider.Create()`.
 - Support many concurrent `Create()` calls without double-claiming a VM or racing pool mutations.
 
 ## Terminology
+
 - `NodePool` (Karpenter): Kubernetes resource `karpenter.sh/NodePool`.
 - `NodePool` (LKE): Linode LKE node pool (`linodego.LKENodePool`).
 - `NodeClaim`: Kubernetes resource `karpenter.sh/NodeClaim`.
 - `Instance`: Linode VM (`linodego.Instance`), identified by `instanceID`.
 
 ## Core model and invariants
+
 - **Pool mapping:** exactly 1 LKE pool per `(Karpenter NodePool name, instanceType)`.
 - **Pool discovery:** always list pools and filter client-side (server-side tag filtering is unreliable for LKE pools).
 - **Determinism:** if multiple claimable instances exist, claim the first `instanceID` in the list.
@@ -40,6 +49,7 @@ flowchart LR
 ```
 
 ## Tier-specific assumptions
+
 - **Enterprise tier**
   - LKE pool tags propagate to underlying Linode instance tags.
   - Linode automatically applies `nodepool=<poolID>` and `lke<clusterID>` tags to instances.
@@ -51,6 +61,7 @@ flowchart LR
   - Required identity tags (pool tags + nodeclaim tag) are applied directly to the instance at claim time via `UpdateInstance`.
 
 ## Concurrency model
+
 - Assume a single active writer (leader election).
 - Use an in-process keyed mutex keyed by `(karpenterNodePoolName, instanceType)`.
 - The mutex protects:
@@ -60,17 +71,22 @@ flowchart LR
   - node-level delete + orphan GC mutations for that pool key
 
 ## High-level `Create()` flow
+
 Inputs:
+
 - `karpenterNodePoolName := nodeClaim.labels[karpenter.sh/nodepool]`
 - `instanceType := resolved single instance type`
 - `poolKey := (karpenterNodePoolName, instanceType)`
 
 ### Step 1: Fast idempotency
+
 - Query instances by tag `karpenter.sh/nodeclaim:<nodeClaimName>`.
 - If exactly one instance exists, return it (covers status update failure after instance tag write).
 
 ### Step 2: Claim-or-scale loop (bounded by `DefaultCreateDeadline`)
+
 Repeat until deadline:
+
 - Lock mutex for `poolKey`.
 - Find or create the LKE pool for `(nodepoolName, instanceType)`.
 - Determine claimable instances:
@@ -159,6 +175,7 @@ sequenceDiagram
 ```
 
 ## Error policy (review focus)
+
 - **Retryable** (`CreateError` / `NodePoolProvisioning`):
   - timeouts waiting for claimable instance (bounded by `DefaultCreateDeadline`)
   - eventual consistency delays
@@ -178,10 +195,10 @@ This section calls out **Linode API call volume by function**, the key **multipl
   - **GET operations returning paginated collections**: **200 requests / minute** (default).
   - **All other operations**: **1600 requests / minute** (default).
   - **Create a Linode**: **20 requests / 15 seconds** (specific override).
-  - Source: https://techdocs.akamai.com/linode-api/reference/rate-limits
+  - Source: <https://techdocs.akamai.com/linode-api/reference/rate-limits>
 - `linodego` retry behavior:
   - The Go SDK is configured to retry and to **sleep based on the `Retry-After` header** when provided.
-  - Reference implementation: https://github.com/linode/linodego/blob/main/retries.go
+  - Reference implementation: <https://github.com/linode/linodego/blob/main/retries.go>
 
 ### Per-function API call “budgets” (current behavior)
 
@@ -260,10 +277,12 @@ File: `pkg/providers/instancetype/offering/offering.go`
 - Without additional server-side API surfaces (e.g., an **atomic “claim next unclaimed node in pool”** or a **pool membership endpoint that includes claim state**) the design remains fundamentally rate-limit/latency bound.
 
 ## Delete + orphan capacity (summary)
+
 - Delete must be node-level (delete node from pool), deleting the pool only when removing the last node.
 - Orphan capacity can occur if scaling succeeds but claiming fails; orphan GC will remove unclaimed capacity after a fixed TTL (5m).
 
 ## Open questions for review
+
 - Is `DefaultCreateDeadline` a reasonable upper bound in `Create()` before returning a retryable error?
 - Are the invariants and “hard error” cases correct, or should any be relaxed/strengthened?
 - Is the orphan TTL (5m) the right tradeoff for cost vs safety?

@@ -19,6 +19,10 @@ mise.local.toml
 # Project Specific
 *.csv
 
+# Jekyll local preview
+_site/
+.sass-cache/
+
 # Binary output
 karpenter-provider-aws-*
 

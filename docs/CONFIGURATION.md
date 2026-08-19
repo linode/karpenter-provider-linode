@@ -1,3 +1,9 @@
+---
+layout: default
+nav_title: Configuration
+nav_order: 2
+---
+
 # Configuration
 
 This guide details the configuration options for the Karpenter Provider for Linode, covering environment variables, operating modes, and the `LinodeNodeClass` Custom Resource.
@@ -5,14 +11,14 @@ This guide details the configuration options for the Karpenter Provider for Lino
 ## Environment Variables
 
 | Variable | Description | Required? | Default |
-|----------|-------------|-----------|---------|
+| ---------- | ------------- | ----------- | --------- |
 | `LINODE_TOKEN` | Your Linode API Personal Access Token. | **Yes** | - |
 | `CLUSTER_NAME` | The name of your LKE cluster. Used to discover the cluster ID in `lke` mode. | **Yes** (in `lke` mode) | - |
 | `LINODE_REGION` | The Linode region code. See [available regions](https://www.linode.com/global-infrastructure/availability/). | No | `us-east` |
 | `CLUSTER_ENDPOINT` | The external Kubernetes cluster endpoint. Discovered automatically if not provided. | No | - |
 | `KARPENTER_MODE` | Operating mode: `lke` or `instance`. See [Modes](#modes) below. | No | `lke` |
 | `LINODE_CLIENT_TIMEOUT` | Timeout in seconds for Linode API client requests. | No | - |
-| `VM_MEMORY_OVERHEAD_PERCENT`| Additional memory overhead to simplify calculation (0.075 = 7.5%). | No | `0.075` |
+| `VM_MEMORY_OVERHEAD_PERCENT` | Additional memory overhead to simplify calculation (0.075 = 7.5%). | No | `0.075` |
 | `DISABLE_DRY_RUN` | Set to `true` to disable dry-run validation for LinodeNodeClasses. | No | `false` |
 
 These environment variables are injected into the controller pod via a Kubernetes Secret. By default, the Helm chart creates a secret called `karpl-credentials` from the `apiToken`, `apiURL`, `apiVersion`, and `region` values.
@@ -34,19 +40,21 @@ These environment variables are injected into the controller pod via a Kubernete
 The provider can operate in two distinct modes, controlled by the `KARPENTER_MODE` environment variable.
 
 ### LKE Mode (`lke`)
-*   **Default Mode.**
-*   Provisions nodes by creating **LKE Node Pools** with a count of 1.
-*   The nodes are automatically joined to your LKE cluster.
-*   **Pros**: Simplest setup, managed by LKE.
-*   **Cons**: Limited customization (cannot use custom images or advanced networking/storage options usually available to raw Linodes).
+
+* **Default Mode.**
+* Provisions nodes by creating **LKE Node Pools** with a count of 1.
+* The nodes are automatically joined to your LKE cluster.
+* **Pros**: Simplest setup, managed by LKE.
+* **Cons**: Limited customization (cannot use custom images or advanced networking/storage options usually available to raw Linodes).
 
 ### Instance Mode (`instance`)
-*   Provisions nodes by creating raw **Linode Instances**.
-*   **Status**: ⚠️ **In Development. Not Fully Functional**
-    *   This mode represents the roadmap for full instance control but is **not currently functional** for creating working cluster nodes.
-    *   It currently **lacks bootstrapping and cluster joining logic** (such as User Data injection). Instances will start but will not join the Kubernetes cluster.
-*   **Pros**: Full control over the instance configuration (SSH keys, placement groups, etc.).
-*   **Note**: `VPCID` and custom disk configurations are defined in the API but not yet fully implemented in the provider logic.
+
+* Provisions nodes by creating raw **Linode Instances**.
+* **Status**: ⚠️ **In Development. Not Fully Functional**
+  * This mode represents the roadmap for full instance control but is **not currently functional** for creating working cluster nodes.
+  * It currently **lacks bootstrapping and cluster joining logic** (such as User Data injection). Instances will start but will not join the Kubernetes cluster.
+* **Pros**: Full control over the instance configuration (SSH keys, placement groups, etc.).
+* **Note**: `VPCID` and custom disk configurations are defined in the API but not yet fully implemented in the provider logic.
 
 ## LinodeNodeClass Spec
 
@@ -55,7 +63,7 @@ The `LinodeNodeClass` allows you to configure specific settings for the nodes ma
 ### Field Reference
 
 | Field | Type | Supported Modes | Description |
-|-------|------|-----------------|-------------|
+| ------- | ------ | ----------------- | ------------- |
 | `tags` | `[]string` | **All** | List of tags to apply to instances. In LKE mode, Karpenter-managed pools keep only core provider tags. |
 | `firewallID` | `int` | **All** | The ID of the Cloud Firewall to attach. |
 | `lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for LKE Enterprise worker nodes. Upgrade the cluster control plane to this version first; otherwise reconciliation fails and replacement NodeClaims will not come up on the requested version. For Enterprise clusters, the update strategy automatically defaults to `on_recycle`. |
@@ -71,10 +79,10 @@ The `LinodeNodeClass` allows you to configure specific settings for the nodes ma
 
 It is important to distinguish between Karpenter configuration and Linode-specific configuration:
 
-*   **Taints**: Taints are defined in the **Karpenter `NodePool`** resource (`spec.template.spec.taints`), *not* in the `LinodeNodeClass`.
-    *   **LKE Mode**: Taints are passed to the LKE Node Pool configuration and applied to nodes by LKE.
-*   **Kubernetes Labels**: Standard scheduling labels are defined in the **Karpenter `NodePool`** (`spec.template.metadata.labels`). Karpenter ensures these are applied to the Node object.
-*   **LKE Labels**: LKE Node Pool labels are derived from the labels resolved onto the NodeClaim (originating from NodePool template metadata labels).
+* **Taints**: Taints are defined in the **Karpenter `NodePool`** resource (`spec.template.spec.taints`), *not* in the `LinodeNodeClass`.
+  * **LKE Mode**: Taints are passed to the LKE Node Pool configuration and applied to nodes by LKE.
+* **Kubernetes Labels**: Standard scheduling labels are defined in the **Karpenter `NodePool`** (`spec.template.metadata.labels`). Karpenter ensures these are applied to the Node object.
+* **LKE Labels**: LKE Node Pool labels are derived from the labels resolved onto the NodeClaim (originating from NodePool template metadata labels).
 
 ### Example: LKE Mode
 
@@ -116,6 +124,7 @@ This can include well-known labels or custom labels you create yourself.
 You can use `affinity` to define more complicated constraints, see [Node Affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity) for the complete specification.
 
 ### Labels
+
 Well-known labels may be specified as NodePool requirements or pod scheduling constraints. You can also define your own custom labels by specifying `requirements` or `labels` on your NodePool and select them using `nodeAffinity` or `nodeSelectors` on your Pods.
 
 #### Well-Known Labels
@@ -156,6 +165,7 @@ nodeSelector:
   topology.kubernetes.io/region: us-east
   karpenter.sh/capacity-type: dedicated
 ```
+
 This example features a well-known label (`topology.kubernetes.io/region`) and a label that is well known to Karpenter (`karpenter.sh/capacity-type`).
 
 If you want to create a custom label, you should do that at the NodePool level.
