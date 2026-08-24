@@ -196,24 +196,3 @@ spec:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
           tail: 100
-
-    - name: Wait for all test NodeClaims to be deleted
-      try:
-      - wait:
-          apiVersion: karpenter.sh/v1
-          kind: NodeClaim
-          timeout: 20m
-          selector: karpenter.sh/nodepool=ml
-          for:
-            deletion: {}
-      catch:
-      - describe:
-          apiVersion: karpenter.sh/v1
-          kind: NodeClaim
-      - script:
-          timeout: 30s
-          content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
-      - podLogs:
-          namespace: kube-system
-          selector: app.kubernetes.io/name=karpenter
-          tail: 100
