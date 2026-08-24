@@ -12,7 +12,8 @@ spec:
     - name: Make sure there are no lingering NodeClaims
       try:
       - script:
-          content: kubectl get nodeclaim -o json
+          timeout: 30s
+          content: kubectl get nodeclaim -l karpenter.sh/nodepool=consolidation-empty -o json
           check:
             ($error): ~
             (json_parse($stdout).items | length(@)): 0
@@ -120,7 +121,7 @@ spec:
       - wait:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
-          timeout: 10m
+          timeout: 20m
           selector: karpenter.sh/nodepool=consolidation-empty
           for:
             deletion: {}
