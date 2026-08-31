@@ -38,11 +38,9 @@ jobs:
             workflow:
              - '.github/workflows/**'
              - '.github/actions/**'
-             - '.github/filters.yml'
             e2e_ci:
              - '.github/workflows/e2e*.y*ml'
              - '.github/actions/e2e/**'
-             - '.github/filters.yml'
 
   ci-test:
     environment: ${{ (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) && 'prod-external' || 'prod' }}
