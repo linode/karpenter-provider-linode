@@ -539,6 +539,54 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Calls()).To(BeNumerically(">=", 1))
 				})
 
+				It("should return an ICE error when scaling an existing pool hits insufficient capacity", func() {
+					poolID := 209
+					instanceID := 3010
+					poolType := "g6-standard-2"
+					nodeClaimTag := fmt.Sprintf("%s=%s", v1.NodeClaimTagKey, "other-nodeclaim")
+					poolTags := []string{
+						fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+						fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
+					}
+					pool := &linodego.LKENodePool{
+						ID:      poolID,
+						Type:    poolType,
+						Count:   1,
+						Tags:    poolTags,
+						Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID, ID: "node-3010"}},
+					}
+					linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+
+					// The pool's only instance is already claimed by another NodeClaim, so
+					// the provider must scale the pool rather than claim an existing node.
+					now := time.Now()
+					alreadyClaimedInst := linodego.Instance{ID: instanceID, Tags: []string{nodeClaimTag}, Created: &now}
+					linodeEnv.LinodeAPI.Instances.Store(instanceID, alreadyClaimedInst)
+
+					// Make UpdateLKENodePool return HTTP 400 for this instance type.
+					linodeEnv.LinodeAPI.InsufficientCapacityPools.Set([]fake.CapacityPool{{InstanceType: poolType, Region: fake.DefaultRegion}})
+
+					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+					Expect(err).ToNot(HaveOccurred())
+
+					node, err := linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+					Expect(err).To(HaveOccurred())
+					Expect(node).To(BeNil())
+
+					// The scale-up 400 must surface as a terminal ICE error rather than a
+					// retryable pool-scale failure, so the NodeClaim is deleted and the
+					// provisioner re-solves against the remaining offerings.
+					Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeTrue())
+
+					// The offering must also be marked unavailable so the re-solve does not
+					// immediately pick the same sold-out instance type again.
+					Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(poolType, fake.DefaultRegion)).To(BeTrue())
+
+					Expect(linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Calls()).To(BeNumerically(">=", 1))
+				})
+
 				It("should reuse existing pool for same (nodepool, instanceType)", func() {
 					poolID := 207
 					instanceID := 3008

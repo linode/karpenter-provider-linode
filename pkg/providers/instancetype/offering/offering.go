@@ -31,7 +31,7 @@ import (
 )
 
 type Provider interface {
-	InjectOfferings([]*cloudprovider.InstanceType, map[string]linodego.LinodeType, []string) []*cloudprovider.InstanceType
+	InjectOfferings([]*cloudprovider.InstanceType, map[string]linodego.LinodeType, sets.Set[string], map[string]sets.Set[string]) []*cloudprovider.InstanceType
 }
 
 type NodeClass interface {
@@ -60,6 +60,7 @@ func (p *DefaultProvider) InjectOfferings(
 	instanceTypes []*cloudprovider.InstanceType,
 	instanceTypesInfo map[string]linodego.LinodeType,
 	allRegions sets.Set[string],
+	instanceTypesOfferings map[string]sets.Set[string],
 ) []*cloudprovider.InstanceType {
 	var its []*cloudprovider.InstanceType
 	for _, it := range instanceTypes {
@@ -67,6 +68,7 @@ func (p *DefaultProvider) InjectOfferings(
 			it,
 			instanceTypesInfo,
 			allRegions,
+			instanceTypesOfferings,
 		)
 		// NOTE: By making this copy one level deep, we can modify the offerings without mutating the results from previous
 		// GetInstanceTypes calls. This should still be done with caution - it is currently done here in the provider, and
@@ -86,6 +88,7 @@ func (p *DefaultProvider) createOfferings(
 	it *cloudprovider.InstanceType,
 	instanceTypesInfo map[string]linodego.LinodeType,
 	allRegions sets.Set[string],
+	instanceTypesOfferings map[string]sets.Set[string],
 ) cloudprovider.Offerings {
 	var offerings []*cloudprovider.Offering
 	// If the sequence number has changed for the unavailable offerings, we know that we can't use the previously cached value
@@ -109,8 +112,15 @@ func (p *DefaultProvider) createOfferings(
 				Requirements: scheduling.NewRequirements(
 					scheduling.NewRequirement(corev1.LabelTopologyRegion, corev1.NodeSelectorOpIn, region),
 				),
-				Price:     price,
-				Available: !p.unavailableOfferings.IsUnavailable(it.Name, region),
+				Price: price,
+				// An offering is available only if the region-availability data
+				// (GET /regions/{region}/availability) reports the plan as available
+				// there AND it has not been recently marked unavailable by a failed
+				// create (ICE cache). Previously only the ICE cache was consulted,
+				// so plans sold out in the region were still offered to the
+				// scheduler and repeatedly attempted.
+				Available: instanceTypesOfferings[it.Name].Has(region) &&
+					!p.unavailableOfferings.IsUnavailable(it.Name, region),
 			}
 			cachedOfferings = append(cachedOfferings, offering)
 		}
