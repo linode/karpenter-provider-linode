@@ -134,6 +134,7 @@ func (p *DefaultProvider) List(ctx context.Context, nodeClass NodeClass) ([]*clo
 		instanceTypes,
 		p.instanceTypesInfo,
 		p.allRegions,
+		p.instanceTypesOfferings,
 	), nil
 }
 

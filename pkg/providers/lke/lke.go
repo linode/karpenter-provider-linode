@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strconv"
 	"time"
@@ -173,6 +174,15 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 		pool, err := p.findOrCreatePool(ctx, nodeClass, nodeClaim, tags, instanceType, createdPool)
 		if err != nil {
 			utils.UpdateUnavailableOfferingsCache(ctx, err, p.region, cheapestType, p.unavailableOfferings)
+			// A 400 on pool create means this offering cannot be fulfilled (e.g. the
+			// plan has no capacity in the region). Surface it as an insufficient
+			// capacity error so the NodeClaim is terminated immediately and the
+			// provisioner re-solves against the remaining offerings — while the
+			// unavailable-offerings mark set above is still fresh — instead of
+			// retrying the same sold-out plan until the create deadline.
+			if linodego.ErrHasStatus(err, http.StatusBadRequest) {
+				return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("creating LKE node pool for instance type %s, %w", instanceType, err))
+			}
 			return nil, cloudprovider.NewCreateError(err, "NodePoolCreationFailed", fmt.Sprintf("Failed to find or create LKE node pool: %s", err.Error()))
 		}
 
@@ -199,6 +209,12 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 		_, err = p.client.UpdateLKENodePool(ctx, p.clusterID, pool.ID, linodego.LKENodePoolUpdateOptions{Count: pool.Count + 1})
 		if err != nil {
 			logger.Error(err, "failed to scale pool", "poolID", pool.ID)
+			// Same as pool creation above: a 400 on scale-up is a capacity-style
+			// rejection, not a transient failure — fail fast so fallback can engage.
+			utils.UpdateUnavailableOfferingsCache(ctx, err, p.region, cheapestType, p.unavailableOfferings)
+			if linodego.ErrHasStatus(err, http.StatusBadRequest) {
+				return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("scaling LKE node pool %d, %w", pool.ID, err))
+			}
 			return nil, fmt.Errorf("%w: %w", ErrPoolScaleFailed, err)
 		}
 		*scaledOnce = true

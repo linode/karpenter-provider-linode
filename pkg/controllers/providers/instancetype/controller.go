@@ -56,7 +56,11 @@ func (c *Controller) Reconcile(ctx context.Context) (reconciler.Result, error) {
 	if err := multierr.Combine(errs...); err != nil {
 		return reconciler.Result{}, fmt.Errorf("updating instancetype, %w", err)
 	}
-	return reconciler.Result{RequeueAfter: 12 * time.Hour}, nil
+	// Region availability (which plans are sold out where) now feeds offering
+	// availability directly, so it must be refreshed on the order of minutes,
+	// not hours — a plan that sells out mid-day should stop being offered on
+	// the next refresh rather than up to 12h later.
+	return reconciler.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
 func (c *Controller) Register(_ context.Context, m manager.Manager) error {
