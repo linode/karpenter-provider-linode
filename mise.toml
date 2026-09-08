@@ -6,7 +6,7 @@ minimum_release_age = "7d"
 ENVTEST_K8S_VERSION = "1.36.2"
 
 [tools]
-go = "1.26.6"
+go = "1.26.8"
 golangci-lint = "2.12.2"
 helm = "3.19.5"
 just = "1.52.0"
