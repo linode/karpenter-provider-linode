@@ -1,0 +1,2 @@
+charts/karpenter-crd/templates/* linguist-generated
+pkg/apis/crds/* linguist-generated
