@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/awslabs/operatorpkg/object"
-	"github.com/samber/lo"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -64,7 +63,7 @@ var _ = BeforeSuite(func() {
 		coretest.WithFieldIndexers(coretest.NodeClaimNodeClassRefFieldIndexer(ctx)),
 		coretest.WithFieldIndexers(coretest.NodePoolNodeClassRefFieldIndexer(ctx)),
 	)
-	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
+	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: new(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
 	linodeEnv = test.NewEnvironment(ctx)
 	cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.NodeProvider(ctx), events.NewRecorder(&record.FakeRecorder{}), env.Client)
@@ -75,7 +74,7 @@ var _ = AfterSuite(func() {
 })
 
 var _ = BeforeEach(func() {
-	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
+	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: new(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
 	nodeClass = test.LinodeNodeClass()
 	linodeEnv.Reset()

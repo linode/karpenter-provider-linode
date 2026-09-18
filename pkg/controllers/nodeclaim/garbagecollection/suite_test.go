@@ -27,7 +27,6 @@ import (
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/ptr"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	karpcloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
@@ -71,7 +70,7 @@ func TestAPIs(t *testing.T) {
 var _ = BeforeSuite(func() {
 	ctx = options.ToContext(ctx, test.Options())
 	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(v1alpha1.CRDs...))
-	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
+	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: new(true)}}))
 	linodeEnv = test.NewEnvironment(ctx)
 	cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.InstanceProvider, events.NewRecorder(&record.FakeRecorder{}),
 		env.Client)
@@ -127,7 +126,7 @@ var _ = Describe("GarbageCollection", func() {
 
 	It("should delete an instance if there is no NodeClaim owner", func() {
 		// Launch time was 1m ago
-		instance.Created = ptr.To(time.Now().Add(-time.Minute))
+		instance.Created = new(time.Now().Add(-time.Minute))
 		linodeEnv.LinodeAPI.Instances.Store(instance.ID, *instance)
 
 		ExpectSingletonReconciled(ctx, garbageCollectionController)
@@ -138,7 +137,7 @@ var _ = Describe("GarbageCollection", func() {
 	})
 	It("should delete an instance along with the node if there is no NodeClaim owner (to quicken scheduling)", func() {
 		// Launch time was 1m ago
-		instance.Created = ptr.To(time.Now().Add(-time.Minute))
+		instance.Created = new(time.Now().Add(-time.Minute))
 		linodeEnv.LinodeAPI.Instances.Store(instance.ID, *instance)
 
 		node := coretest.Node(coretest.NodeOptions{
@@ -171,7 +170,7 @@ var _ = Describe("GarbageCollection", func() {
 					},
 					Region: fake.DefaultRegion,
 					// Launch time was 1m ago
-					Created: ptr.To(time.Now().Add(-time.Minute)),
+					Created: new(time.Now().Add(-time.Minute)),
 					ID:      instanceID,
 					Type:    standard8GBType,
 				},
@@ -207,7 +206,7 @@ var _ = Describe("GarbageCollection", func() {
 					},
 					Region: fake.DefaultRegion,
 					// Launch time was 1m ago
-					Created: ptr.To(time.Now().Add(-time.Minute)),
+					Created: new(time.Now().Add(-time.Minute)),
 					ID:      instanceID,
 					Type:    standard8GBType,
 				},
@@ -246,7 +245,7 @@ var _ = Describe("GarbageCollection", func() {
 	})
 	It("should not delete an instance if it is within the NodeClaim resolution window (1m)", func() {
 		// Launch time just happened
-		instance.Created = ptr.To(time.Now())
+		instance.Created = new(time.Now())
 		linodeEnv.LinodeAPI.Instances.Store(instance.ID, *instance)
 
 		ExpectSingletonReconciled(ctx, garbageCollectionController)
@@ -261,7 +260,7 @@ var _ = Describe("GarbageCollection", func() {
 		})
 
 		// Launch time was 1m ago
-		instance.Created = ptr.To(time.Now().Add(-time.Minute))
+		instance.Created = new(time.Now().Add(-time.Minute))
 		linodeEnv.LinodeAPI.Instances.Store(instance.ID, *instance)
 
 		ExpectSingletonReconciled(ctx, garbageCollectionController)
@@ -270,7 +269,7 @@ var _ = Describe("GarbageCollection", func() {
 	})
 	It("should not delete the instance or node if it already has a NodeClaim that matches it", func() {
 		// Launch time was 1m ago
-		instance.Created = ptr.To(time.Now().Add(-time.Minute))
+		instance.Created = new(time.Now().Add(-time.Minute))
 		linodeEnv.LinodeAPI.Instances.Store(instance.ID, *instance)
 
 		nodeClaim := coretest.NodeClaim(karpv1.NodeClaim{
@@ -312,7 +311,7 @@ var _ = Describe("GarbageCollection", func() {
 					},
 					Region: fake.DefaultRegion,
 					// Launch time was 1m ago
-					Created: ptr.To(time.Now().Add(-time.Minute)),
+					Created: new(time.Now().Add(-time.Minute)),
 					ID:      instanceID,
 					Type:    standard8GBType,
 				},
