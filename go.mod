@@ -6,7 +6,7 @@ toolchain go1.26.8
 
 require (
 	github.com/Pallinder/go-randomdata v1.2.0
-	github.com/awslabs/operatorpkg v0.0.0-20251222193911-34e9a1898737
+	github.com/awslabs/operatorpkg v0.0.0-20260917215433-d57ef9a9ef51
 	github.com/google/uuid v1.6.0
 	github.com/imdario/mergo v0.3.16
 	github.com/linode/linodego/v2 v2.3.0
@@ -24,7 +24,7 @@ require (
 	k8s.io/client-go v0.35.1
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2
-	sigs.k8s.io/controller-runtime v0.22.4
+	sigs.k8s.io/controller-runtime v0.23.1
 	sigs.k8s.io/karpenter v1.9.0
 )
 
