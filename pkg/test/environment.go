@@ -21,7 +21,6 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/samber/lo"
 	clock "k8s.io/utils/clock/testing"
-	"k8s.io/utils/ptr"
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/karpenter/pkg/controllers/nodeoverlay"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
@@ -172,6 +171,6 @@ func (env *Environment) Reset() {
 
 func (env *Environment) SetDefaults() {
 	instances := fake.MakeInstances()
-	env.LinodeAPI.ListTypesOutput.Set(ptr.To(instances))
-	env.LinodeAPI.GetRegionAvailabilityOutput.Set(ptr.To(fake.MakeInstanceOfferings(instances)))
+	env.LinodeAPI.ListTypesOutput.Set(new(instances))
+	env.LinodeAPI.GetRegionAvailabilityOutput.Set(new(fake.MakeInstanceOfferings(instances)))
 }

@@ -29,7 +29,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	clock "k8s.io/utils/clock/testing"
-	"k8s.io/utils/ptr"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/controllers/provisioning"
@@ -78,7 +77,7 @@ var _ = BeforeSuite(func() {
 		coretest.WithFieldIndexers(coretest.NodePoolNodeClassRefFieldIndexer(ctx)),
 	)
 
-	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
+	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: new(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
 	ctx, stop = context.WithCancel(ctx)
 	linodeEnv = test.NewEnvironment(ctx)
@@ -92,7 +91,7 @@ var _ = AfterSuite(func() {
 })
 
 var _ = BeforeEach(func() {
-	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
+	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: new(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
 	linodeEnv.Reset()
 	linodeEnv.SetDefaults()
@@ -108,11 +107,11 @@ var _ = Describe("CloudProvider", func() {
 	var nodeClaim *karpv1.NodeClaim
 	var _ = BeforeEach(func() {
 		// Override context with instance mode for direct Linode instance tests
-		ctx = options.ToContext(ctx, test.Options(test.OptionsFields{Mode: lo.ToPtr("instance")}))
+		ctx = options.ToContext(ctx, test.Options(test.OptionsFields{Mode: new("instance")}))
 		// Create CloudProvider with instance provider for this test suite
 		cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.InstanceProvider, recorder, env.Client)
 		cluster = state.NewCluster(fakeClock, env.Client, cloudProvider)
-		prov = provisioning.NewProvisioner(env.Client, recorder, cloudProvider, cluster, fakeClock)
+		prov = provisioning.NewProvisioner(env.Client, recorder, cloudProvider, cluster, fakeClock, nil, nil)
 		// Use LinodeNodeClassWithoutLKE for direct Linode instance tests
 		nodeClass = test.LinodeNodeClassWithoutLKE(
 			v1.LinodeNodeClass{
@@ -275,7 +274,7 @@ var _ = Describe("CloudProvider", func() {
 									Key:       corev1.LabelInstanceTypeStable,
 									Operator:  corev1.NodeSelectorOpIn,
 									Values:    instanceNames,
-									MinValues: lo.ToPtr(2),
+									MinValues: new(2),
 								},
 							},
 						},
@@ -333,7 +332,7 @@ var _ = Describe("CloudProvider", func() {
 				ID:     fake.InstanceID(),
 				Region: fake.DefaultRegion,
 			}
-			linodeEnv.LinodeAPI.GetInstanceBehavior.Output.Set(ptr.To(ptr.To(instance)))
+			linodeEnv.LinodeAPI.GetInstanceBehavior.Output.Set(new(new(instance)))
 			nodeClass.Annotations = lo.Assign(nodeClass.Annotations, map[string]string{
 				v1.AnnotationLinodeNodeClassHash:        nodeClass.Hash(),
 				v1.AnnotationLinodeNodeClassHashVersion: v1.LinodeNodeClassHashVersion,
@@ -360,7 +359,7 @@ var _ = Describe("CloudProvider", func() {
 		It("should return drifted if there are multiple drift reasons", func() {
 			// Instance is a reference to what we return in the GetInstances call
 			instance.ID = fake.InstanceID()
-			linodeEnv.LinodeAPI.GetInstanceBehavior.Output.Set(ptr.To(ptr.To(instance)))
+			linodeEnv.LinodeAPI.GetInstanceBehavior.Output.Set(new(new(instance)))
 
 			// Assign a fake hash
 			nodeClass.Annotations = lo.Assign(nodeClass.Annotations, map[string]string{
@@ -475,11 +474,11 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 	var lkeNodeClaim *karpv1.NodeClaim
 	var _ = BeforeEach(func() {
 		// Override context with lke mode for LKE-managed mode tests
-		ctx = options.ToContext(ctx, test.Options(test.OptionsFields{Mode: lo.ToPtr("lke")}))
+		ctx = options.ToContext(ctx, test.Options(test.OptionsFields{Mode: new("lke")}))
 		// Create CloudProvider with LKE provider for this test suite
 		cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.LKENodeProvider, recorder, env.Client)
 		cluster = state.NewCluster(fakeClock, env.Client, cloudProvider)
-		prov = provisioning.NewProvisioner(env.Client, recorder, cloudProvider, cluster, fakeClock)
+		prov = provisioning.NewProvisioner(env.Client, recorder, cloudProvider, cluster, fakeClock, nil, nil)
 		// Use LinodeNodeClass for LKE-managed mode tests
 		lkeNodeClass = test.LinodeNodeClass()
 		lkeNodeClass.StatusConditions().SetTrue(opstatus.ConditionReady)
@@ -541,7 +540,7 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 		})
 
 		It("should return NodeClassNotReady when lkeK8sVersion validation marks the NodeClass not ready", func() {
-			lkeNodeClass.Spec.LKEK8sVersion = lo.ToPtr("v1.32.8+lke13")
+			lkeNodeClass.Spec.LKEK8sVersion = new("v1.32.8+lke13")
 			linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
 
 			nodeClassController := nodeclasscontroller.NewController(

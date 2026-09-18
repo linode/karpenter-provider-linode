@@ -20,7 +20,6 @@ import (
 
 	"github.com/awslabs/operatorpkg/status"
 	"github.com/linode/linodego/v2"
-	"github.com/samber/lo"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	"github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclass"
@@ -72,7 +71,7 @@ var _ = Describe("NodeClass Validation", func() {
 	})
 
 	It("should set ValidationSucceeded false for lkeK8sVersion on standard tier", func() {
-		nodeClass.Spec.LKEK8sVersion = lo.ToPtr("v1.31.9+lke7")
+		nodeClass.Spec.LKEK8sVersion = new("v1.31.9+lke7")
 		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
 		linodeEnv.LinodeAPI.ClusterVersion = fake.DefaultClusterVersion
 
@@ -88,7 +87,7 @@ var _ = Describe("NodeClass Validation", func() {
 	})
 
 	It("should set ValidationSucceeded false when lkeK8sVersion does not match the enterprise control plane", func() {
-		nodeClass.Spec.LKEK8sVersion = lo.ToPtr("v1.32.8+lke13")
+		nodeClass.Spec.LKEK8sVersion = new("v1.32.8+lke13")
 		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionEnterprise
 		linodeEnv.LinodeAPI.ClusterVersion = "v1.31.9+lke7"
 
@@ -105,7 +104,7 @@ var _ = Describe("NodeClass Validation", func() {
 	})
 
 	It("should set ValidationSucceeded true when lkeK8sVersion matches the enterprise control plane", func() {
-		nodeClass.Spec.LKEK8sVersion = lo.ToPtr("v1.31.9+lke7")
+		nodeClass.Spec.LKEK8sVersion = new("v1.31.9+lke7")
 		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionEnterprise
 		linodeEnv.LinodeAPI.ClusterVersion = "v1.31.9+lke7"
 
@@ -120,7 +119,7 @@ var _ = Describe("NodeClass Validation", func() {
 	})
 
 	It("should return an error on transient GetLKECluster failures without setting a false condition", func() {
-		nodeClass.Spec.LKEK8sVersion = lo.ToPtr("v1.31.9+lke7")
+		nodeClass.Spec.LKEK8sVersion = new("v1.31.9+lke7")
 		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionEnterprise
 		linodeEnv.LinodeAPI.GetLKEClusterBehavior.Error.Set(fmt.Errorf("boom"))
 
@@ -134,7 +133,7 @@ var _ = Describe("NodeClass Validation", func() {
 	})
 
 	It("should revalidate lkeK8sVersion on spec updates", func() {
-		nodeClass.Spec.LKEK8sVersion = lo.ToPtr("v1.32.8+lke13")
+		nodeClass.Spec.LKEK8sVersion = new("v1.32.8+lke13")
 		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionEnterprise
 		linodeEnv.LinodeAPI.ClusterVersion = "v1.31.9+lke7"
 
@@ -143,7 +142,7 @@ var _ = Describe("NodeClass Validation", func() {
 		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).IsFalse()).To(BeTrue())
 
-		nodeClass.Spec.LKEK8sVersion = lo.ToPtr("v1.31.9+lke7")
+		nodeClass.Spec.LKEK8sVersion = new("v1.31.9+lke7")
 		ExpectApplied(ctx, env.Client, nodeClass)
 		ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
 		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
