@@ -29,7 +29,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/ptr"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
@@ -115,9 +114,9 @@ func TestNodepool(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(testv1alpha1.CRDs...))
-	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
+	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: new(true)}}))
 	ctx = options.ToContext(ctx, test.Options(test.OptionsFields{
-		ClusterRegion: ptr.To(fake.DefaultRegion),
+		ClusterRegion: new(fake.DefaultRegion),
 	}))
 	ctx, stop = context.WithCancel(ctx)
 	linodeEnv = test.NewEnvironment(ctx)
@@ -724,7 +723,7 @@ var _ = Describe("LKENodeProvider", func() {
 			Context("Create options", func() {
 				It("should propagate optional NodeClass fields", func() {
 					firewallID := 123
-					nodeClass.Spec.FirewallID = lo.ToPtr(firewallID)
+					nodeClass.Spec.FirewallID = new(firewallID)
 
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
@@ -1380,8 +1379,8 @@ var _ = Describe("LKENodeProvider", func() {
 				It("should propagate optional NodeClass fields", func() {
 					firewallID := 123
 					version := fake.DefaultClusterVersion
-					nodeClass.Spec.FirewallID = lo.ToPtr(firewallID)
-					nodeClass.Spec.LKEK8sVersion = lo.ToPtr(version)
+					nodeClass.Spec.FirewallID = new(firewallID)
+					nodeClass.Spec.LKEK8sVersion = new(version)
 
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
@@ -1410,7 +1409,7 @@ var _ = Describe("LKENodeProvider", func() {
 
 				It("should update an existing pool to the desired kubernetes version before reuse", func() {
 					version := fake.DefaultClusterVersion
-					nodeClass.Spec.LKEK8sVersion = lo.ToPtr(version)
+					nodeClass.Spec.LKEK8sVersion = new(version)
 
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
@@ -1424,7 +1423,7 @@ var _ = Describe("LKENodeProvider", func() {
 					oldVersion := "1.30"
 					linodeEnv.LinodeAPI.NodePools.Store(
 						fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID),
-						&linodego.LKENodePool{ID: poolID, Type: cheapestType.Name, Count: 1, Tags: poolTags, K8sVersion: lo.ToPtr(oldVersion)},
+						&linodego.LKENodePool{ID: poolID, Type: cheapestType.Name, Count: 1, Tags: poolTags, K8sVersion: new(oldVersion)},
 					)
 
 					now := time.Now()

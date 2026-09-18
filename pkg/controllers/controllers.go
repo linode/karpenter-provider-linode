@@ -71,7 +71,7 @@ func NewControllers(
 		controllersinstancetype.NewController(instanceTypeProvider),
 		controllersinstancetypecapacity.NewController(kubeClient, cloudProvider, instanceTypeProvider),
 		nodeclassinplaceupdate.NewController(kubeClient, cloudProvider, nodeProvider),
-		status.NewController[*v1alpha1.LinodeNodeClass](kubeClient, mgr.GetEventRecorderFor("karpenter"), status.EmitDeprecatedMetrics),
+		status.NewController[*v1alpha1.LinodeNodeClass](kubeClient, mgr.GetEventRecorderFor("karpenter"), status.EmitDeprecatedMetrics), //nolint:staticcheck // SA1019 upstream karpenter needs to update from using deprecated events
 		metrics.NewController(kubeClient, cloudProvider),
 	}
 	return controllers

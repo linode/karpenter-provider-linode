@@ -20,7 +20,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/samber/lo"
 	coreoperator "sigs.k8s.io/karpenter/pkg/operator"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
@@ -48,7 +47,7 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
+	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: new(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
 	ctx, stop = context.WithCancel(ctx)
 	linodeEnv = test.NewEnvironment(ctx)
@@ -82,10 +81,10 @@ var _ = Describe("Options", func() {
 			"--vm-memory-overhead-percent", "0.1")
 		Expect(err).ToNot(HaveOccurred())
 		expectOptionsEqual(opts, test.Options(test.OptionsFields{
-			ClusterName:             lo.ToPtr("env-cluster"),
-			ClusterEndpoint:         lo.ToPtr("https://env-cluster"),
-			ClusterRegion:           lo.ToPtr("us-west"),
-			VMMemoryOverheadPercent: lo.ToPtr[float64](0.1),
+			ClusterName:             new("env-cluster"),
+			ClusterEndpoint:         new("https://env-cluster"),
+			ClusterRegion:           new("us-west"),
+			VMMemoryOverheadPercent: new(0.1),
 		}))
 	})
 	It("should use lke provider if mode is not set", func() {
@@ -95,7 +94,7 @@ var _ = Describe("Options", func() {
 		os.Args = os.Args[:1] // Clear any existing args for the test
 
 		ctx := options.ToContext(context.Background(), test.Options(test.OptionsFields{
-			ClusterName: lo.ToPtr("env-cluster"),
+			ClusterName: new("env-cluster"),
 		}))
 		op, err := operator.NewOperator(ctx, &coreoperator.Operator{}, linodeEnv.LinodeAPI)
 		Expect(err).NotTo(HaveOccurred())
@@ -108,11 +107,11 @@ var _ = Describe("Options", func() {
 		os.Args = os.Args[:1] // Clear any existing args for the test
 
 		ctx := options.ToContext(context.Background(), test.Options(test.OptionsFields{
-			Mode:                    lo.ToPtr("instance"),
-			ClusterName:             lo.ToPtr("env-cluster"),
-			ClusterEndpoint:         lo.ToPtr("https://env-cluster"),
-			ClusterRegion:           lo.ToPtr("us-west"),
-			VMMemoryOverheadPercent: lo.ToPtr[float64](0.1),
+			Mode:                    new("instance"),
+			ClusterName:             new("env-cluster"),
+			ClusterEndpoint:         new("https://env-cluster"),
+			ClusterRegion:           new("us-west"),
+			VMMemoryOverheadPercent: new(0.1),
 		}))
 		op, err := operator.NewOperator(ctx, &coreoperator.Operator{}, linodeEnv.LinodeAPI)
 		Expect(err).NotTo(HaveOccurred())
@@ -131,10 +130,10 @@ var _ = Describe("Options", func() {
 		err := opts.Parse(fs)
 		Expect(err).ToNot(HaveOccurred())
 		expectOptionsEqual(opts, test.Options(test.OptionsFields{
-			ClusterName:             lo.ToPtr("env-cluster"),
-			ClusterEndpoint:         lo.ToPtr("https://env-cluster"),
-			ClusterRegion:           lo.ToPtr("us-west"),
-			VMMemoryOverheadPercent: lo.ToPtr[float64](0.1),
+			ClusterName:             new("env-cluster"),
+			ClusterEndpoint:         new("https://env-cluster"),
+			ClusterRegion:           new("us-west"),
+			VMMemoryOverheadPercent: new(0.1),
 		}))
 	})
 

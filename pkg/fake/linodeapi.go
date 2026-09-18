@@ -169,7 +169,7 @@ func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.Lino
 		// Find the type in defaultLinodeTypeList
 		for _, t := range defaultLinodeTypeList {
 			if t.ID == *typeID {
-				return ptr.To(&t), nil
+				return new(&t), nil
 			}
 		}
 		return nil, &linodego.Error{
@@ -200,7 +200,7 @@ func (l *LinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.I
 			}
 		}
 		instance := raw.(linodego.Instance)
-		return ptr.To(&instance), nil
+		return new(&instance), nil
 	})
 	if instance == nil {
 		return nil, err
@@ -276,12 +276,12 @@ func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceC
 			Type:                opts.Type,
 			Region:              opts.Region,
 			InterfaceGeneration: opts.InterfaceGeneration,
-			Created:             ptr.To(time.Now()),
+			Created:             new(time.Now()),
 			Status:              linodego.InstanceRunning,
 		}
 		l.Instances.Store(instance.ID, instance)
 
-		return ptr.To(ptr.To(instance)), nil
+		return new(new(instance)), nil
 	})
 	if instance == nil {
 		return nil, err
@@ -496,7 +496,7 @@ func (l *LinodeClient) CreateLKENodePool(_ context.Context, clusterID int, opts 
 
 		l.NodePools.Store(fmt.Sprintf("%d-%d", params.ClusterID, poolID), newPool)
 
-		return ptr.To(newPool), nil
+		return new(newPool), nil
 	})
 
 	if pool == nil {
@@ -562,7 +562,7 @@ func (l *LinodeClient) GetLKENodePool(_ context.Context, clusterID, poolID int) 
 			}
 		}
 
-		return ptr.To(pool), nil
+		return new(pool), nil
 	})
 
 	if pool == nil {
@@ -695,7 +695,7 @@ func (l *LinodeClient) UpdateLKENodePool(_ context.Context, clusterID, poolID in
 		// Store updated pool
 		l.NodePools.Store(key, pool)
 
-		return ptr.To(pool), nil
+		return new(pool), nil
 	})
 
 	if pool == nil {
@@ -764,7 +764,7 @@ func (l *LinodeClient) GetLKECluster(_ context.Context, clusterID int) (*linodeg
 			K8sVersion: l.ClusterVersion,
 			Tier:       string(l.ClusterTier),
 		}
-		return ptr.To(&cluster), nil
+		return new(&cluster), nil
 	})
 	if cluster == nil {
 		return nil, err
@@ -802,7 +802,7 @@ func (l *LinodeClient) UpdateInstance(_ context.Context, linodeID int, opts lino
 		}
 		l.Instances.Store(params.LinodeID, instance)
 
-		return ptr.To(&instance), nil
+		return new(&instance), nil
 	})
 
 	if instance == nil {

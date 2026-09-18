@@ -62,7 +62,7 @@ var _ = BeforeSuite(func() {
 		coretest.WithCRDs(karptestv1alpha1.CRDs...),
 		coretest.WithFieldIndexers(coretest.NodeClaimNodeClassRefFieldIndexer(ctx)),
 	)
-	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
+	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: new(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
 	linodeEnv = test.NewEnvironment(ctx)
 	cloudProvider := cloudprovider.New(

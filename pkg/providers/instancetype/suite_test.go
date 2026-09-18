@@ -65,7 +65,7 @@ func TestLinode(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	env = coretest.NewEnvironment(coretest.WithCRDs(apis.CRDs...), coretest.WithCRDs(v1alpha1.CRDs...))
-	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
+	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: new(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
 	ctx, stop = context.WithCancel(ctx)
 	linodeEnv = test.NewEnvironment(ctx)
@@ -73,7 +73,7 @@ var _ = BeforeSuite(func() {
 	cloudProvider = cloudprovider.New(linodeEnv.InstanceTypesProvider, linodeEnv.NodeProvider(ctx), events.NewRecorder(&record.FakeRecorder{}),
 		env.Client)
 	cluster = state.NewCluster(fakeClock, env.Client, cloudProvider)
-	prov = provisioning.NewProvisioner(env.Client, events.NewRecorder(&record.FakeRecorder{}), cloudProvider, cluster, fakeClock)
+	prov = provisioning.NewProvisioner(env.Client, events.NewRecorder(&record.FakeRecorder{}), cloudProvider, cluster, fakeClock, nil, nil)
 })
 
 var _ = AfterSuite(func() {
@@ -166,7 +166,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 		var info linodego.LinodeType
 		BeforeEach(func() {
 			ctx = options.ToContext(ctx, test.Options(test.OptionsFields{
-				ClusterName: lo.ToPtr("karpenter-cluster"),
+				ClusterName: new("karpenter-cluster"),
 			}))
 
 			var ok bool

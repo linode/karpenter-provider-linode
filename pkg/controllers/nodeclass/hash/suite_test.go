@@ -20,7 +20,6 @@ import (
 
 	"github.com/awslabs/operatorpkg/object"
 	"github.com/awslabs/operatorpkg/status"
-	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
@@ -59,7 +58,7 @@ var _ = BeforeSuite(func() {
 		coretest.WithCRDs(karpv1alpha1.CRDs...),
 		coretest.WithFieldIndexers(coretest.NodeClaimNodeClassRefFieldIndexer(ctx)),
 	)
-	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: lo.ToPtr(true)}}))
+	ctx = coreoptions.ToContext(ctx, coretest.Options(coretest.OptionsFields{FeatureGates: coretest.FeatureGates{ReservedCapacity: new(true)}}))
 	ctx = options.ToContext(ctx, test.Options())
 })
 
