@@ -84,6 +84,13 @@ verify: tools
 		fi
 	fi
 
+lint-chart target_branch='main':
+	ct lint \
+	--chart-yaml-schema=.ct/chart_schema.yaml \
+	--lint-conf=.ct/lintconf.yaml \
+	--check-version-increment=false \
+	--target-branch={{ target_branch }}
+
 # Run vulnerability checks
 vulncheck: tools
 	govulncheck ./pkg/...
