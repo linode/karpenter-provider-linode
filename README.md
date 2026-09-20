@@ -283,22 +283,9 @@ linode-cli lke cluster-delete --label "${CLUSTER_NAME}"
 
 ## Known issues
 
-A duplicate `NodeClaim` (Linode instance) MAY be temporarily provisioned on Linode until Karpenter detects the original was able to register the original successfully. This is because:
+LKE cannot currently add Karpenter's `karpenter.sh/unregistered` taint before the kubelet registers, so the controller may log a warning about the missing taint. The provider instead registers the temporary bootstrap taints used by each LKE tier with Karpenter's scheduling model.
 
-- Time from instance creation to that instance actually joining the cluster is SLOW (can take over 3 minutes for even non-GPU instances)
-- LKE standard does not yet support adding start-up taints to Kubelet (`karpenter.sh/unregistered` in particular is needed) to tell Karpenter to not go and create an extra `NodeClaim` because registration for the original is taking so long.
-
-To address this gap in the meantime, we've configured the default `BATCH_IDLE_DURATION` and `BATCH_MAX_DURATION` for Karpenter to be quite long to avoid impatiently creating new `NodeClaim`s (see <https://karpenter.sh/docs/reference/settings/> to read about these settings).
-
-The trade-off of this approach is that while duplicate `NodeClaim`s are less likely to be created, Pods will be stuck in `Pending` for an extra 1 minute before a `NodeClaim` is created and subsquent instance creation request kicked off (`BATCH_IDLE_DURATION=1m`)
-
-If a duplicate is created still (less likely, but still possible if instances take exceptionally long to join the cluster), the duplicate `NodeClaim` does get cleaned up after about a minute when Karpenter realizes it's not needed. You will see something like this in the Karpenter controller logs:
-
-```
-{"level":"INFO","time":"2026-01-26T19:42:57.156Z","logger":"controller","message":"launched nodeclaim","commit":"237f3a9","controller":"nodeclaim.lifecycle","controllerGroup":"karpenter.sh","controllerKind":"NodeClaim","NodeClaim":{"name":"default-v2blg"},"namespace":"","name":"default-v2blg","reconcileID":"e85e6c72-8da1-4fea-af26-1fb0e676d502","provider-id":"linode://90601036","instance-type":"g6-standard-6","zone":"","capacity-type":"on-demand","allocatable":{"cpu":"5915m","memory":"13590Mi","pods":"110"}}
-{"level":"ERROR","time":"2026-01-26T19:44:22.686Z","logger":"controller","message":"node claim registration error","commit":"237f3a9","controller":"nodeclaim.lifecycle","controllerGroup":"karpenter.sh","controllerKind":"NodeClaim","NodeClaim":{"name":"default-v2blg"},"namespace":"","name":"default-v2blg","reconcileID":"e3ab7681-c8fb-489a-9f6b-63036fa52090","provider-id":"linode://90601036","taint":"karpenter.sh/unregistered","error":"missing taint prevents registration-related race conditions on Karpenter-managed nodes"}
-{"level":"INFO","time":"2026-01-26T19:44:22.705Z","logger":"controller","message":"registered nodeclaim","commit":"237f3a9","controller":"nodeclaim.lifecycle","controllerGroup":"karpenter.sh","controllerKind":"NodeClaim","NodeClaim":{"name":"default-v2blg"},"namespace":"","name":"default-v2blg","reconcileID":"e3ab7681-c8fb-489a-9f6b-63036fa52090","provider-id":"linode://90601036","Node":{"name":"lke561146-819072-4a8e5fd50000"}}
-```
+Do not increase `BATCH_IDLE_DURATION` or `BATCH_MAX_DURATION` to work around slow LKE node registration. The Helm chart uses Karpenter's standard batching defaults, and the provider prevents duplicate `NodeClaim`s by modeling LKE bootstrap taints directly.
 
 ---
 
