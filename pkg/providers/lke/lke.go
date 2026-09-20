@@ -33,6 +33,7 @@ import (
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
+	"sigs.k8s.io/karpenter/pkg/scheduling"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
@@ -42,12 +43,61 @@ import (
 )
 
 const (
-	DefaultCreateDeadline         = 10 * time.Second
-	DefaultTagVerificationTimeout = 4 * time.Second
-	DefaultRetryDelay             = 2 * time.Second
+	DefaultCreateDeadline               = 10 * time.Second
+	DefaultTagVerificationTimeout       = 4 * time.Second
+	DefaultRetryDelay                   = 2 * time.Second
+	lkeLabelsTaintsWaitingTaintKey      = "lke.linode.com/labels-taints"
+	lkeLabelsTaintsWaitingTaintValue    = "waiting"
+	lkeEnterpriseCiliumNotReadyTaintKey = "node.cilium.io/agent-not-ready"
+	lkeEnterpriseUninitializedTaintKey  = "node.cluster.x-k8s.io/uninitialized"
 )
 
 var defaultPoolUpdateStrategy = linodego.LKENodePoolOnRecycle
+
+var commonKnownEphemeralTaints = []corev1.Taint{
+	{
+		Key:    lkeLabelsTaintsWaitingTaintKey,
+		Value:  lkeLabelsTaintsWaitingTaintValue,
+		Effect: corev1.TaintEffectNoSchedule,
+	},
+	{
+		Key:    corev1.TaintNodeNetworkUnavailable,
+		Effect: corev1.TaintEffectNoSchedule,
+	},
+}
+
+var enterpriseKnownEphemeralTaints = []corev1.Taint{
+	{
+		Key:    lkeEnterpriseCiliumNotReadyTaintKey,
+		Effect: corev1.TaintEffectNoSchedule,
+	},
+	{
+		Key:    lkeEnterpriseUninitializedTaintKey,
+		Effect: corev1.TaintEffectNoSchedule,
+	},
+}
+
+// RegisterKnownEphemeralTaints configures Karpenter's scheduling model before
+// controllers start. LKE removes these taints as each node finishes bootstrap.
+func RegisterKnownEphemeralTaints(clusterTier linodego.LKEVersionTier) {
+	registerKnownEphemeralTaints(commonKnownEphemeralTaints)
+	if clusterTier == linodego.LKEVersionEnterprise {
+		registerKnownEphemeralTaints(enterpriseKnownEphemeralTaints)
+	}
+}
+
+func registerKnownEphemeralTaints(taints []corev1.Taint) {
+	for _, taint := range taints {
+		if slices.ContainsFunc(scheduling.KnownEphemeralTaints, func(knownTaint corev1.Taint) bool {
+			return knownTaint.Key == taint.Key &&
+				knownTaint.Value == taint.Value &&
+				knownTaint.Effect == taint.Effect
+		}) {
+			continue
+		}
+		scheduling.KnownEphemeralTaints = append(scheduling.KnownEphemeralTaints, taint)
+	}
+}
 
 var ErrNodesProvisioning = errors.New("nodes provisioning")
 var ErrNoClaimableInstance = errors.New("no claimable instance")
@@ -257,8 +307,7 @@ func (p *DefaultProvider) findOrCreatePool(ctx context.Context, nodeClass *v1alp
 		Type:   instanceType,
 		Tags:   tagList,
 		Labels: lkeLabelsFromNodeClaim(nodeClaim),
-		// Eventually we need to differentiate between taints and startup taints on LKE API
-		Taints: convertToLkeTaints(append(nodeClaim.Spec.Taints, nodeClaim.Spec.StartupTaints...)),
+		Taints: convertToLkeTaints(nodeClaim.Spec.Taints),
 	}
 	if nodeClass.Spec.FirewallID != nil {
 		createOpts.FirewallID = nodeClass.Spec.FirewallID
