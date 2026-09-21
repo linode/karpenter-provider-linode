@@ -33,6 +33,7 @@ import (
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
+	"sigs.k8s.io/karpenter/pkg/scheduling"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 	testv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 
@@ -133,6 +134,74 @@ var _ = BeforeEach(func() {
 	ctx = options.ToContext(ctx, test.Options())
 	linodeEnv.Reset()
 	linodeEnv.SetDefaults()
+})
+
+var _ = Describe("Known Ephemeral Taints", func() {
+	var original []corev1.Taint
+
+	BeforeEach(func() {
+		original = append([]corev1.Taint(nil), scheduling.KnownEphemeralTaints...)
+	})
+
+	AfterEach(func() {
+		scheduling.KnownEphemeralTaints = original
+	})
+
+	It("should register standard LKE bootstrap taints exactly once", func() {
+		lke.RegisterKnownEphemeralTaints(linodego.LKEVersionStandard)
+		lke.RegisterKnownEphemeralTaints(linodego.LKEVersionStandard)
+
+		Expect(scheduling.KnownEphemeralTaints).To(ContainElement(corev1.Taint{
+			Key:    "lke.linode.com/labels-taints",
+			Value:  "waiting",
+			Effect: corev1.TaintEffectNoSchedule,
+		}))
+		Expect(scheduling.KnownEphemeralTaints).To(ContainElement(corev1.Taint{
+			Key:    corev1.TaintNodeNetworkUnavailable,
+			Effect: corev1.TaintEffectNoSchedule,
+		}))
+		Expect(scheduling.KnownEphemeralTaints).NotTo(ContainElement(corev1.Taint{
+			Key:    "node.cilium.io/agent-not-ready",
+			Effect: corev1.TaintEffectNoSchedule,
+		}))
+		Expect(lo.CountBy(scheduling.KnownEphemeralTaints, func(taint corev1.Taint) bool {
+			return taint.Key == "lke.linode.com/labels-taints"
+		})).To(Equal(1))
+		Expect(lo.CountBy(scheduling.KnownEphemeralTaints, func(taint corev1.Taint) bool {
+			return taint.Key == corev1.TaintNodeNetworkUnavailable
+		})).To(Equal(1))
+	})
+
+	It("should register additional LKE Enterprise bootstrap taints exactly once", func() {
+		lke.RegisterKnownEphemeralTaints(linodego.LKEVersionEnterprise)
+		lke.RegisterKnownEphemeralTaints(linodego.LKEVersionEnterprise)
+
+		Expect(scheduling.KnownEphemeralTaints).To(ContainElements(
+			corev1.Taint{
+				Key:    "lke.linode.com/labels-taints",
+				Value:  "waiting",
+				Effect: corev1.TaintEffectNoSchedule,
+			},
+			corev1.Taint{
+				Key:    corev1.TaintNodeNetworkUnavailable,
+				Effect: corev1.TaintEffectNoSchedule,
+			},
+			corev1.Taint{
+				Key:    "node.cilium.io/agent-not-ready",
+				Effect: corev1.TaintEffectNoSchedule,
+			},
+			corev1.Taint{
+				Key:    "node.cluster.x-k8s.io/uninitialized",
+				Effect: corev1.TaintEffectNoSchedule,
+			},
+		))
+		Expect(lo.CountBy(scheduling.KnownEphemeralTaints, func(taint corev1.Taint) bool {
+			return taint.Key == "node.cilium.io/agent-not-ready"
+		})).To(Equal(1))
+		Expect(lo.CountBy(scheduling.KnownEphemeralTaints, func(taint corev1.Taint) bool {
+			return taint.Key == "node.cluster.x-k8s.io/uninitialized"
+		})).To(Equal(1))
+	})
 })
 
 var _ = Describe("LKENodeProvider", func() {
@@ -275,8 +344,9 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(poolInstance.Tags).To(ContainElement("integration=true"))
 				})
 
-				It("should convert NodeClaim taints to LKE taints", func() {
+				It("should send only persistent NodeClaim taints to LKE", func() {
 					nodeClaim.Spec.Taints = []corev1.Taint{{Key: "dedicated", Value: "gpu", Effect: corev1.TaintEffectNoSchedule}}
+					nodeClaim.Spec.StartupTaints = []corev1.Taint{{Key: "example.com/startup", Value: "waiting", Effect: corev1.TaintEffectNoExecute}}
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 
@@ -287,9 +357,9 @@ var _ = Describe("LKENodeProvider", func() {
 					poolInstance, err := linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, tags, instanceTypes)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(poolInstance).ToNot(BeNil())
-					// Verify taints were passed to the pool creation
+
 					input := linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.CalledWithInput.At(0)
-					Expect(input.Opts.Taints).To(ContainElement(linodego.LKENodePoolTaint{Key: "dedicated", Value: "gpu", Effect: linodego.LKENodePoolTaintEffect(corev1.TaintEffectNoSchedule)}))
+					Expect(input.Opts.Taints).To(Equal([]linodego.LKENodePoolTaint{{Key: "dedicated", Value: "gpu", Effect: linodego.LKENodePoolTaintEffect(corev1.TaintEffectNoSchedule)}}))
 				})
 
 				It("should include supported NodeClaim labels in pool labels", func() {
@@ -950,8 +1020,9 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(input.Opts.Tags).To(ContainElement("integration=true"))
 				})
 
-				It("should convert NodeClaim taints to LKE taints", func() {
+				It("should send only persistent NodeClaim taints to LKE", func() {
 					nodeClaim.Spec.Taints = []corev1.Taint{{Key: "dedicated", Value: "gpu", Effect: corev1.TaintEffectNoSchedule}}
+					nodeClaim.Spec.StartupTaints = []corev1.Taint{{Key: "example.com/startup", Value: "waiting", Effect: corev1.TaintEffectNoExecute}}
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 
@@ -970,7 +1041,7 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(poolInstance).ToNot(BeNil())
 
 					input := linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.CalledWithInput.At(0)
-					Expect(input.Opts.Taints).To(ContainElement(linodego.LKENodePoolTaint{Key: "dedicated", Value: "gpu", Effect: linodego.LKENodePoolTaintEffect(corev1.TaintEffectNoSchedule)}))
+					Expect(input.Opts.Taints).To(Equal([]linodego.LKENodePoolTaint{{Key: "dedicated", Value: "gpu", Effect: linodego.LKENodePoolTaintEffect(corev1.TaintEffectNoSchedule)}}))
 				})
 
 				It("should include NodeClaim labels in lke nodepool labels", func() {
