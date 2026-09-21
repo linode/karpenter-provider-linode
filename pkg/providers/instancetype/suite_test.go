@@ -141,6 +141,8 @@ var _ = Describe("InstanceTypeProvider", func() {
 			return instanceType.Name == "g6-standard-4"
 		})
 		Expect(ok).To(BeTrue())
+		Expect(instanceType.Requirements.Get(corev1.LabelTopologyZone).Has(fake.DefaultRegion)).To(BeTrue())
+		Expect(instanceType.Requirements.Get(karpv1.CapacityTypeLabelKey).Has(karpv1.CapacityTypeOnDemand)).To(BeTrue())
 
 		price, ok := instanceType.OfferingPrice(fake.DefaultRegion, karpv1.CapacityTypeOnDemand)
 		Expect(ok).To(BeTrue())
