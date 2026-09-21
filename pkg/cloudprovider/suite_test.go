@@ -126,6 +126,18 @@ var _ = Describe("CloudProvider", func() {
 			Spec: karpv1.NodePoolSpec{
 				Template: karpv1.NodeClaimTemplate{
 					Spec: karpv1.NodeClaimTemplateSpec{
+						Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
+							{
+								Key:      corev1.LabelTopologyZone,
+								Operator: corev1.NodeSelectorOpIn,
+								Values:   []string{fake.DefaultRegion},
+							},
+							{
+								Key:      karpv1.CapacityTypeLabelKey,
+								Operator: corev1.NodeSelectorOpIn,
+								Values:   []string{karpv1.CapacityTypeOnDemand},
+							},
+						},
 						NodeClassRef: &karpv1.NodeClassReference{
 							Group: object.GVK(nodeClass).Group,
 							Kind:  object.GVK(nodeClass).Kind,
@@ -137,9 +149,25 @@ var _ = Describe("CloudProvider", func() {
 		})
 		nodeClaim = coretest.NodeClaim(karpv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{karpv1.NodePoolLabelKey: nodePool.Name},
+				Labels: map[string]string{
+					karpv1.NodePoolLabelKey:     nodePool.Name,
+					corev1.LabelTopologyZone:    fake.DefaultRegion,
+					karpv1.CapacityTypeLabelKey: karpv1.CapacityTypeOnDemand,
+				},
 			},
 			Spec: karpv1.NodeClaimSpec{
+				Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
+					{
+						Key:      corev1.LabelTopologyZone,
+						Operator: corev1.NodeSelectorOpIn,
+						Values:   []string{fake.DefaultRegion},
+					},
+					{
+						Key:      karpv1.CapacityTypeLabelKey,
+						Operator: corev1.NodeSelectorOpIn,
+						Values:   []string{karpv1.CapacityTypeOnDemand},
+					},
+				},
 				NodeClassRef: &karpv1.NodeClassReference{
 					Group: object.GVK(nodeClass).Group,
 					Kind:  object.GVK(nodeClass).Kind,
@@ -265,6 +293,16 @@ var _ = Describe("CloudProvider", func() {
 								Name:  nodeClass.Name,
 							},
 							Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
+								{
+									Key:      corev1.LabelTopologyZone,
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{fake.DefaultRegion},
+								},
+								{
+									Key:      karpv1.CapacityTypeLabelKey,
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{karpv1.CapacityTypeOnDemand},
+								},
 								{
 									Key:      v1.LabelInstanceClass,
 									Operator: corev1.NodeSelectorOpIn,
@@ -486,6 +524,18 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 			Spec: karpv1.NodePoolSpec{
 				Template: karpv1.NodeClaimTemplate{
 					Spec: karpv1.NodeClaimTemplateSpec{
+						Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
+							{
+								Key:      corev1.LabelTopologyZone,
+								Operator: corev1.NodeSelectorOpIn,
+								Values:   []string{fake.DefaultRegion},
+							},
+							{
+								Key:      karpv1.CapacityTypeLabelKey,
+								Operator: corev1.NodeSelectorOpIn,
+								Values:   []string{karpv1.CapacityTypeOnDemand},
+							},
+						},
 						NodeClassRef: &karpv1.NodeClassReference{
 							Group: object.GVK(lkeNodeClass).Group,
 							Kind:  object.GVK(lkeNodeClass).Kind,
@@ -497,9 +547,25 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 		})
 		lkeNodeClaim = coretest.NodeClaim(karpv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{karpv1.NodePoolLabelKey: lkeNodePool.Name},
+				Labels: map[string]string{
+					karpv1.NodePoolLabelKey:     lkeNodePool.Name,
+					corev1.LabelTopologyZone:    fake.DefaultRegion,
+					karpv1.CapacityTypeLabelKey: karpv1.CapacityTypeOnDemand,
+				},
 			},
 			Spec: karpv1.NodeClaimSpec{
+				Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
+					{
+						Key:      corev1.LabelTopologyZone,
+						Operator: corev1.NodeSelectorOpIn,
+						Values:   []string{fake.DefaultRegion},
+					},
+					{
+						Key:      karpv1.CapacityTypeLabelKey,
+						Operator: corev1.NodeSelectorOpIn,
+						Values:   []string{karpv1.CapacityTypeOnDemand},
+					},
+				},
 				NodeClassRef: &karpv1.NodeClassReference{
 					Group: object.GVK(lkeNodeClass).Group,
 					Kind:  object.GVK(lkeNodeClass).Kind,

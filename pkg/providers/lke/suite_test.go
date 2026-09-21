@@ -158,10 +158,24 @@ var _ = Describe("LKENodeProvider", func() {
 		nodeClaim = coretest.NodeClaim(karpv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
-					karpv1.NodePoolLabelKey: nodePoolObj.Name,
+					karpv1.NodePoolLabelKey:     nodePoolObj.Name,
+					corev1.LabelTopologyZone:    fake.DefaultRegion,
+					karpv1.CapacityTypeLabelKey: karpv1.CapacityTypeOnDemand,
 				},
 			},
 			Spec: karpv1.NodeClaimSpec{
+				Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
+					{
+						Key:      corev1.LabelTopologyZone,
+						Operator: corev1.NodeSelectorOpIn,
+						Values:   []string{fake.DefaultRegion},
+					},
+					{
+						Key:      karpv1.CapacityTypeLabelKey,
+						Operator: corev1.NodeSelectorOpIn,
+						Values:   []string{karpv1.CapacityTypeOnDemand},
+					},
+				},
 				NodeClassRef: &karpv1.NodeClassReference{
 					Group: object.GVK(nodeClass).Group,
 					Kind:  object.GVK(nodeClass).Kind,
@@ -216,13 +230,6 @@ var _ = Describe("LKENodeProvider", func() {
 				})
 
 				It("should create a dedicated nodepool instance", func() {
-					nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
-						{
-							Key:      karpv1.CapacityTypeLabelKey,
-							Operator: corev1.NodeSelectorOpIn,
-							Values:   []string{karpv1.CapacityTypeOnDemand},
-						},
-					}
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 
@@ -285,8 +292,9 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(input.Opts.Taints).To(ContainElement(linodego.LKENodePoolTaint{Key: "dedicated", Value: "gpu", Effect: linodego.LKENodePoolTaintEffect(corev1.TaintEffectNoSchedule)}))
 				})
 
-				It("should include NodeClaim labels in pool labels", func() {
+				It("should include supported NodeClaim labels in pool labels", func() {
 					nodeClaim.Labels["env"] = "production"
+					nodeClaim.Labels[corev1.LabelTopologyZone] = fake.DefaultRegion
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 
@@ -300,6 +308,7 @@ var _ = Describe("LKENodeProvider", func() {
 					input := linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.CalledWithInput.At(0)
 					Expect(input.Opts.Labels[karpv1.NodePoolLabelKey]).To(Equal(nodePoolObj.Name))
 					Expect(input.Opts.Labels["env"]).To(Equal("production"))
+					Expect(input.Opts.Labels).ToNot(HaveKey(corev1.LabelTopologyZone))
 				})
 			})
 
@@ -787,13 +796,6 @@ var _ = Describe("LKENodeProvider", func() {
 				})
 
 				It("should create a dedicated nodepool instance", func() {
-					nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
-						{
-							Key:      karpv1.CapacityTypeLabelKey,
-							Operator: corev1.NodeSelectorOpIn,
-							Values:   []string{karpv1.CapacityTypeOnDemand},
-						},
-					}
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 
