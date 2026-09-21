@@ -28,7 +28,6 @@ func init() {
 	// https://youtrack.jetbrains.com/projects/GO/issues/GO-19359/Incorrect-Cannot-infer-T-error
 	unused := []string{
 		v1.LabelWindowsBuild,
-		v1.LabelTopologyZone,
 	}
 	karpv1.RestrictedLabelDomains = karpv1.RestrictedLabelDomains.Insert(RestrictedLabelDomains...)
 	karpv1.WellKnownLabels = karpv1.WellKnownLabels.Union(LinodeWellKnownLabels)
