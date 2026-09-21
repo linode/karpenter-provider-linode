@@ -669,6 +669,12 @@ func lkeLabelsFromNodeClaim(nodeClaim *karpv1.NodeClaim) linodego.LKENodePoolLab
 	}
 	labels := make(linodego.LKENodePoolLabels, len(nodeClaim.Labels))
 	for key, value := range nodeClaim.Labels {
+		// LKE assigns the zone from the cluster region. Forwarding Karpenter's
+		// topology label would make it a user label and can conflict with the
+		// authoritative label applied to the registered Node.
+		if key == corev1.LabelTopologyZone {
+			continue
+		}
 		labels[key] = value
 	}
 	return labels

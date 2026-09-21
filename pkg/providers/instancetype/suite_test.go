@@ -26,6 +26,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	clock "k8s.io/utils/clock/testing"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
+	karpcloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/controllers/provisioning"
 	"sigs.k8s.io/karpenter/pkg/controllers/state"
 	"sigs.k8s.io/karpenter/pkg/events"
@@ -113,6 +114,11 @@ var _ = Describe("InstanceTypeProvider", func() {
 								Operator: corev1.NodeSelectorOpIn,
 								Values:   []string{fake.DefaultRegion},
 							},
+							{
+								Key:      corev1.LabelTopologyZone,
+								Operator: corev1.NodeSelectorOpIn,
+								Values:   []string{fake.DefaultRegion},
+							},
 						},
 						NodeClassRef: &karpv1.NodeClassReference{
 							Group: object.GVK(nodeClass).Group,
@@ -125,6 +131,22 @@ var _ = Describe("InstanceTypeProvider", func() {
 		})
 		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypes(ctx)).To(Succeed())
 		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeOfferings(ctx)).To(Succeed())
+	})
+
+	It("should expose prices by the node topology zone", func() {
+		instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+		Expect(err).ToNot(HaveOccurred())
+
+		instanceType, ok := lo.Find(instanceTypes, func(instanceType *karpcloudprovider.InstanceType) bool {
+			return instanceType.Name == "g6-standard-4"
+		})
+		Expect(ok).To(BeTrue())
+		Expect(instanceType.Requirements.Get(corev1.LabelTopologyZone).Has(fake.DefaultRegion)).To(BeTrue())
+		Expect(instanceType.Requirements.Get(karpv1.CapacityTypeLabelKey).Has(karpv1.CapacityTypeOnDemand)).To(BeTrue())
+
+		price, ok := instanceType.OfferingPrice(fake.DefaultRegion, karpv1.CapacityTypeOnDemand)
+		Expect(ok).To(BeTrue())
+		Expect(price).To(BeNumerically(">", 0))
 	})
 
 	It("should support individual instance type labels", func() {

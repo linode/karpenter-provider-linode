@@ -12,6 +12,9 @@ spec:
         e2e.linode.dev/cleanup: "true"
     spec:
       requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
         - key: e2e.linode.dev/consolidation-empty
           operator: Exists
         - key: karpenter.k8s.linode/instance-memory

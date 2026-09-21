@@ -147,6 +147,17 @@ Well-known labels may be specified as NodePool requirements or pod scheduling co
 | karpenter.k8s.linode/instance-accelerated-devices-count        | 1           | [Linode Specific] Number of accelerated devices on the instance                                                                                                 |
 | karpenter.k8s.linode/instance-class                            | dedicated   | [Linode Specific] Instance class types include `nanode`, `standard`, `dedicated`, `highmem`, and `gpu`                                                          |
 
+#### Capacity type
+
+Linode currently provides only on-demand capacity. Constrain each NodePool accordingly so Karpenter does not consider unsupported spot replacements during consolidation:
+
+```yaml
+requirements:
+  - key: karpenter.sh/capacity-type
+    operator: In
+    values: ["on-demand"]
+```
+
 #### User-Defined Labels
 
 Karpenter is aware of several well-known labels, deriving them from instance type details. If you specify a `nodeSelector` or a required `nodeAffinity` using a label that is not well-known to Karpenter, it will not launch nodes with these labels and pods will remain pending. For Karpenter to become aware that it can schedule for these labels, you must specify the label in the NodePool requirements with the `Exists` operator:
@@ -164,7 +175,7 @@ Here is an example of a `nodeSelector` for selecting nodes:
 ```yaml
 nodeSelector:
   topology.kubernetes.io/region: us-east
-  karpenter.sh/capacity-type: dedicated
+  karpenter.sh/capacity-type: on-demand
 ```
 
 This example features a well-known label (`topology.kubernetes.io/region`) and a label that is well known to Karpenter (`karpenter.sh/capacity-type`).
