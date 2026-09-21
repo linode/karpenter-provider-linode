@@ -77,12 +77,13 @@ The `LinodeNodeClass` allows you to configure specific settings for the nodes ma
 
 ### Taints and Standard Labels
 
-It is important to distinguish between Karpenter configuration and Linode-specific configuration:
+Karpenter taints and LKE node pool taints have different lifecycles:
 
-* **Taints**: Taints are defined in the **Karpenter `NodePool`** resource (`spec.template.spec.taints`), *not* in the `LinodeNodeClass`.
-  * **LKE Mode**: Taints are passed to the LKE Node Pool configuration and applied to nodes by LKE.
-* **Kubernetes Labels**: Standard scheduling labels are defined in the **Karpenter `NodePool`** (`spec.template.metadata.labels`). Karpenter ensures these are applied to the Node object.
-* **LKE Labels**: LKE Node Pool labels are derived from the labels resolved onto the NodeClaim (originating from NodePool template metadata labels).
+* **Persistent taints**: Define persistent taints in the Karpenter `NodePool` at `spec.template.spec.taints`. In LKE mode, the provider sends these taints to the LKE Node Pool API so LKE applies them to every node in the pool.
+* **Platform startup taints**: The provider automatically teaches Karpenter about temporary taints added during LKE node bootstrap. Standard LKE uses `lke.linode.com/labels-taints=waiting:NoSchedule` and `node.kubernetes.io/network-unavailable:NoSchedule`. LKE Enterprise also uses `node.cilium.io/agent-not-ready:NoSchedule` and `node.cluster.x-k8s.io/uninitialized:NoSchedule`. Karpenter ignores the corresponding tier's temporary taints for scheduling while a node initializes, then waits for LKE to remove them before marking the NodeClaim initialized.
+* **User-defined startup taints**: LKE does not currently expose a startup-only taints field. The provider therefore does not send `spec.template.spec.startupTaints` to the persistent LKE Node Pool API. Arbitrary startup taints require a separate bootstrap mechanism to appear on the node.
+* **Kubernetes labels**: Define standard scheduling labels in the Karpenter `NodePool` at `spec.template.metadata.labels`. Karpenter ensures these labels are applied to the Node object.
+* **LKE labels**: LKE Node Pool labels are derived from labels resolved onto the NodeClaim, originating from the NodePool template metadata labels.
 
 ### Example: LKE Mode
 

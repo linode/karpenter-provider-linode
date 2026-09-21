@@ -92,6 +92,8 @@ func NewOperator(ctx context.Context, op *operator.Operator, linodeClient sdk.Li
 			return nil, fmt.Errorf("could not determine LKE cluster with name: %s", opts.ClusterName)
 		}
 		clusterID = clusterList[0].ID
+		clusterTier := linodego.LKEVersionTier(clusterList[0].Tier)
+		lke.RegisterKnownEphemeralTaints(clusterTier)
 
 		if opts.ClusterRegion == "" {
 			opts.ClusterRegion = clusterList[0].Region
@@ -100,7 +102,7 @@ func NewOperator(ctx context.Context, op *operator.Operator, linodeClient sdk.Li
 
 		nodeProvider = lke.NewDefaultProvider(
 			clusterList[0].ID,
-			linodego.LKEVersionTier(clusterList[0].Tier),
+			clusterTier,
 			opts.ClusterName,
 			opts.ClusterRegion,
 			op.EventRecorder,
