@@ -102,6 +102,7 @@ jobs:
       CLUSTER_TIER: ${{ inputs.cluster_tier }}
       CHAINSAW_SELECTOR: ${{ inputs.chainsaw_selector }}
       CHAINSAW_FLAGS: ${{ inputs.chainsaw_flags }}
+      IMAGE_TAGS: ${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}
 
     steps:
       - name: Harden Runner
@@ -115,6 +116,9 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # Allowed because fork PR jobs require approval through the prod-external environment.
+          allow-unsafe-pr-checkout: true
 
       - name: Build & Push KARPL Image for e2e
         uses: ./.github/actions/e2e
