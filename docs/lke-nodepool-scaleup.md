@@ -27,9 +27,10 @@ This document summarizes the core assumptions, invariants, and high-level flow f
 - **Pool discovery:** always list pools and filter client-side (server-side tag filtering is unreliable for LKE pools).
 - **Determinism:** if multiple claimable instances exist, claim the first `instanceID` in the list.
 - **Tag ownership:**
+  - Karpenter writes provider-managed tags to LKE pools through the LKE API and manages identity tags directly on Linode instances.
   - `karpenter.sh/nodeclaim:<nodeClaimName>` is **instance-scoped only**.
   - `karpenter.sh/nodeclaim` is the authoritative orchestration signal for claim ownership: instances without any `karpenter.sh/nodeclaim:*` tag are treated as unclaimed and can only be claimed by writing `karpenter.sh/nodeclaim:<nodeClaimName>`.
-  - Pool-scoped tags may be written via LKE pool APIs.
+  - Pool-scoped tags may be written via LKE pool APIs. Do not change or remove Karpenter-managed tags outside the provider; pool and instance discovery and claim ownership rely on them.
 
 ### Pool mapping diagram
 
