@@ -829,6 +829,53 @@ var _ = Describe("LKENodeProvider", func() {
 			})
 
 			Context("Create", func() {
+				DescribeTable("should add only one node while instance discovery is delayed",
+					func(initialCount int) {
+						ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+						nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+						instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+						Expect(err).ToNot(HaveOccurred())
+						cheapestType, err := utils.CheapestInstanceType(instanceTypes)
+						Expect(err).ToNot(HaveOccurred())
+
+						poolID := 100
+						instanceID := 1000 + poolID*10 + initialCount
+						if initialCount > 0 {
+							pool := &linodego.LKENodePool{
+								ID: poolID, Type: cheapestType.Name, Count: initialCount,
+								Tags:    enterprisePoolTags(nodePoolObj.Name),
+								Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID - 1, ID: "existing-node"}},
+							}
+							linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+						}
+						now := time.Now()
+						claimable := linodego.Instance{
+							ID: instanceID, Type: cheapestType.Name, Created: &now,
+							Tags: enterpriseInstanceTags(nodePoolObj.Name, poolID), LKEClusterID: fake.DefaultClusterID,
+						}
+						// Initial ownership lookup, then three delayed discovery responses.
+						enqueueListInstances(linodeEnv, []linodego.Instance{}, []linodego.Instance{},
+							[]linodego.Instance{}, []linodego.Instance{}, []linodego.Instance{claimable})
+						provider := lke.NewDefaultProvider(
+							fake.DefaultClusterID, linodego.LKEVersionEnterprise, fake.DefaultClusterName,
+							fake.DefaultRegion, recorder, linodeEnv.LinodeAPI, linodeEnv.UnavailableOfferingsCache,
+							linodeEnv.NodePoolCache, lke.ProviderConfig{RetryDelay: time.Millisecond},
+						)
+
+						node, err := provider.Create(ctx, nodeClass, nodeClaim,
+							utils.TagListToMap(enterprisePoolTags(nodePoolObj.Name)), instanceTypes)
+						Expect(err).ToNot(HaveOccurred())
+						Expect(node.ID).To(Equal(instanceID))
+						pools, err := linodeEnv.LinodeAPI.ListLKENodePools(ctx, fake.DefaultClusterID, nil)
+						Expect(err).ToNot(HaveOccurred())
+						Expect(pools).To(HaveLen(1))
+						Expect(pools[0].Count).To(Equal(initialCount + 1))
+						Expect(pools[0].Linodes).To(HaveLen(initialCount + 1))
+					},
+					Entry("after creating a new pool", 0),
+					Entry("after scaling an existing pool", 1),
+				)
+
 				It("should surface instance lookup errors", func() {
 					linodeEnv.LinodeAPI.ListInstancesBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: retryMessage})
 

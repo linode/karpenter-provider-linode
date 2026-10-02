@@ -173,12 +173,14 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 
 	poolKey := makePoolKey(nodeClaim.Labels[karpv1.NodePoolLabelKey], instanceType)
 	deadline := time.Now().Add(p.config.CreateDeadline)
+	// Keep successful capacity mutations across retries while discovery catches up.
+	createdPool, scaledOnce := false, false
 	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 
-		inst, err := p.attemptCreate(ctx, nodeClass, nodeClaim, tags, cheapestType, instanceType, poolKey, new(false), new(false))
+		inst, err := p.attemptCreate(ctx, nodeClass, nodeClaim, tags, cheapestType, instanceType, poolKey, &createdPool, &scaledOnce)
 		if err != nil {
 			if isRetryableCreateError(err) || utils.IsRetryableError(err) {
 				time.Sleep(p.config.RetryDelay)

@@ -102,11 +102,11 @@ Repeat until deadline:
   - (Standard) also write required identity tags to the instance.
   - Unlock mutex and return providerID.
 - If no claimable instance exists:
-  - scale the pool by incrementing `pool.Count`.
+  - scale the pool by incrementing `pool.Count` only if this `Create()` call has not already created or scaled a pool.
 - Unlock.
 - Retry until deadline with brief sleeps:
-  - 500ms after `ErrNodesProvisioning` (waiting for instance IDs).
-  - 200ms after scaling or when waiting for newly created pool/instance.
+  - Preserve the successful create/scale flags across attempts, so delayed instance discovery does not request extra nodes.
+  - Sleep for the configured retry delay (default: 2 seconds).
 
 On timeout: return a retryable `CreateError` (reason `NodePoolProvisioning`) so Karpenter requeues.
 
