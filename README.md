@@ -48,7 +48,7 @@ Table of contents:
   - [Delete Karpenter nodes manually](#delete-karpenter-nodes-manually)
 - [Cleanup](#cleanup)
   - [Delete the cluster](#delete-the-cluster)
-- [Known issues](#known-issues)
+- [Operational notes](#operational-notes)
 
 ## Features Overview
 
@@ -284,11 +284,9 @@ helm uninstall karpenter --namespace "${KARPENTER_NAMESPACE}"
 linode-cli lke cluster-delete --label "${CLUSTER_NAME}"
 ```
 
-## Known issues
+## Operational notes
 
-LKE cannot currently add Karpenter's `karpenter.sh/unregistered` taint before the kubelet registers, so the controller may log a warning about the missing taint. The provider instead registers the temporary bootstrap taints used by each LKE tier with Karpenter's scheduling model.
-
-Do not increase `BATCH_IDLE_DURATION` or `BATCH_MAX_DURATION` to work around slow LKE node registration. The Helm chart uses Karpenter's standard batching defaults, and the provider prevents duplicate `NodeClaim`s by modeling LKE bootstrap taints directly.
+Karpenter manages tags on LKE Node Pools through the LKE API and on Linode instances through the Linode API. Do not add, remove, or modify Karpenter-managed tags outside Karpenter (for example, through Cloud Manager or the Linode API); those tags identify pools and instances for discovery, claiming, and reconciliation, and changing them can break provisioning or cleanup. Set user-defined instance tags through `LinodeNodeClass.spec.tags` instead.
 
 ---
 
