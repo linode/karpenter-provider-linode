@@ -632,11 +632,10 @@ func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[st
 
 	linodeInstance, err := p.client.GetInstance(ctx, instanceID)
 	if err != nil {
-		wrappedErr := fmt.Errorf("getting instance %d: %w", instanceID, err)
 		if linodego.IsNotFound(err) {
-			return cloudprovider.NewNodeClaimNotFoundError(wrappedErr)
+			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("getting instance %d: %w", instanceID, err))
 		}
-		return wrappedErr
+		return fmt.Errorf("getting instance %d: %w", instanceID, err)
 	}
 
 	newTags := append([]string{}, linodeInstance.Tags...)
