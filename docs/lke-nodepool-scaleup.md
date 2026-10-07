@@ -175,16 +175,25 @@ sequenceDiagram
     end
 ```
 
-## Error policy (review focus)
+## Error policy
 
-- **Retryable** (`CreateError` / `NodePoolProvisioning`):
-  - timeouts waiting for claimable instance (bounded by `DefaultCreateDeadline`)
-  - eventual consistency delays
-  - retryable API errors (429/5xx)
-- **Invariant violations (design assumptions, not currently enforced as hard errors; each includes an explicit action item):**
-  - >1 pool matches `(karpenterNodePoolName, instanceType)` — code returns first match
-  - >1 instance matches `karpenter.sh/nodeclaim:<nodeClaimName>` — code returns first match
-  - any instance has multiple `karpenter.sh/nodeclaim:*` tags — not validated; **Action:** add validation in the LKE provider to detect this case and surface it as a hard error (tracked in the team’s issue tracker as a follow-up task).
+- **Plan unavailable**:
+  - When Linode reports that a plan is unavailable during new pool creation, Karpenter marks that plan unavailable in the cluster's region.
+  - This rule applies only when Karpenter creates a new pool. It does not apply when Karpenter adds a node to an existing pool.
+- **Other pool creation errors**:
+  - Karpenter reports other pool creation errors and does not mark the plan unavailable.
+  - Errors while Karpenter lists pools or checks a pool's Kubernetes version do not mark a plan unavailable.
+- **Pool scaling errors**:
+  - Karpenter does not mark a plan unavailable when it cannot add a node to an existing pool.
+  - Karpenter reports validation errors. It still retries errors that the API marks as retryable.
+- **Retryable errors**:
+  - If Karpenter does not find an assignable instance before `DefaultCreateDeadline` expires, it returns an error.
+  - Karpenter retries while it waits for Linode API data to become consistent.
+  - Karpenter retries API errors with HTTP status 429 or 5xx.
+- **Pool and instance matching**:
+  - If more than one pool matches a node pool name and instance type, Karpenter uses the first pool.
+  - If more than one instance matches a NodeClaim, Karpenter uses the first instance.
+  - Karpenter does not check whether an instance has multiple NodeClaim tags.
 
 ## API call volume and scalability concerns
 
