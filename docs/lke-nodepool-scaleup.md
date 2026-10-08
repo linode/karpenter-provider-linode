@@ -178,14 +178,7 @@ sequenceDiagram
 ## Error policy
 
 - **Plan unavailable**:
-  - When Linode reports that a plan is unavailable during new pool creation, Karpenter marks that plan unavailable in the cluster's region.
-  - This rule applies only when Karpenter creates a new pool. It does not apply when Karpenter adds a node to an existing pool.
-- **Other pool creation errors**:
-  - Karpenter reports other pool creation errors and does not mark the plan unavailable.
-  - Errors while Karpenter lists pools or checks a pool's Kubernetes version do not mark a plan unavailable.
-- **Pool scaling errors**:
-  - Karpenter does not mark a plan unavailable when it cannot add a node to an existing pool.
-  - Karpenter reports validation errors. It still retries errors that the API marks as retryable.
+  - Karpenter marks a plan unavailable in the cluster's region only when LKE identifies that plan as unavailable during new pool creation.
 - **Retryable errors**:
   - If Karpenter does not find an assignable instance before `DefaultCreateDeadline` expires, it returns an error.
   - Karpenter retries while it waits for Linode API data to become consistent.
@@ -203,10 +196,10 @@ sequenceDiagram
   - A plan that sells out between refreshes stays selectable until the next refresh.
 - **Scale-up errors**:
   - Karpenter does not treat an HTTP 400 on pool scale-up as insufficient capacity. These errors also come from validation, networking, and request limits, and the response does not show which cause applies.
-  - Karpenter reports the error as a creation error and does not mark the plan unavailable. This error does not trigger the NodeClaim deletion that an insufficient capacity error causes.
+  - Karpenter reports the error as a creation error. This error does not trigger the NodeClaim deletion that an insufficient capacity error causes.
 - **Plan unavailable on pool creation**:
   - If the LKE API rejects a new pool because the plan is unavailable in the region, Karpenter returns an insufficient capacity error. Karpenter then deletes the NodeClaim and selects another offering.
-  - Karpenter logs `pool create rejected with an unrecognized 400` when a pool creation 400 does not match this error. It then reports the error as a creation error and does not mark the plan unavailable.
+  - Karpenter logs `pool create rejected with an unrecognized 400` when a pool creation 400 does not match this error.
 
 ## API call volume and scalability concerns
 
