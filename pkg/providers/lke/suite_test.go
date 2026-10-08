@@ -67,6 +67,7 @@ const (
 	defaultNodeLabel = "node-0"
 	fooKey           = "foo"
 	barValue         = "bar"
+	dedicated8GBType = "g6-dedicated-4"
 )
 
 func newEnterpriseProvider(env *test.Environment, recorder events.Recorder) *lke.DefaultProvider {
@@ -287,7 +288,7 @@ var _ = Describe("LKENodeProvider", func() {
 				})
 
 				It("should return an ICE error when all attempted instance types return an ICE error", func() {
-					dedicated8GB := "g6-dedicated-4"
+					dedicated8GB := dedicated8GBType
 					standard8GB := standard8GBType
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
@@ -304,9 +305,79 @@ var _ = Describe("LKENodeProvider", func() {
 					poolInstance, err := linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, tags, instanceTypes)
 					Expect(err).To(HaveOccurred())
 					Expect(poolInstance).To(BeNil())
+					Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeTrue())
 
 					Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(dedicated8GB, fake.DefaultRegion)).To(BeTrue())
 					Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(standard8GB, fake.DefaultRegion)).To(BeFalse())
+				})
+
+				It("should accept the recognized plan-unavailable reason with changed guidance text", func() {
+					instanceType := dedicated8GBType
+					reason := fmt.Sprintf("The Linode plan %s is not currently available in the selected region. Choose another plan.", instanceType)
+					linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Error.Set(fake.NewLinodeAPIError(
+						http.StatusBadRequest,
+						linodego.APIErrorReason{Field: "type", Reason: reason},
+					))
+					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+					Expect(err).ToNot(HaveOccurred())
+					instanceTypes = lo.Filter(instanceTypes, func(i *corecloudprovider.InstanceType, _ int) bool { return i.Name == instanceType })
+
+					poolInstance, err := linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+					Expect(err).To(HaveOccurred())
+					Expect(poolInstance).To(BeNil())
+					Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeTrue())
+					Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(instanceType, fake.DefaultRegion)).To(BeTrue())
+				})
+
+				DescribeTable("should not classify unrecognized pool-create errors as capacity",
+					func(apiErr *linodego.Error) {
+						instanceType := dedicated8GBType
+						ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+						nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+						linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Error.Set(apiErr)
+
+						instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+						Expect(err).ToNot(HaveOccurred())
+						instanceTypes = lo.Filter(instanceTypes, func(i *corecloudprovider.InstanceType, _ int) bool { return i.Name == instanceType })
+
+						poolInstance, err := linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+						Expect(err).To(HaveOccurred())
+						Expect(poolInstance).To(BeNil())
+						Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeFalse())
+						var createError *corecloudprovider.CreateError
+						Expect(errors.As(err, &createError)).To(BeTrue())
+						Expect(err.Error()).To(ContainSubstring(apiErr.Message))
+						Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(instanceType, fake.DefaultRegion)).To(BeFalse())
+					},
+					Entry("field validation", fake.NewLinodeAPIError(http.StatusBadRequest, linodego.APIErrorReason{Field: "tags", Reason: "tag length exceeds 50 characters"})),
+					Entry("plan-unavailable text on another field", fake.NewLinodeAPIError(http.StatusBadRequest, linodego.APIErrorReason{Field: "tags", Reason: fake.PlanUnavailableReason(dedicated8GBType).Reason})),
+					Entry("unknown plan reason", fake.NewLinodeAPIError(http.StatusBadRequest, linodego.APIErrorReason{Field: "type", Reason: "plan could not be allocated"})),
+					Entry("mixed capacity and validation errors", fake.NewLinodeAPIError(http.StatusBadRequest,
+						fake.PlanUnavailableReason(dedicated8GBType),
+						linodego.APIErrorReason{Field: "tags", Reason: "tag length exceeds 50 characters"},
+					)),
+				)
+
+				It("should not classify a pool-list error as capacity", func() {
+					instanceType := dedicated8GBType
+					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+					linodeEnv.LinodeAPI.ListLKENodePoolsBehavior.Error.Set(fake.NewPlanUnavailableError(instanceType))
+
+					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+					Expect(err).ToNot(HaveOccurred())
+					instanceTypes = lo.Filter(instanceTypes, func(i *corecloudprovider.InstanceType, _ int) bool { return i.Name == instanceType })
+
+					poolInstance, err := linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+					Expect(err).To(HaveOccurred())
+					Expect(poolInstance).To(BeNil())
+					Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeFalse())
+					var createError *corecloudprovider.CreateError
+					Expect(errors.As(err, &createError)).To(BeTrue())
+					Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(instanceType, fake.DefaultRegion)).To(BeFalse())
+					Expect(linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Calls()).To(Equal(0))
 				})
 
 				It("should create a dedicated nodepool instance", func() {
@@ -628,7 +699,7 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Calls()).To(BeNumerically(">=", 1))
 				})
 
-				It("should return an ICE error when scaling an existing pool hits insufficient capacity", func() {
+				It("should return a create error without marking capacity unavailable when scaling fails", func() {
 					poolID := 209
 					instanceID := 3010
 					poolType := "g6-standard-2"
@@ -645,15 +716,16 @@ var _ = Describe("LKENodeProvider", func() {
 						Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID, ID: "node-3010"}},
 					}
 					linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+					linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Error.Set(fake.NewLinodeAPIError(
+						http.StatusBadRequest,
+						linodego.APIErrorReason{Field: "count", Reason: "count exceeds the maximum node count for the networking configuration of this cluster"},
+					))
 
 					// The pool's only instance is already claimed by another NodeClaim, so
 					// the provider must scale the pool rather than claim an existing node.
 					now := time.Now()
 					alreadyClaimedInst := linodego.Instance{ID: instanceID, Tags: []string{nodeClaimTag}, Created: &now}
 					linodeEnv.LinodeAPI.Instances.Store(instanceID, alreadyClaimedInst)
-
-					// Make UpdateLKENodePool return HTTP 400 for this instance type.
-					linodeEnv.LinodeAPI.InsufficientCapacityPools.Set([]fake.CapacityPool{{InstanceType: poolType, Region: fake.DefaultRegion}})
 
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
@@ -663,16 +735,10 @@ var _ = Describe("LKENodeProvider", func() {
 					node, err := linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 					Expect(err).To(HaveOccurred())
 					Expect(node).To(BeNil())
-
-					// The scale-up 400 must surface as a terminal ICE error rather than a
-					// retryable pool-scale failure, so the NodeClaim is deleted and the
-					// provisioner re-solves against the remaining offerings.
-					Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeTrue())
-
-					// The offering must also be marked unavailable so the re-solve does not
-					// immediately pick the same sold-out instance type again.
-					Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(poolType, fake.DefaultRegion)).To(BeTrue())
-
+					Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeFalse())
+					var createError *corecloudprovider.CreateError
+					Expect(errors.As(err, &createError)).To(BeTrue())
+					Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(poolType, fake.DefaultRegion)).To(BeFalse())
 					Expect(linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Calls()).To(BeNumerically(">=", 1))
 				})
 
@@ -956,7 +1022,7 @@ var _ = Describe("LKENodeProvider", func() {
 				})
 
 				It("should return an ICE error when all attempted instance types return an ICE error", func() {
-					dedicated8GB := "g6-dedicated-4"
+					dedicated8GB := dedicated8GBType
 					standard8GB := standard8GBType
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
@@ -1631,6 +1697,34 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(*input.Opts.K8sVersion).To(Equal(version))
 					Expect(input.Opts.UpdateStrategy).ToNot(BeNil())
 					Expect(*input.Opts.UpdateStrategy).To(Equal(linodego.LKENodePoolOnRecycle))
+				})
+
+				It("should not classify pool-version reconciliation errors as capacity", func() {
+					version := fake.DefaultClusterVersion
+					nodeClass.Spec.LKEK8sVersion = new(version)
+					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+					Expect(err).ToNot(HaveOccurred())
+					cheapestType, err := utils.CheapestInstanceType(instanceTypes)
+					Expect(err).ToNot(HaveOccurred())
+
+					poolID := 302
+					poolTags := enterprisePoolTags(nodePoolObj.Name)
+					linodeEnv.LinodeAPI.NodePools.Store(
+						fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID),
+						&linodego.LKENodePool{ID: poolID, Type: cheapestType.Name, Count: 1, Tags: poolTags, K8sVersion: new("1.30")},
+					)
+					linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Error.Set(fake.NewPlanUnavailableError(cheapestType.Name))
+
+					poolInstance, err := enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+					Expect(err).To(HaveOccurred())
+					Expect(poolInstance).To(BeNil())
+					Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeFalse())
+					var createError *corecloudprovider.CreateError
+					Expect(errors.As(err, &createError)).To(BeTrue())
+					Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(cheapestType.Name, fake.DefaultRegion)).To(BeFalse())
+					Expect(linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Calls()).To(Equal(0))
 				})
 
 			})
