@@ -103,6 +103,7 @@ var ErrNodesProvisioning = errors.New("nodes provisioning")
 var ErrNoClaimableInstance = errors.New("no claimable instance")
 var ErrClaimFailed = errors.New("claim failed")
 var ErrPoolScaleFailed = errors.New("pool scale failed")
+var ErrCreateTimeout = errors.New("timed out waiting for claimable instance")
 
 type DefaultProvider struct {
 	clusterID            int
@@ -175,6 +176,8 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 	deadline := time.Now().Add(p.config.CreateDeadline)
 	// Keep successful capacity mutations across retries while discovery catches up.
 	createdPool, scaledOnce := false, false
+	// Last actionable retry failure; defaults to the expected wait so the timeout always has a cause.
+	lastRetryErr := ErrNoClaimableInstance
 	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -183,6 +186,12 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 		inst, err := p.attemptCreate(ctx, nodeClass, nodeClaim, tags, cheapestType, instanceType, poolKey, &createdPool, &scaledOnce)
 		if err != nil {
 			if isRetryableCreateError(err) || utils.IsRetryableError(err) {
+				// Waiting for a scaled node to appear is expected; only record real failures
+				// so the timeout message reports the last actionable error.
+				if !errors.Is(err, ErrNoClaimableInstance) {
+					lastRetryErr = err
+					log.FromContext(ctx).V(1).Info("retrying LKE nodeclaim creation", "nodeclaim", nodeClaim.Name, "instanceType", instanceType, "error", err.Error())
+				}
 				time.Sleep(p.config.RetryDelay)
 				continue
 			}
@@ -192,9 +201,9 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 	}
 
 	return nil, cloudprovider.NewCreateError(
-		fmt.Errorf("timed out waiting for claimable instance for nodeclaim %s", nodeClaim.Name),
+		fmt.Errorf("%w for nodeclaim %s: %w", ErrCreateTimeout, nodeClaim.Name, lastRetryErr),
 		"NodePoolProvisioning",
-		"Timed out waiting for LKE instance to become available",
+		fmt.Sprintf("Timed out waiting for LKE instance to become available: %s", lastRetryErr),
 	)
 }
 
@@ -245,8 +254,7 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 		if claimableInstance != nil {
 			claimedInstance, err := p.claimInstance(ctx, claimableInstance, nodeClaim, nodeClass, pool)
 			if err != nil {
-				logger.Error(err, "failed to claim instance", "instanceID", claimableInstance.ID)
-				return nil, fmt.Errorf("%w: %w", ErrClaimFailed, err)
+				return nil, fmt.Errorf("%w: claiming instance %d: %w", ErrClaimFailed, claimableInstance.ID, err)
 			}
 			inst := instance.NewLKEInstance(claimedInstance.ID, pool.Type, claimedInstance.Tags, p.region, claimedInstance.Created)
 			p.cacheNode(inst)
@@ -259,14 +267,14 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 
 		_, err = p.client.UpdateLKENodePool(ctx, p.clusterID, pool.ID, linodego.LKENodePoolUpdateOptions{Count: pool.Count + 1})
 		if err != nil {
-			logger.Error(err, "failed to scale pool", "poolID", pool.ID)
 			// Same as pool creation above: a 400 on scale-up is a capacity-style
 			// rejection, not a transient failure — fail fast so fallback can engage.
 			utils.UpdateUnavailableOfferingsCache(ctx, err, p.region, cheapestType, p.unavailableOfferings)
 			if linodego.ErrHasStatus(err, http.StatusBadRequest) {
+				logger.Error(err, "failed to scale pool", "poolID", pool.ID)
 				return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("scaling LKE node pool %d, %w", pool.ID, err))
 			}
-			return nil, fmt.Errorf("%w: %w", ErrPoolScaleFailed, err)
+			return nil, fmt.Errorf("%w: scaling LKE node pool %d: %w", ErrPoolScaleFailed, pool.ID, err)
 		}
 		*scaledOnce = true
 		return nil, ErrNoClaimableInstance

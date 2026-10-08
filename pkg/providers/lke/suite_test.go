@@ -16,6 +16,7 @@ package lke_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -203,6 +204,16 @@ var _ = Describe("Known Ephemeral Taints", func() {
 		})).To(Equal(1))
 	})
 })
+
+// expectRetryableCreateError asserts err is a CreateError carrying the last retryable API failure.
+func expectRetryableCreateError(err error) {
+	GinkgoHelper()
+	var createErr *corecloudprovider.CreateError
+	Expect(errors.As(err, &createErr)).To(BeTrue())
+	Expect(createErr.ConditionReason).To(Equal("NodePoolProvisioning"))
+	Expect(createErr.ConditionMessage).To(ContainSubstring(retryMessage))
+	Expect(linodego.ErrHasStatus(err, http.StatusServiceUnavailable)).To(BeTrue())
+}
 
 var _ = Describe("LKENodeProvider", func() {
 	var nodeClass *v1.LinodeNodeClass
@@ -665,6 +676,58 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Calls()).To(BeNumerically(">=", 1))
 				})
 
+				It("should surface retryable pool scale errors", func() {
+					poolID := 212
+					instanceID := 3011
+					poolType := standardNodeType
+					poolTags := []string{
+						fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+						fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
+					}
+					pool := &linodego.LKENodePool{
+						ID:      poolID,
+						Type:    poolType,
+						Count:   1,
+						Tags:    poolTags,
+						Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID, ID: "node-3011"}},
+					}
+					linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+
+					now := time.Now()
+					alreadyClaimedInst := linodego.Instance{
+						ID:      instanceID,
+						Type:    poolType,
+						Tags:    []string{fmt.Sprintf("%s=%s", v1.NodeClaimTagKey, "other-nodeclaim")},
+						Created: &now,
+					}
+					linodeEnv.LinodeAPI.Instances.Store(instanceID, alreadyClaimedInst)
+					linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Error.Set(
+						&linodego.Error{Code: http.StatusServiceUnavailable, Message: retryMessage},
+						fake.MaxCalls(0),
+					)
+
+					provider := lke.NewDefaultProvider(
+						fake.DefaultClusterID,
+						fake.DefaultClusterTier,
+						fake.DefaultClusterName,
+						fake.DefaultRegion,
+						linodeEnv.EventRecorder,
+						linodeEnv.LinodeAPI,
+						linodeEnv.UnavailableOfferingsCache,
+						linodeEnv.NodePoolCache,
+						lke.ProviderConfig{CreateDeadline: 25 * time.Millisecond, TagVerificationTimeout: 25 * time.Millisecond, RetryDelay: 0},
+					)
+					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+					Expect(err).ToNot(HaveOccurred())
+
+					poolInstance, err := provider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+					Expect(err).To(HaveOccurred())
+					Expect(poolInstance).To(BeNil())
+					expectRetryableCreateError(err)
+				})
+
 				It("should reuse existing pool for same (nodepool, instanceType)", func() {
 					poolID := 207
 					instanceID := 3008
@@ -786,7 +849,7 @@ var _ = Describe("LKENodeProvider", func() {
 						linodeEnv.NodePoolCache,
 						lke.ProviderConfig{CreateDeadline: 25 * time.Millisecond, TagVerificationTimeout: 25 * time.Millisecond, RetryDelay: 0},
 					)
-					linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: "retry"}, fake.MaxCalls(0))
+					linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: retryMessage}, fake.MaxCalls(0))
 
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
@@ -796,6 +859,7 @@ var _ = Describe("LKENodeProvider", func() {
 					poolInstance, err := provider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 					Expect(err).To(HaveOccurred())
 					Expect(poolInstance).To(BeNil())
+					expectRetryableCreateError(err)
 				})
 			})
 
@@ -1482,7 +1546,7 @@ var _ = Describe("LKENodeProvider", func() {
 						linodeEnv.NodePoolCache,
 						lke.ProviderConfig{CreateDeadline: 25 * time.Millisecond, TagVerificationTimeout: 25 * time.Millisecond, RetryDelay: 0},
 					)
-					linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: "retry"}, fake.MaxCalls(0))
+					linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: retryMessage}, fake.MaxCalls(0))
 
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
@@ -1492,6 +1556,7 @@ var _ = Describe("LKENodeProvider", func() {
 					poolInstance, err := provider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 					Expect(err).To(HaveOccurred())
 					Expect(poolInstance).To(BeNil())
+					expectRetryableCreateError(err)
 				})
 			})
 
