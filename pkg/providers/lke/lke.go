@@ -15,12 +15,16 @@ limitations under the License.
 package lke
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/awslabs/operatorpkg/option"
@@ -50,6 +54,7 @@ const (
 	lkeLabelsTaintsWaitingTaintValue    = "waiting"
 	lkeEnterpriseCiliumNotReadyTaintKey = "node.cilium.io/agent-not-ready"
 	lkeEnterpriseUninitializedTaintKey  = "node.cluster.x-k8s.io/uninitialized"
+	lkePlanUnavailableReasonFormat      = "The Linode plan %s is not currently available in the selected region"
 )
 
 var defaultPoolUpdateStrategy = linodego.LKENodePoolOnRecycle
@@ -159,7 +164,7 @@ func NewDefaultProvider(
 }
 
 func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*instance.Instance, error) {
-	cheapestType, instanceType, err := p.resolveCreateInstanceType(ctx, instanceTypes, nodeClaim)
+	instanceType, err := p.resolveCreateInstanceType(ctx, instanceTypes, nodeClaim)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +188,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 			return nil, ctx.Err()
 		}
 
-		inst, err := p.attemptCreate(ctx, nodeClass, nodeClaim, tags, cheapestType, instanceType, poolKey, &createdPool, &scaledOnce)
+		inst, err := p.attemptCreate(ctx, nodeClass, nodeClaim, tags, instanceType, poolKey, &createdPool, &scaledOnce)
 		if err != nil {
 			if isRetryableCreateError(err) || utils.IsRetryableError(err) {
 				// Waiting for a scaled node to appear is expected; only record real failures
@@ -207,16 +212,16 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 	)
 }
 
-func (p *DefaultProvider) resolveCreateInstanceType(ctx context.Context, instanceTypes []*cloudprovider.InstanceType, nodeClaim *karpv1.NodeClaim) (*cloudprovider.InstanceType, string, error) {
+func (p *DefaultProvider) resolveCreateInstanceType(ctx context.Context, instanceTypes []*cloudprovider.InstanceType, nodeClaim *karpv1.NodeClaim) (string, error) {
 	filteredInstanceTypes, err := utils.FilterInstanceTypes(ctx, instanceTypes, nodeClaim)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	cheapestType, err := utils.CheapestInstanceType(filteredInstanceTypes)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
-	return cheapestType, cheapestType.Name, nil
+	return cheapestType.Name, nil
 }
 
 func (p *DefaultProvider) lookupExistingInstance(ctx context.Context, nodeClaim *karpv1.NodeClaim) (*instance.Instance, error) {
@@ -228,20 +233,13 @@ func (p *DefaultProvider) lookupExistingInstance(ctx context.Context, nodeClaim 
 	return p.hydrateInstanceFromLinode(ctx, existingInstance)
 }
 
-func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, cheapestType *cloudprovider.InstanceType, instanceType, poolKey string, createdPool, scaledOnce *bool) (*instance.Instance, error) {
+func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceType, poolKey string, createdPool, scaledOnce *bool) (*instance.Instance, error) {
 	logger := log.FromContext(ctx)
 	return p.withPoolLock(ctx, poolKey, func() (*instance.Instance, error) {
 		pool, err := p.findOrCreatePool(ctx, nodeClass, nodeClaim, tags, instanceType, createdPool)
 		if err != nil {
-			utils.UpdateUnavailableOfferingsCache(ctx, err, p.region, cheapestType, p.unavailableOfferings)
-			// A 400 on pool create means this offering cannot be fulfilled (e.g. the
-			// plan has no capacity in the region). Surface it as an insufficient
-			// capacity error so the NodeClaim is terminated immediately and the
-			// provisioner re-solves against the remaining offerings — while the
-			// unavailable-offerings mark set above is still fresh — instead of
-			// retrying the same sold-out plan until the create deadline.
-			if linodego.ErrHasStatus(err, http.StatusBadRequest) {
-				return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("creating LKE node pool for instance type %s, %w", instanceType, err))
+			if cloudprovider.IsInsufficientCapacityError(err) {
+				return nil, err
 			}
 			return nil, cloudprovider.NewCreateError(err, "NodePoolCreationFailed", fmt.Sprintf("Failed to find or create LKE node pool: %s", err.Error()))
 		}
@@ -267,12 +265,11 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 
 		_, err = p.client.UpdateLKENodePool(ctx, p.clusterID, pool.ID, linodego.LKENodePoolUpdateOptions{Count: pool.Count + 1})
 		if err != nil {
-			// Same as pool creation above: a 400 on scale-up is a capacity-style
-			// rejection, not a transient failure — fail fast so fallback can engage.
-			utils.UpdateUnavailableOfferingsCache(ctx, err, p.region, cheapestType, p.unavailableOfferings)
+			logger.Error(err, "failed to scale pool", "poolID", pool.ID)
+			// TODO: Revisit capacity classification when a reliable datacenter-level signal exists.
+			// Scale errors can describe networking or request limits, so they must not invalidate the offering.
 			if linodego.ErrHasStatus(err, http.StatusBadRequest) {
-				logger.Error(err, "failed to scale pool", "poolID", pool.ID)
-				return nil, cloudprovider.NewInsufficientCapacityError(fmt.Errorf("scaling LKE node pool %d, %w", pool.ID, err))
+				return nil, cloudprovider.NewCreateError(fmt.Errorf("scaling LKE node pool %d: %w", pool.ID, err), "NodePoolScaleFailed", fmt.Sprintf("Failed to scale LKE node pool %d: %s", pool.ID, err.Error()))
 			}
 			return nil, fmt.Errorf("%w: scaling LKE node pool %d: %w", ErrPoolScaleFailed, pool.ID, err)
 		}
@@ -331,12 +328,48 @@ func (p *DefaultProvider) findOrCreatePool(ctx context.Context, nodeClass *v1alp
 
 	pool, err := p.client.CreateLKENodePool(ctx, p.clusterID, createOpts)
 	if err != nil {
-		return nil, fmt.Errorf("creating node pool: %w", err)
+		err = fmt.Errorf("creating node pool: %w", err)
+		if isPlanUnavailableError(err, instanceType) {
+			err = fmt.Errorf("creating LKE node pool for instance type %s, %w", instanceType, err)
+			p.unavailableOfferings.MarkUnavailable(ctx, err.Error(), instanceType, p.region)
+			return nil, cloudprovider.NewInsufficientCapacityError(err)
+		}
+		if linodego.ErrHasStatus(err, http.StatusBadRequest) {
+			// Surface 400s that are not recognized as plan-unavailable so a reworded
+			// Linode capacity message does not silently disable offering fallback.
+			log.FromContext(ctx).Info("pool create rejected with an unrecognized 400; not treating as insufficient capacity", "instanceType", instanceType, "error", err.Error())
+		}
+		return nil, err
 	}
 	if createdPool != nil {
 		*createdPool = true
 	}
 	return pool, nil
+}
+
+func isPlanUnavailableError(err error, instanceType string) bool {
+	if !linodego.ErrHasStatus(err, http.StatusBadRequest) {
+		return false
+	}
+
+	var apiErr *linodego.Error
+	if !errors.As(err, &apiErr) || apiErr.Response == nil || apiErr.Response.Body == nil {
+		return false
+	}
+
+	body, readErr := io.ReadAll(apiErr.Response.Body)
+	apiErr.Response.Body = io.NopCloser(bytes.NewReader(body))
+	if readErr != nil {
+		return false
+	}
+
+	var apiError linodego.APIError
+	if err := json.Unmarshal(body, &apiError); err != nil || len(apiError.Errors) != 1 {
+		return false
+	}
+
+	reason := apiError.Errors[0]
+	return reason.Field == "type" && strings.HasPrefix(reason.Reason, fmt.Sprintf(lkePlanUnavailableReasonFormat, instanceType))
 }
 
 func (p *DefaultProvider) matchesPoolKey(pool *linodego.LKENodePool, instanceType, nodePoolName string) bool {
