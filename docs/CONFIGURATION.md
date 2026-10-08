@@ -19,6 +19,7 @@ This guide details the configuration options for the Karpenter Provider for Lino
 | `KARPENTER_MODE` | Operating mode: `lke` or `instance`. See [Modes](#modes) below. | No | `lke` |
 | `LINODE_CLIENT_TIMEOUT` | Timeout in seconds for Linode API client requests. | No | - |
 | `VM_MEMORY_OVERHEAD_PERCENT` | Additional memory overhead to simplify calculation (0.075 = 7.5%). | No | `0.075` |
+| `IGNORE_DRA_REQUESTS` | Karpenter core setting. Set to `false` to enable experimental whole-GPU DRA scheduling. See [DRA](DRA.md). | No | `true` |
 | `DISABLE_DRY_RUN` | Set to `true` to disable dry-run validation for LinodeNodeClasses. | No | `false` |
 
 These environment variables are injected into the controller pod via a Kubernetes Secret. By default, the Helm chart creates a secret called `karpl-credentials` from the `apiToken`, `apiURL`, `apiVersion`, and `region` values.

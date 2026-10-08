@@ -75,11 +75,12 @@ func (p *DefaultProvider) InjectOfferings(
 		// GetInstanceTypes calls. This should still be done with caution - it is currently done here in the provider, and
 		// once in the instance provider (filterReservedInstanceTypes)
 		its = append(its, &cloudprovider.InstanceType{
-			Name:         it.Name,
-			Requirements: it.Requirements,
-			Offerings:    offerings,
-			Capacity:     it.Capacity,
-			Overhead:     it.Overhead,
+			Name:             it.Name,
+			Requirements:     it.Requirements,
+			Offerings:        offerings,
+			Capacity:         it.Capacity,
+			DynamicResources: it.DynamicResources,
+			Overhead:         it.Overhead,
 		})
 	}
 	return its

@@ -62,7 +62,7 @@ func (d DefaultResolver) Resolve(ctx context.Context, info *linodego.LinodeType,
 	if resolved := nodeClass.KubeletConfiguration(); resolved != nil {
 		kc = resolved
 	}
-	return NewInstanceType(
+	it := NewInstanceType(
 		ctx,
 		info,
 		d.region,
@@ -73,6 +73,8 @@ func (d DefaultResolver) Resolve(ctx context.Context, info *linodego.LinodeType,
 		kc.EvictionHard,
 		kc.EvictionSoft,
 	)
+	it.DynamicResources = nvidiaGPUResources(info)
+	return it
 }
 
 func NewDefaultResolver(region string) *DefaultResolver {
