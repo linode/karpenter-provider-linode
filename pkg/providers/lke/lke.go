@@ -583,9 +583,17 @@ func isKarpenterManagedPool(pool *linodego.LKENodePool) bool {
 }
 
 func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
-	lkePool, err := p.findLKENodePoolFromLinodeInstanceID(ctx, id)
+	instanceID, err := strconv.Atoi(id)
 	if err != nil {
-		return cloudprovider.NewNodeClaimNotFoundError(err)
+		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("parsing instance ID: %w", err))
+	}
+
+	lkePool, err := p.findLKENodePoolFromLinodeInstanceID(ctx, instanceID)
+	if err != nil {
+		if cloudprovider.IsNodeClaimNotFoundError(err) {
+			p.nodeCache.Delete(id)
+		}
+		return err
 	}
 
 	if len(lkePool.Linodes) <= 1 {
@@ -600,7 +608,7 @@ func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
 		return nil
 	}
 
-	poolNode, err := findNodeInPool(lkePool, id)
+	poolNode, err := findNodeInPool(lkePool, instanceID)
 	if err != nil {
 		p.nodeCache.Delete(id)
 		return cloudprovider.NewNodeClaimNotFoundError(err)
@@ -632,6 +640,9 @@ func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[st
 
 	linodeInstance, err := p.client.GetInstance(ctx, instanceID)
 	if err != nil {
+		if linodego.IsNotFound(err) {
+			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("getting instance %d: %w", instanceID, err))
+		}
 		return fmt.Errorf("getting instance %d: %w", instanceID, err)
 	}
 
@@ -642,7 +653,13 @@ func (p *DefaultProvider) CreateTags(ctx context.Context, id string, tags map[st
 	_, err = p.client.UpdateInstance(ctx, instanceID, linodego.InstanceUpdateOptions{
 		Tags: newTags,
 	})
-	return err
+	if err != nil {
+		if linodego.IsNotFound(err) {
+			return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("updating instance tags, %w", err))
+		}
+		return err
+	}
+	return nil
 }
 
 func (p *DefaultProvider) UpdateTags(ctx context.Context, id string, tags []string) error {
@@ -695,13 +712,12 @@ func (p *DefaultProvider) cacheNode(n *instance.Instance) {
 	p.nodeCache.SetDefault(id, n)
 }
 
-func (p *DefaultProvider) findLKENodePoolFromLinodeInstanceID(ctx context.Context, id string) (*linodego.LKENodePool, error) {
-	instanceID, err := strconv.Atoi(id)
-	if err != nil {
-		return nil, fmt.Errorf("parsing instance ID: %w", err)
-	}
+func (p *DefaultProvider) findLKENodePoolFromLinodeInstanceID(ctx context.Context, instanceID int) (*linodego.LKENodePool, error) {
 	pools, err := p.client.ListLKENodePools(ctx, p.clusterID, nil)
 	if err != nil {
+		if linodego.IsNotFound(err) {
+			return nil, cloudprovider.NewNodeClaimNotFoundError(err)
+		}
 		return nil, err
 	}
 	for _, pool := range pools {
@@ -714,14 +730,10 @@ func (p *DefaultProvider) findLKENodePoolFromLinodeInstanceID(ctx context.Contex
 			}
 		}
 	}
-	return nil, fmt.Errorf("instance %d not found in any Karpenter-managed pool", instanceID)
+	return nil, cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("instance %d not found in any Karpenter-managed pool", instanceID))
 }
 
-func findNodeInPool(pool *linodego.LKENodePool, id string) (*linodego.LKENodePoolLinode, error) {
-	instanceID, err := strconv.Atoi(id)
-	if err != nil {
-		return nil, fmt.Errorf("parsing instance ID: %w", err)
-	}
+func findNodeInPool(pool *linodego.LKENodePool, instanceID int) (*linodego.LKENodePoolLinode, error) {
 	for _, node := range pool.Linodes {
 		if node.InstanceID == instanceID {
 			return &node, nil
