@@ -195,6 +195,19 @@ sequenceDiagram
   - If more than one instance matches a NodeClaim, Karpenter uses the first instance.
   - Karpenter does not check whether an instance has multiple NodeClaim tags.
 
+### Plan availability
+
+- **Region availability check**:
+  - The offering provider marks an offering available only when `GET /regions/{region}/availability` reports the plan as available.
+  - The instance type controller refreshes this data every 5 minutes.
+  - A plan that sells out between refreshes stays selectable until the next refresh.
+- **Scale-up errors**:
+  - Karpenter does not treat an HTTP 400 on pool scale-up as insufficient capacity. These errors also come from validation, networking, and request limits, and the response does not show which cause applies.
+  - Karpenter reports the error as a creation error and does not mark the plan unavailable. This error does not trigger the NodeClaim deletion that an insufficient capacity error causes.
+- **Plan unavailable on pool creation**:
+  - If the LKE API rejects a new pool because the plan is unavailable in the region, Karpenter returns an insufficient capacity error. Karpenter then deletes the NodeClaim and selects another offering.
+  - Karpenter logs `pool create rejected with an unrecognized 400` when a pool creation 400 does not match this error. It then reports the error as a creation error and does not mark the plan unavailable.
+
 ## API call volume and scalability concerns
 
 This section calls out **Linode API call volume by function**, the key **multipliers** (N+1, polling, and controller requeues), and why this design can be **rate-limit bound** under concurrency.
