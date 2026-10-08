@@ -1901,16 +1901,77 @@ var _ = Describe("LKENodeProvider", func() {
 				Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Calls()).To(Equal(1))
 			})
 
-			It("should return error for invalid instance ID", func() {
+			It("should return not found for an invalid instance ID", func() {
 				err := linodeEnv.LKENodeProvider.Delete(ctx, "invalid-id")
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("parsing instance ID"))
+				Expect(corecloudprovider.IsNodeClaimNotFoundError(err)).To(BeTrue())
 			})
 
-			It("should return error when instance not found", func() {
+			It("should return not found when the pool list confirms instance absence", func() {
 				err := linodeEnv.LKENodeProvider.Delete(ctx, "999999")
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("not found"))
+				Expect(corecloudprovider.IsNodeClaimNotFoundError(err)).To(BeTrue())
+			})
+
+			It("should preserve pool-list failures as retryable errors", func() {
+				listErr := &linodego.Error{Code: http.StatusTooManyRequests, Message: "rate limited"}
+				linodeEnv.LinodeAPI.ListLKENodePoolsBehavior.Error.Set(listErr)
+
+				err := linodeEnv.LKENodeProvider.Delete(ctx, "999999")
+				Expect(err).To(HaveOccurred())
+				Expect(corecloudprovider.IsNodeClaimNotFoundError(err)).To(BeFalse())
+				Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Calls()).To(Equal(0))
+			})
+
+			It("should return not found when the pool-list API returns 404", func() {
+				linodeEnv.LinodeAPI.ListLKENodePoolsBehavior.Error.Set(&linodego.Error{Code: http.StatusNotFound, Message: "cluster not found"})
+
+				err := linodeEnv.LKENodeProvider.Delete(ctx, "999999")
+				Expect(err).To(HaveOccurred())
+				Expect(corecloudprovider.IsNodeClaimNotFoundError(err)).To(BeTrue())
+			})
+
+			It("should return not found when deleting the last-node pool returns 404", func() {
+				poolID := 403
+				instanceID := 5004
+				pool := &linodego.LKENodePool{
+					ID: poolID,
+					Tags: []string{
+						fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+						fmt.Sprintf("%s=true", v1.LabelLKEManaged),
+					},
+					Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID, ID: "node-5004"}},
+				}
+				linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+				linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Error.Set(&linodego.Error{Code: http.StatusNotFound, Message: "pool not found"})
+
+				err := linodeEnv.LKENodeProvider.Delete(ctx, strconv.Itoa(instanceID))
+				Expect(err).To(HaveOccurred())
+				Expect(corecloudprovider.IsNodeClaimNotFoundError(err)).To(BeTrue())
+			})
+
+			It("should return not found when deleting a pool node returns 404", func() {
+				poolID := 404
+				instanceID := 5005
+				pool := &linodego.LKENodePool{
+					ID: poolID,
+					Tags: []string{
+						fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+						fmt.Sprintf("%s=true", v1.LabelLKEManaged),
+					},
+					Linodes: []linodego.LKENodePoolLinode{
+						{InstanceID: instanceID, ID: "node-5005"},
+						{InstanceID: 5006, ID: "node-5006"},
+					},
+				}
+				linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+				linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Error.Set(&linodego.Error{Code: http.StatusNotFound, Message: "pool node not found"})
+
+				err := linodeEnv.LKENodeProvider.Delete(ctx, strconv.Itoa(instanceID))
+				Expect(err).To(HaveOccurred())
+				Expect(corecloudprovider.IsNodeClaimNotFoundError(err)).To(BeTrue())
 			})
 
 			It("should surface delete errors", func() {
@@ -2052,9 +2113,10 @@ var _ = Describe("LKENodeProvider", func() {
 			Expect(updatedInst.(linodego.Instance).Tags).To(ContainElement(fmt.Sprintf("%s=test-claim", v1.NodeClaimTagKey)))
 		})
 
-		It("should return error when instance not found", func() {
+		It("should return not found when fetching a missing instance returns 404", func() {
 			err := linodeEnv.LKENodeProvider.CreateTags(ctx, "999999", map[string]string{"test": "value"})
 			Expect(err).To(HaveOccurred())
+			Expect(corecloudprovider.IsNodeClaimNotFoundError(err)).To(BeTrue())
 		})
 
 		It("should return error for invalid instance ID", func() {
@@ -2069,6 +2131,7 @@ var _ = Describe("LKENodeProvider", func() {
 			err := linodeEnv.LKENodeProvider.CreateTags(ctx, "2001", map[string]string{fooKey: barValue})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("get fail"))
+			Expect(corecloudprovider.IsNodeClaimNotFoundError(err)).To(BeFalse())
 		})
 
 		It("should surface update failures", func() {
@@ -2081,6 +2144,19 @@ var _ = Describe("LKENodeProvider", func() {
 			err := linodeEnv.LKENodeProvider.CreateTags(ctx, strconv.Itoa(instanceID), map[string]string{fooKey: barValue})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("boom"))
+			Expect(corecloudprovider.IsNodeClaimNotFoundError(err)).To(BeFalse())
+		})
+
+		It("should return not found when updating tags returns 404", func() {
+			instanceID := 9102
+			now := time.Now()
+			inst := linodego.Instance{ID: instanceID, Tags: []string{}, Created: &now}
+			linodeEnv.LinodeAPI.Instances.Store(instanceID, inst)
+			linodeEnv.LinodeAPI.UpdateInstanceBehavior.Error.Set(&linodego.Error{Code: http.StatusNotFound, Message: "instance not found"})
+
+			err := linodeEnv.LKENodeProvider.CreateTags(ctx, strconv.Itoa(instanceID), map[string]string{fooKey: barValue})
+			Expect(err).To(HaveOccurred())
+			Expect(corecloudprovider.IsNodeClaimNotFoundError(err)).To(BeTrue())
 		})
 
 		Context("Enterprise tier", func() {
