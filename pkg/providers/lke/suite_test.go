@@ -236,6 +236,8 @@ var _ = Describe("LKENodeProvider", func() {
 				},
 			},
 		})
+		// Keep the generated NodePool tag within Linode's 50-character limit.
+		nodePoolObj.Name = "lke-pool"
 		nodeClaim = coretest.NodeClaim(karpv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
@@ -285,6 +287,28 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(poolInstance).To(BeNil())
 					Expect(err.Error()).To(ContainSubstring(retryMessage))
 					Expect(linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Calls()).To(Equal(0))
+				})
+
+				It("should reject overlong pool tags before calling Linode APIs", func() {
+					clusterName := strings.Repeat("c", 23)
+					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+					Expect(err).ToNot(HaveOccurred())
+					cheapestType, err := utils.CheapestInstanceType(instanceTypes)
+					Expect(err).ToNot(HaveOccurred())
+					tags := utils.GetTagsForLKE(nodeClass, nodeClaim, clusterName)
+					clusterTag := fmt.Sprintf("kubernetes.io/cluster/%s=owned", clusterName)
+
+					_, err = linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, tags, instanceTypes)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring(clusterTag))
+					Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeFalse())
+					Expect(linodeEnv.LinodeAPI.ListInstancesBehavior.Calls()).To(Equal(0))
+					Expect(linodeEnv.LinodeAPI.ListLKENodePoolsBehavior.Calls()).To(Equal(0))
+					Expect(linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.Calls()).To(Equal(0))
+					Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(cheapestType.Name, fake.DefaultRegion)).To(BeFalse())
 				})
 
 				It("should return an ICE error when all attempted instance types return an ICE error", func() {

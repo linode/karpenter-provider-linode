@@ -16,6 +16,7 @@ package nodeclass_test
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/awslabs/operatorpkg/status"
@@ -24,6 +25,7 @@ import (
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	"github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclass"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
+	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/test"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -68,6 +70,59 @@ var _ = Describe("NodeClass Validation", func() {
 		Expect(res.RequeueAfter).To(Equal(10 * time.Minute))
 		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).IsTrue()).To(BeTrue())
 		Expect(nodeClass.StatusConditions().Get(status.ConditionReady).IsTrue()).To(BeTrue())
+	})
+
+	It("should reject overlong user tags before LKE API validation", func() {
+		tag := "env=" + strings.Repeat("a", 47)
+		nodeClass.Spec.Tags = []string{tag}
+		nodeClass.Spec.LKEK8sVersion = new("v1.31.9+lke7")
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		err := ExpectObjectReconcileFailed(ctx, env.Client, controller, nodeClass)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(tag))
+		Expect(linodeEnv.LinodeAPI.GetLKEClusterBehavior.Calls()).To(Equal(0))
+	})
+
+	It("should reject an overlong generated cluster tag before LKE API validation", func() {
+		clusterName := strings.Repeat("c", 23)
+		ctx = options.ToContext(ctx, test.Options(test.OptionsFields{ClusterName: &clusterName}))
+		nodeClass.Spec.LKEK8sVersion = new("v1.31.9+lke7")
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		err := ExpectObjectReconcileFailed(ctx, env.Client, controller, nodeClass)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("kubernetes.io/cluster/" + clusterName + "=owned"))
+
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).IsFalse()).To(BeTrue())
+		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).Reason).To(Equal(nodeclass.ConditionReasonTagValidationFailed))
+		Expect(linodeEnv.LinodeAPI.GetLKEClusterBehavior.Calls()).To(Equal(0))
+	})
+
+	It("should report all tag validation failures", func() {
+		clusterName := strings.Repeat("c", 23)
+		ctx = options.ToContext(ctx, test.Options(test.OptionsFields{ClusterName: &clusterName}))
+		restrictedTag := "karpenter.sh/nodepool=test"
+		overlongUserTag := "env=" + strings.Repeat("a", 47)
+		overlongClusterTag := "kubernetes.io/cluster/" + clusterName + "=owned"
+		nodeClass.Spec.Tags = []string{restrictedTag, overlongUserTag}
+		nodeClass.Spec.LKEK8sVersion = new("v1.31.9+lke7")
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		err := ExpectObjectReconcileFailed(ctx, env.Client, controller, nodeClass)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(restrictedTag))
+		Expect(err.Error()).To(ContainSubstring(overlongUserTag))
+		Expect(err.Error()).To(ContainSubstring(overlongClusterTag))
+
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+		condition := nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded)
+		Expect(condition.IsFalse()).To(BeTrue())
+		Expect(condition.Message).To(ContainSubstring(restrictedTag))
+		Expect(condition.Message).To(ContainSubstring(overlongUserTag))
+		Expect(condition.Message).To(ContainSubstring(overlongClusterTag))
+		Expect(linodeEnv.LinodeAPI.GetLKEClusterBehavior.Calls()).To(Equal(0))
 	})
 
 	It("should set ValidationSucceeded false for lkeK8sVersion on standard tier", func() {
