@@ -64,7 +64,7 @@ The `LinodeNodeClass` allows you to configure specific settings for the nodes ma
 
 | Field | Type | Supported Modes | Description |
 | ------- | ------ | ----------------- | ------------- |
-| `tags` | `[]string` | **All** | Tags to apply to Linode instances. In LKE mode, user tags are reconciled directly on instances; LKE Node Pools receive only Karpenter-managed provider tags. |
+| `tags` | `[]string` | **All** | Tags to apply to Linode instances. Each complete tag is limited to 50 characters. In LKE mode, user tags are reconciled directly on instances; generated Karpenter-managed pool tags also must fit the limit and are rejected rather than shortened. |
 | `firewallID` | `int` | **All** | The ID of the Cloud Firewall to attach. |
 | `lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for LKE Enterprise worker nodes. Upgrade the cluster control plane to this version first; otherwise reconciliation fails and replacement NodeClaims will not come up on the requested version. For Enterprise clusters, the update strategy automatically defaults to `on_recycle`. |
 | `image` | `string` | **Instance** | The Image ID to deploy (default: `linode/ubuntu22.04`). |

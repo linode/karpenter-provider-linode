@@ -15,9 +15,11 @@ limitations under the License.
 package fake
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -315,6 +317,33 @@ type tagFilter struct {
 	contains bool
 }
 
+// NewLinodeAPIError returns a fake Linode API error with structured response details.
+func NewLinodeAPIError(statusCode int, reasons ...linodego.APIErrorReason) *linodego.Error {
+	apiError := linodego.APIError{Errors: reasons}
+	body, err := json.Marshal(apiError)
+	if err != nil {
+		panic(err)
+	}
+	return linodego.NewError(&http.Response{
+		StatusCode: statusCode,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(bytes.NewReader(body)),
+	})
+}
+
+// PlanUnavailableReason returns the API error reason for an unavailable LKE plan.
+func PlanUnavailableReason(instanceType string) linodego.APIErrorReason {
+	return linodego.APIErrorReason{
+		Field:  "type",
+		Reason: fmt.Sprintf("The Linode plan %s is not currently available in the selected region. Please select another region or plan type, or contact Support for assistance.", instanceType),
+	}
+}
+
+// NewPlanUnavailableError returns a structured error for an unavailable LKE plan.
+func NewPlanUnavailableError(instanceType string) *linodego.Error {
+	return NewLinodeAPIError(http.StatusBadRequest, PlanUnavailableReason(instanceType))
+}
+
 // extractTagsFromFilter parses the linodego X-Filter JSON carried in ListOptions.Filter.
 //
 // This fake only implements the "tags" shapes used by this repo:
@@ -444,10 +473,7 @@ func (l *LinodeClient) CreateLKENodePool(_ context.Context, clusterID int, opts 
 			return true
 		})
 		if skipInstance {
-			return nil, &linodego.Error{
-				Code:    http.StatusBadRequest,
-				Message: fmt.Sprintf("Insufficient capacity for instance type %s in region %s", params.Opts.Type, DefaultRegion),
-			}
+			return nil, NewPlanUnavailableError(params.Opts.Type)
 		}
 
 		var poolCount int

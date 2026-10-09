@@ -57,6 +57,11 @@ func NewDefaultProvider(
 	}
 }
 
+// InvalidateCache clears cached offerings after availability data changes.
+func (p *DefaultProvider) InvalidateCache() {
+	p.cache.Flush()
+}
+
 func (p *DefaultProvider) InjectOfferings(
 	instanceTypes []*cloudprovider.InstanceType,
 	instanceTypesInfo map[string]linodego.LinodeType,

@@ -253,6 +253,7 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 		// Only update instanceTypesSeqNun with the instance type offerings have been changed
 		// This is to not create new keys with duplicate instance type offerings option
 		p.instanceTypesCache.Flush() // None of the cached instance type info is valid when the instance type offerings info changes
+		p.offeringProvider.InvalidateCache()
 		log.FromContext(ctx).WithValues("instance-type-count", len(instanceTypeOfferings)).V(1).Info("discovered offerings for instance types")
 	}
 	p.instanceTypesOfferings = instanceTypeOfferings

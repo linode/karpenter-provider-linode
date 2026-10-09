@@ -148,6 +148,42 @@ var _ = Describe("InstanceTypeProvider", func() {
 		Expect(ok).To(BeTrue())
 		Expect(price).To(BeNumerically(">", 0))
 	})
+	It("should refresh cached offering availability when region availability changes", func() {
+		const targetPlan = "g6-standard-2"
+		availability := linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Clone()
+		Expect(availability).ToNot(BeNil())
+
+		assertAvailability := func(want bool) {
+			instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+			Expect(err).ToNot(HaveOccurred())
+			instanceType, ok := lo.Find(instanceTypes, func(it *karpcloudprovider.InstanceType) bool {
+				return it.Name == targetPlan
+			})
+			Expect(ok).To(BeTrue())
+			Expect(instanceType.Offerings).To(HaveLen(1))
+			Expect(instanceType.Offerings[0].Available).To(Equal(want))
+		}
+		refreshAvailability := func(available bool) {
+			found := false
+			for i := range *availability {
+				if (*availability)[i].Plan == targetPlan {
+					(*availability)[i].Available = available
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue())
+			// Other plans remain available, so the overall region set does not change.
+			linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Set(availability)
+			Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeOfferings(ctx)).To(Succeed())
+		}
+
+		assertAvailability(true)
+		refreshAvailability(false)
+		assertAvailability(false)
+		refreshAvailability(true)
+		assertAvailability(true)
+	})
 
 	It("should support individual instance type labels", func() {
 		ExpectApplied(ctx, env.Client, nodePool, nodeClass)
