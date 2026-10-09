@@ -1,8 +1,8 @@
 module github.com/linode/karpenter-provider-linode
 
-go 1.26.6
+go 1.27.0
 
-toolchain go1.26.9
+toolchain go1.27.2
 
 require (
 	github.com/Pallinder/go-randomdata v1.2.0
