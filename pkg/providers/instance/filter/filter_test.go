@@ -162,7 +162,7 @@ func withOfferings(offerings ...*cloudprovider.Offering) mockInstanceTypeOptions
 
 func makeInstanceType(name string, opts ...mockInstanceTypeOptions) *cloudprovider.InstanceType {
 	instanceType := option.Resolve(opts...)
-	rand.Shuffle(len(instanceType.Offerings), func(i, j int) {
+	rand.Shuffle(len(instanceType.Offerings), func(i, j int) { //nolint:gosec // test-only shuffle
 		instanceType.Offerings[i], instanceType.Offerings[j] = instanceType.Offerings[j], instanceType.Offerings[i]
 	})
 	instanceType.Name = name
