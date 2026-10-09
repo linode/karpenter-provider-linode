@@ -7,8 +7,8 @@ ENVTEST_K8S_VERSION = "1.36.2"
 
 [tools]
 python = "3.12.14"
-go = "1.26.8"
-golangci-lint = "2.12.2"
+go = "1.27.2"
+golangci-lint = "2.14.0"
 helm = "3.19.5"
 just = "1.52.0"
 kubectl = "1.35.5"

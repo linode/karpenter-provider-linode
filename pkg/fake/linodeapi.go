@@ -198,7 +198,7 @@ func (l *LinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.I
 		if !ok {
 			return nil, &linodego.Error{
 				Code:    http.StatusNotFound,
-				Message: fmt.Sprintf("instance does not exist with id %d", linodeID),
+				Message: fmt.Sprintf("instance does not exist with id %d", *linodeID),
 			}
 		}
 		instance := raw.(linodego.Instance)
