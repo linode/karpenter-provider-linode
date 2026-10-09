@@ -87,6 +87,23 @@ var _ = Describe("ParseInstanceID", func() {
 	})
 })
 
+var _ = Describe("ValidateTagLengths", func() {
+	It("accepts a complete 50-character tag", func() {
+		tag := "env=" + strings.Repeat("a", 46)
+		Expect(len(tag)).To(Equal(50))
+		Expect(utils.ValidateTagLengths([]string{tag})).To(Succeed())
+	})
+
+	It("rejects a complete 51-character tag", func() {
+		tag := "env=" + strings.Repeat("a", 47)
+		err := utils.ValidateTagLengths([]string{tag})
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(tag))
+		Expect(err.Error()).To(ContainSubstring("51 characters"))
+	})
+})
+
 var _ = Describe("NormalizeNodeClaimTagValue", func() {
 	It("should return name unchanged when shorter than max value length", func() {
 		name := "short-name"
