@@ -128,6 +128,10 @@ spec:
             - name: KARPENTER_MODE
               value: "{{ . }}"
           {{- end }}
+          {{- if .Values.settings.dra.enabled }}
+            - name: IGNORE_DRA_REQUESTS
+              value: "false"
+          {{- end }}
           {{- with .Values.linodeDebug }}
             - name: LINODE_DEBUG
               value: "{{ . }}"

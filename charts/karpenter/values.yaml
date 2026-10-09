@@ -179,6 +179,10 @@ settings:
   clusterEndpoint: ""
   # -- Operating mode: 'lke' for LKE NodePool provisioning, 'instance' for direct Linode instances.
   mode: "lke"
+  dra:
+    # -- Experimental: enable core DRA scheduling (sets IGNORE_DRA_REQUESTS=false) so ResourceClaim workloads can
+    # provision exclusive whole-GPU nodes. Do not also set IGNORE_DRA_REQUESTS in controller.env. See docs/DRA.md.
+    enabled: false
   # -- Maximum time to wait for an LKE node pool instance to become claimable.
   lkeCreateDeadline: 10s
   # -- Maximum time to wait for LKE instance tags to be observed after claim.
