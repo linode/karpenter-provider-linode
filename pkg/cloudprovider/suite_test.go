@@ -545,6 +545,8 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 				},
 			},
 		})
+		// Keep the generated NodePool tag within Linode's 50-character limit.
+		lkeNodePool.Name = "lke-pool"
 		lkeNodeClaim = coretest.NodeClaim(karpv1.NodeClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{

@@ -16,6 +16,7 @@ package nodeclass
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -51,7 +52,7 @@ const (
 )
 
 var ValidationConditionMessages = map[string]string{
-	ConditionReasonTagValidationFailed:               "LinodeNodeClass spec.tags contains restricted provider-managed tags",
+	ConditionReasonTagValidationFailed:               "LinodeNodeClass tags violate provider-managed key or 50-character length requirements",
 	ConditionReasonLKEK8sVersionUnsupported:          "lkeK8sVersion is only supported for LKE Enterprise clusters",
 	ConditionReasonLKEK8sVersionControlPlaneMismatch: "lkeK8sVersion requires the LKE cluster control plane to already be on the same version",
 }
@@ -98,7 +99,7 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 		},
 	}
 
-	// Use appropriate tag function based on mode
+	// The NodePool name is unavailable here; the LKE provider validates that concrete tag before any API call.
 	var tags map[string]string
 	if options.FromContext(ctx).Mode == "lke" {
 		tags = utils.GetTagsForLKE(nodeClass, nodeClaim, options.FromContext(ctx).ClusterName)
@@ -106,11 +107,11 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 		tags = utils.GetTags(nodeClass, nodeClaim, options.FromContext(ctx).ClusterName)
 	}
 
+	if err := v.validateTags(nodeClass, tags); err != nil {
+		return reconcile.Result{}, err
+	}
 	if res, err := v.validateLKEK8sVersion(ctx, nodeClass); err != nil || !lo.IsEmpty(res) {
 		return res, err
-	}
-	if err := v.validateTags(nodeClass); err != nil {
-		return reconcile.Result{}, err
 	}
 
 	if val, ok := v.cache.Get(v.cacheKey(nodeClass, tags)); ok {
@@ -138,8 +139,13 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 	return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
 }
 
-func (v *Validation) validateTags(nodeClass *v1alpha1.LinodeNodeClass) error {
-	if err := utils.ValidateTags(nodeClass.Spec.Tags); err != nil {
+func (v *Validation) validateTags(nodeClass *v1alpha1.LinodeNodeClass, generatedTags map[string]string) error {
+	err := errors.Join(
+		utils.ValidateTags(nodeClass.Spec.Tags),
+		utils.ValidateTagLengths(nodeClass.Spec.Tags),
+		utils.ValidateTagLengths(utils.MapToTagList(generatedTags)),
+	)
+	if err != nil {
 		nodeClass.StatusConditions().SetFalse(v1.ConditionTypeValidationSucceeded, ConditionReasonTagValidationFailed, err.Error())
 		return reconcile.TerminalError(fmt.Errorf("validating tags, %w", err))
 	}

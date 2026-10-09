@@ -16,6 +16,7 @@ package test
 
 import (
 	"fmt"
+	"hash/fnv"
 
 	"github.com/imdario/mergo"
 	"sigs.k8s.io/karpenter/pkg/test"
@@ -30,8 +31,15 @@ func LinodeNodeClass(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {
 			panic(fmt.Sprintf("Failed to merge settings: %s", err))
 		}
 	}
+	metadata := test.ObjectMeta(options.ObjectMeta)
+	if options.Name == "" && options.GenerateName == "" {
+		// Keep default fixtures valid for the 50-character provider-managed NodeClass tag.
+		hash := fnv.New32a()
+		_, _ = hash.Write([]byte(metadata.Name))
+		metadata.Name = fmt.Sprintf("nc-%08x", hash.Sum32())
+	}
 	return &v1.LinodeNodeClass{
-		ObjectMeta: test.ObjectMeta(options.ObjectMeta),
+		ObjectMeta: metadata,
 		Spec:       options.Spec,
 		Status:     options.Status,
 	}

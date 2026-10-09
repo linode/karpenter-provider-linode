@@ -164,6 +164,14 @@ func NewDefaultProvider(
 }
 
 func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*instance.Instance, error) {
+	if err := utils.ValidateTagLengths(utils.MapToTagList(tags)); err != nil {
+		return nil, cloudprovider.NewCreateError(
+			err,
+			"NodePoolTagValidationFailed",
+			fmt.Sprintf("LKE node pool tag validation failed: %s", err),
+		)
+	}
+
 	instanceType, err := p.resolveCreateInstanceType(ctx, instanceTypes, nodeClaim)
 	if err != nil {
 		return nil, err

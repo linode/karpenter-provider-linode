@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -185,6 +186,21 @@ func ValidateTags(tags []string) error {
 		return fmt.Sprintf("%q", tag)
 	})
 	return serrors.Wrap(fmt.Errorf("tags failed validation requirements"), "tags", strings.Join(quotedTags, ", "))
+}
+
+// ValidateTagLengths rejects complete tag strings longer than Linode's tag limit, measured in bytes.
+func ValidateTagLengths(tags []string) error {
+	var invalidTags []string
+	for _, tag := range tags {
+		if len(tag) > maxLinodeTagLength {
+			invalidTags = append(invalidTags, fmt.Sprintf("%q (%d characters)", tag, len(tag)))
+		}
+	}
+	if len(invalidTags) == 0 {
+		return nil
+	}
+	slices.Sort(invalidTags)
+	return fmt.Errorf("tags exceed Linode's %d-character limit: %s", maxLinodeTagLength, strings.Join(invalidTags, ", "))
 }
 
 func TagListToMap(tags []string) map[string]string {
