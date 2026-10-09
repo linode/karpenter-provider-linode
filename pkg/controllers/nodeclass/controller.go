@@ -108,7 +108,7 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 		//nolint:gocritic // We want to ignore not found errors here
 		if err := c.kubeClient.Patch(ctx, nodeClass, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); client.IgnoreNotFound(err) != nil {
 			if errors.IsConflict(err) {
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 			return reconcile.Result{}, err
 		}
@@ -129,7 +129,7 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 		// Here, we are updating the status condition list
 		if err := c.kubeClient.Status().Patch(ctx, nodeClass, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); err != nil {
 			if errors.IsConflict(err) {
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 			errs = multierr.Append(errs, client.IgnoreNotFound(err))
 		}
@@ -158,7 +158,7 @@ func (c *Controller) finalize(ctx context.Context, nodeClass *v1alpha1.LinodeNod
 		// https://github.com/kubernetes/kubernetes/issues/111643#issuecomment-2016489732
 		if err := c.kubeClient.Patch(ctx, nodeClass, client.MergeFromWithOptions(stored, client.MergeFromWithOptimisticLock{})); err != nil {
 			if errors.IsConflict(err) {
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 			return reconcile.Result{}, client.IgnoreNotFound(fmt.Errorf("removing termination finalizer, %w", err))
 		}
