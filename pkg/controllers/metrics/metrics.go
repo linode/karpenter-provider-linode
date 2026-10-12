@@ -37,11 +37,12 @@ var (
 			Name:      "instance_type_offering_available",
 			Help:      "Instance type offering availability, based on instance type, capacity type, and region",
 		},
-		[]string{
-			instanceTypeLabel,
-			capacityTypeLabel,
-			regionLabel,
+		[]opmetrics.Label{
+			{Name: instanceTypeLabel, Help: "The Linode instance type."},
+			metrics.CapacityType,
+			{Name: regionLabel, Help: "The Linode region of the offering."},
 		},
+		opmetrics.Alpha,
 	)
 	InstanceTypeOfferingPriceEstimate = opmetrics.NewPrometheusGauge(
 		crmetrics.Registry,
@@ -51,10 +52,11 @@ var (
 			Name:      "instance_type_offering_price_estimate",
 			Help:      "Instance type offering estimated hourly price used when making informed decisions on node cost calculation, based on instance type, capacity type, and region.",
 		},
-		[]string{
-			instanceTypeLabel,
-			capacityTypeLabel,
-			regionLabel,
+		[]opmetrics.Label{
+			{Name: instanceTypeLabel, Help: "The Linode instance type."},
+			metrics.CapacityType,
+			{Name: regionLabel, Help: "The Linode region of the offering."},
 		},
+		opmetrics.Alpha,
 	)
 )
