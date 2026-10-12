@@ -2,7 +2,6 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  creationTimestamp: null
   name: consolidation-empty-node-scale-down
   labels:
     all:
@@ -13,7 +12,7 @@ spec:
       try:
       - script:
           timeout: 30s
-          content: kubectl get nodeclaim -l karpenter.sh/nodepool=consolidation-empty -o json
+          content: kubectl -n "$NAMESPACE" get nodeclaim -l karpenter.sh/nodepool=consolidation-empty -o json
           check:
             ($error): ~
             (json_parse($stdout).items | length(@)): 0
@@ -37,7 +36,6 @@ spec:
             kind: Deployment
             metadata:
               name: inflate
-              namespace: default
             status:
               replicas: 5
               availableReplicas: 5
@@ -62,7 +60,7 @@ spec:
           timeout: 15m
           content: |
             set -euo pipefail
-            count=$(kubectl get nodeclaim \
+            count=$(kubectl -n "$NAMESPACE" get nodeclaim \
               -l karpenter.sh/nodepool=consolidation-empty,node.kubernetes.io/instance-type=g6-standard-4 \
               -o name | wc -l | tr -d ' ')
             if [ "$count" -lt 2 ]; then
@@ -84,7 +82,7 @@ spec:
       try:
       - script:
           content: |
-            kubectl -n default scale deployment inflate --replicas 1
+            kubectl -n "$NAMESPACE" scale deployment inflate --replicas 1
 
     - name: Check for g6-standard-2 NodeClaim to be ready
       try:
@@ -114,7 +112,7 @@ spec:
       try:
       - script:
           content: |
-            kubectl -n default scale deployment inflate --replicas 0
+            kubectl -n "$NAMESPACE" scale deployment inflate --replicas 0
 
     - name: Wait for NodeClaims to be deleted
       try:

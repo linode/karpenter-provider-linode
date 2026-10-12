@@ -2,7 +2,6 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  creationTimestamp: null
   name: scheduling-nodepool-label-selector
   labels:
     all:
@@ -13,7 +12,7 @@ spec:
       try:
       - script:
           timeout: 30s
-          content: kubectl get nodeclaim -l karpenter.sh/nodepool=selector -o json
+          content: kubectl -n "$NAMESPACE" get nodeclaim -l karpenter.sh/nodepool=selector -o json
           check:
             ($error): ~
             (json_parse($stdout).items | length(@)): 0
@@ -40,7 +39,6 @@ spec:
             kind: Deployment
             metadata:
               name: inflate
-              namespace: default
             status:
               replicas: 1
               availableReplicas: 1
@@ -73,7 +71,7 @@ spec:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
       - script:
-          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+          content: kubectl -n "$NAMESPACE" get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
@@ -87,19 +85,19 @@ spec:
             - -c
           content: |
             set -euo pipefail
-            node_name=$(kubectl -n default get pod -l app=inflate -o jsonpath='{.items[0].spec.nodeName}')
-            selector_label=$(kubectl get node "$node_name" -o jsonpath='{.metadata.labels.e2e\.linode\.dev/selector}')
-            inflate_phase=$(kubectl -n default get pod -l app=inflate -o jsonpath='{.items[0].status.phase}')
+            node_name=$(kubectl -n "$NAMESPACE" get pod -l app=inflate -o jsonpath='{.items[0].spec.nodeName}')
+            selector_label=$(kubectl -n "$NAMESPACE" get node "$node_name" -o jsonpath='{.metadata.labels.e2e\.linode\.dev/selector}')
+            inflate_phase=$(kubectl -n "$NAMESPACE" get pod -l app=inflate -o jsonpath='{.items[0].status.phase}')
             [ "$selector_label" = "true" ]
             [ "$inflate_phase" = "Running" ]
       catch:
       - script:
           content: |
-            kubectl -n default describe deployment inflate
-            kubectl -n default get pod -l app=inflate -o wide
-            kubectl get node -o wide
+            kubectl -n "$NAMESPACE" describe deployment inflate
+            kubectl -n "$NAMESPACE" get pod -l app=inflate -o wide
+            kubectl -n "$NAMESPACE" get node -o wide
             kubectl get nodeclaim -A -o wide
-            kubectl get nodepool selector -o yaml
+            kubectl -n "$NAMESPACE" get nodepool selector -o yaml
             kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
@@ -110,7 +108,7 @@ spec:
       try:
       - script:
           content: |
-            kubectl scale -n default deployment inflate --replicas 0
+            kubectl -n "$NAMESPACE" scale deployment inflate --replicas 0
 
     - name: Wait for NodeClaims to be deleted
       try:
