@@ -198,8 +198,9 @@ func (c *CloudProvider) Delete(ctx context.Context, nodeClaim *karpv1.NodeClaim)
 	return c.nodeProvider.Delete(ctx, id)
 }
 
-func (c *CloudProvider) DisruptionReasons() []karpv1.DisruptionReason {
-	return nil
+// Reboot reports unsupported in-place repair; Linode repair policies replace nodes.
+func (c *CloudProvider) Reboot(context.Context, *karpv1.NodeClaim, string) error {
+	return cloudprovider.NewNodeRebootNotImplementedError()
 }
 
 func (c *CloudProvider) IsDrifted(ctx context.Context, nodeClaim *karpv1.NodeClaim) (cloudprovider.DriftReason, error) {
