@@ -61,6 +61,8 @@ var node *corev1.Node
 var standardImage v1.LinodeImage
 var nvidiaImage v1.LinodeImage
 
+const testInstanceTypeName = "g6-standard-2"
+
 func TestLinode(t *testing.T) {
 	t.Parallel()
 	ctx = TestContextWithLogger(t)
@@ -142,12 +144,14 @@ var _ = Describe("CapacityCache", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test-node",
 				Labels: map[string]string{
-					corev1.LabelInstanceTypeStable: "g6-standard-2",
-					karpv1.NodeRegisteredLabelKey:  "true",
+					corev1.LabelInstanceTypeStable:                              testInstanceTypeName,
+					karpv1.NodeRegisteredLabelKey:                               "true",
+					karpv1.NodeClassLabelKey(object.GVK(nodeClass).GroupKind()): nodeClass.Name,
 				},
 			},
 			Capacity: corev1.ResourceList{
-				corev1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dMi", 3788)),
+				corev1.ResourceMemory:           resource.MustParse(fmt.Sprintf("%dMi", 3788)),
+				corev1.ResourceEphemeralStorage: resource.MustParse("72Gi"),
 			},
 			ProviderID: fake.ProviderID(fake.InstanceID()),
 		})
@@ -174,14 +178,43 @@ var _ = Describe("CapacityCache", func() {
 		ExpectApplied(ctx, env.Client, nodeClaim)
 	})
 	It("should update discovered capacity based on existing nodes", func() {
+		predictedInstanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+		Expect(err).To(BeNil())
+		predictedType, ok := lo.Find(predictedInstanceTypes, func(i *karpcloudprovider.InstanceType) bool {
+			return i.Name == testInstanceTypeName
+		})
+		Expect(ok).To(BeTrue())
+		Expect(predictedType.Capacity.StorageEphemeral().String()).To(Equal("80Gi"))
+
 		ExpectObjectReconciled(ctx, env.Client, controller, node)
 		instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
 		Expect(err).To(BeNil())
 		i, ok := lo.Find(instanceTypes, func(i *karpcloudprovider.InstanceType) bool {
-			return i.Name == "g6-standard-2"
+			return i.Name == testInstanceTypeName
 		})
 		Expect(ok).To(BeTrue())
 		Expect(i.Capacity.Memory().Value()).To(Equal(node.Status.Capacity.Memory().Value()), "Expected capacity to match discovered node capacity")
+		Expect(i.Capacity.StorageEphemeral().String()).To(Equal("72Gi"), "Expected storage capacity to match discovered node capacity")
+
+		node.Status.Capacity[corev1.ResourceEphemeralStorage] = resource.MustParse("75Gi")
+		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeCapacityFromNode(ctx, node, nodeClass)).To(Succeed())
+		instanceTypes, err = linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+		Expect(err).To(BeNil())
+		i, ok = lo.Find(instanceTypes, func(i *karpcloudprovider.InstanceType) bool {
+			return i.Name == testInstanceTypeName
+		})
+		Expect(ok).To(BeTrue())
+		Expect(i.Capacity.StorageEphemeral().String()).To(Equal("72Gi"), "Expected larger observations to not increase cached capacity")
+
+		node.Status.Capacity[corev1.ResourceEphemeralStorage] = resource.MustParse("71Gi")
+		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeCapacityFromNode(ctx, node, nodeClass)).To(Succeed())
+		instanceTypes, err = linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+		Expect(err).To(BeNil())
+		i, ok = lo.Find(instanceTypes, func(i *karpcloudprovider.InstanceType) bool {
+			return i.Name == testInstanceTypeName
+		})
+		Expect(ok).To(BeTrue())
+		Expect(i.Capacity.StorageEphemeral().String()).To(Equal("71Gi"), "Expected lower observations to update the cached capacity")
 	})
 
 	It("should use VM_MEMORY_OVERHEAD_PERCENT calculation after Image update", func() {
