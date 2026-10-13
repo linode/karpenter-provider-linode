@@ -102,8 +102,17 @@ func enterpriseInstanceTags(nodePoolName string, poolID int) []string {
 }
 
 func enqueueListInstances(env *test.Environment, lists ...[]linodego.Instance) {
-	for i := len(lists) - 1; i >= 0; i-- {
-		list := lists[i]
+	responses := make([][]linodego.Instance, 0, len(lists)*2)
+	if len(lists) > 0 {
+		responses = append(responses, lists[0])
+		for _, list := range lists[1:] {
+			// Every Create attempt now performs an ownership lookup before
+			// candidate discovery; these responses model an unowned candidate.
+			responses = append(responses, []linodego.Instance{}, list)
+		}
+	}
+	for i := len(responses) - 1; i >= 0; i-- {
+		list := responses[i]
 		env.LinodeAPI.ListInstancesBehavior.MultiOut.Add(&list)
 	}
 }
@@ -1007,9 +1016,13 @@ var _ = Describe("LKENodeProvider", func() {
 							ID: instanceID, Type: cheapestType.Name, Created: &now,
 							Tags: enterpriseInstanceTags(nodePoolObj.Name, poolID), LKEClusterID: fake.DefaultClusterID,
 						}
-						// Initial ownership lookup, then three delayed discovery responses.
-						enqueueListInstances(linodeEnv, []linodego.Instance{}, []linodego.Instance{},
-							[]linodego.Instance{}, []linodego.Instance{}, []linodego.Instance{claimable})
+						// Initial lookup plus three delayed candidate-discovery responses.
+						// The helper inserts each attempt's ownership lookup.
+						enqueueListInstances(linodeEnv,
+							[]linodego.Instance{},
+							[]linodego.Instance{},
+							[]linodego.Instance{},
+							[]linodego.Instance{claimable})
 						provider := lke.NewDefaultProvider(
 							fake.DefaultClusterID, linodego.LKEVersionEnterprise, fake.DefaultClusterName,
 							fake.DefaultRegion, recorder, linodeEnv.LinodeAPI, linodeEnv.UnavailableOfferingsCache,

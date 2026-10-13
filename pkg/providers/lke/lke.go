@@ -244,6 +244,15 @@ func (p *DefaultProvider) lookupExistingInstance(ctx context.Context, nodeClaim 
 func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceType, poolKey string, createdPool, scaledOnce *bool) (*instance.Instance, error) {
 	logger := log.FromContext(ctx)
 	return p.withPoolLock(ctx, poolKey, func() (*instance.Instance, error) {
+		// Recheck under the lock on every retry to recover instances claimed by an earlier attempt.
+		existingInstance, err := p.lookupExistingInstance(ctx, nodeClaim)
+		if err != nil && !errors.Is(err, utils.ErrInstanceNotFound) {
+			return nil, err
+		}
+		if existingInstance != nil {
+			return existingInstance, nil
+		}
+
 		pool, err := p.findOrCreatePool(ctx, nodeClass, nodeClaim, tags, instanceType, createdPool)
 		if err != nil {
 			if cloudprovider.IsInsufficientCapacityError(err) {
