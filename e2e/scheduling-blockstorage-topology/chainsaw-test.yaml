@@ -6,6 +6,7 @@ metadata:
   name: scheduling-blockstorage-topology
   labels:
     all:
+    pr:
     category.scheduling:
 spec:
   steps:
