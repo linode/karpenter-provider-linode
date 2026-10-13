@@ -245,6 +245,16 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 	logger := log.FromContext(ctx)
 	var createdInstance *instance.Instance
 	err := p.withPoolLock(ctx, poolKey, func() error {
+		// Recheck under the lock on every retry to recover instances claimed by an earlier attempt.
+		existingInstance, err := p.lookupExistingInstance(ctx, nodeClaim)
+		if err != nil && !errors.Is(err, utils.ErrInstanceNotFound) {
+			return err
+		}
+		if existingInstance != nil {
+			createdInstance = existingInstance
+			return nil
+		}
+
 		pool, err := p.findOrCreatePool(ctx, nodeClass, nodeClaim, tags, instanceType, createdPool)
 		if err != nil {
 			if cloudprovider.IsInsufficientCapacityError(err) {

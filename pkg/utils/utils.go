@@ -258,7 +258,7 @@ func splitTag(tag string) (key, value string, ok bool) {
 	return tag[:index], tag[index+1:], true
 }
 
-// LookupInstanceByTag returns the single Linode instance matching the provided tag.
+// LookupInstanceByTag returns the first Linode instance matching the provided tag.
 func LookupInstanceByTag(ctx context.Context, client sdk.LinodeAPI, tag string) (*linodego.Instance, error) {
 	filter := linodego.Filter{}
 	filter.AddField(linodego.Contains, "tags", tag)
@@ -266,14 +266,21 @@ func LookupInstanceByTag(ctx context.Context, client sdk.LinodeAPI, tag string) 
 	if err != nil {
 		return nil, err
 	}
-	instances, err := client.ListInstances(ctx, linodego.NewListOptions(1, string(filterJSON)))
+	instances, err := client.ListInstances(ctx, linodego.NewListOptions(0, string(filterJSON)))
 	if err != nil {
 		return nil, err
 	}
-	if len(instances) == 1 {
-		return &instances[0], nil
+	if len(instances) == 0 {
+		return nil, fmt.Errorf("instance tagged %q not found: %w", tag, ErrInstanceNotFound)
 	}
-	return nil, fmt.Errorf("instance tagged %q not found: %w", tag, ErrInstanceNotFound)
+	if len(instances) > 1 {
+		log.FromContext(ctx).Info("multiple instances found for tag; selecting first instance",
+			"tag", tag,
+			"count", len(instances),
+			"selectedInstanceID", instances[0].ID,
+		)
+	}
+	return &instances[0], nil
 }
 
 func IsRetryableError(err error) bool {

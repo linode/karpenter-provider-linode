@@ -15,13 +15,17 @@ limitations under the License.
 package utils_test
 
 import (
+	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/linode/linodego/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -195,4 +199,25 @@ var _ = Describe("NodeClaimTag", func() {
 
 		Expect(len(tag)).To(BeNumerically("<=", 50))
 	})
+})
+
+var _ = Describe("LookupInstanceByTag", func() {
+	DescribeTable("returns the first match or ErrInstanceNotFound",
+		func(instances []linodego.Instance, expectedID int) {
+			client := fake.NewLinodeClient()
+			client.ListInstancesBehavior.Output.Set(&instances)
+
+			instance, err := utils.LookupInstanceByTag(context.Background(), client, "karpenter.sh/nodeclaim=test")
+			if expectedID == 0 {
+				Expect(instance).To(BeNil())
+				Expect(errors.Is(err, utils.ErrInstanceNotFound)).To(BeTrue())
+				return
+			}
+			Expect(err).NotTo(HaveOccurred())
+			Expect(instance.ID).To(Equal(expectedID))
+		},
+		Entry("no matches", []linodego.Instance{}, 0),
+		Entry("one match", []linodego.Instance{{ID: 20}}, 20),
+		Entry("multiple matches", []linodego.Instance{{ID: 20}, {ID: 10}}, 20),
+	)
 })
