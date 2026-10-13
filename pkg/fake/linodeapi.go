@@ -164,6 +164,8 @@ type LinodeClient struct {
 	LinodeAPIBehavior
 	ClusterTier    linodego.LKEVersionTier
 	ClusterVersion string
+	// AfterListLKENodePools runs after the fake has captured the list result.
+	AfterListLKENodePools func(context.Context)
 }
 
 func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.LinodeType, error) {
@@ -246,6 +248,7 @@ func (l *LinodeClient) Reset() {
 	l.DeleteLKENodePoolBehavior.Reset()
 	l.DeleteLKENodePoolNodeBehavior.Reset()
 	l.UpdateInstanceBehavior.Reset()
+	l.AfterListLKENodePools = nil
 	l.ClusterTier = DefaultClusterTier
 	l.ClusterVersion = DefaultClusterVersion
 }
@@ -531,7 +534,7 @@ func (l *LinodeClient) CreateLKENodePool(_ context.Context, clusterID int, opts 
 	return *pool, err
 }
 
-func (l *LinodeClient) ListLKENodePools(_ context.Context, clusterID int, opts *linodego.ListOptions) ([]linodego.LKENodePool, error) {
+func (l *LinodeClient) ListLKENodePools(ctx context.Context, clusterID int, opts *linodego.ListOptions) ([]linodego.LKENodePool, error) {
 	pools, err := l.ListLKENodePoolsBehavior.Invoke(&clusterID, func(clusterID *int) (*[]linodego.LKENodePool, error) {
 		var poolList []linodego.LKENodePool
 		l.NodePools.Range(func(k, v any) bool {
@@ -555,6 +558,9 @@ func (l *LinodeClient) ListLKENodePools(_ context.Context, clusterID int, opts *
 
 	if pools == nil {
 		return nil, err
+	}
+	if l.AfterListLKENodePools != nil {
+		l.AfterListLKENodePools(ctx)
 	}
 	return *pools, err
 }
