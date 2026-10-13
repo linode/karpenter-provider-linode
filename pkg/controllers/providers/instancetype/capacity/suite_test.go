@@ -150,7 +150,7 @@ var _ = Describe("CapacityCache", func() {
 				},
 			},
 			Capacity: corev1.ResourceList{
-				corev1.ResourceMemory:           resource.MustParse(fmt.Sprintf("%dMi", 3788)),
+				corev1.ResourceMemory:           resource.MustParse("3788Mi"),
 				corev1.ResourceEphemeralStorage: resource.MustParse("72Gi"),
 			},
 			ProviderID: fake.ProviderID(fake.InstanceID()),
@@ -232,7 +232,7 @@ var _ = Describe("CapacityCache", func() {
 		Expect(ok).To(BeTrue())
 
 		// Calculate memory capacity based on VM_MEMORY_OVERHEAD_PERCENT and output from ListTypes
-		mem := resources.Quantity(fmt.Sprintf("%dMi", 8192)) // Reported memory from fake.MakeInstances()
+		mem := resources.Quantity("8192Mi") // Reported memory from fake.MakeInstances()
 		mem.Sub(resource.MustParse(fmt.Sprintf("%dMi", int64(math.Ceil(float64(mem.Value())*options.FromContext(ctx).VMMemoryOverheadPercent/1024/1024)))))
 		Expect(i.Capacity.Memory().Value()).To(Equal(mem.Value()), "Expected capacity to match VMMemoryOverheadPercent calculation")
 	})
