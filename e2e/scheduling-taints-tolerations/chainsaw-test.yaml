@@ -64,6 +64,7 @@ spec:
             kind: NodeClaim
             metadata:
               labels:
+                karpenter.sh/nodepool: tainted
                 node.kubernetes.io/instance-type: g6-standard-2
             status:
               (conditions[?type == 'Ready']):

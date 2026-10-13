@@ -62,6 +62,7 @@ spec:
             kind: NodeClaim
             metadata:
               labels:
+                karpenter.sh/nodepool: selector
                 node.kubernetes.io/instance-type: g6-standard-2
             status:
               (conditions[?type == 'Ready']):
