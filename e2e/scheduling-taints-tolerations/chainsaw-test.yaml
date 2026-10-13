@@ -2,7 +2,6 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  creationTimestamp: null
   name: scheduling-taints-tolerations
   labels:
     all:
@@ -13,7 +12,7 @@ spec:
       try:
       - script:
           timeout: 30s
-          content: kubectl get nodeclaim -l karpenter.sh/nodepool=tainted -o json
+          content: kubectl -n "$NAMESPACE" get nodeclaim -l karpenter.sh/nodepool=tainted -o json
           check:
             ($error): ~
             (json_parse($stdout).items | length(@)): 0
@@ -42,7 +41,6 @@ spec:
             kind: Deployment
             metadata:
               name: inflate
-              namespace: default
             status:
               replicas: 1
               availableReplicas: 1
@@ -66,6 +64,7 @@ spec:
             kind: NodeClaim
             metadata:
               labels:
+                karpenter.sh/nodepool: tainted
                 node.kubernetes.io/instance-type: g6-standard-2
             status:
               (conditions[?type == 'Ready']):
@@ -75,7 +74,7 @@ spec:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
       - script:
-          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+          content: kubectl -n "$NAMESPACE" get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
@@ -89,19 +88,19 @@ spec:
             - -c
           content: |
             set -euo pipefail
-            inflate_phase=$(kubectl -n default get pod -l app=inflate -o jsonpath='{.items[0].status.phase}')
-            no_toleration_phase=$(kubectl -n default get pod -l app=inflate-no-toleration -o jsonpath='{.items[0].status.phase}')
+            inflate_phase=$(kubectl -n "$NAMESPACE" get pod -l app=inflate -o jsonpath='{.items[0].status.phase}')
+            no_toleration_phase=$(kubectl -n "$NAMESPACE" get pod -l app=inflate-no-toleration -o jsonpath='{.items[0].status.phase}')
             [ "$inflate_phase" = "Running" ]
             [ "$no_toleration_phase" = "Pending" ]
       catch:
       - script:
           content: |
-            kubectl -n default describe deployment inflate
-            kubectl -n default describe deployment inflate-no-toleration
-            kubectl -n default get pod -l app=inflate -o wide
-            kubectl -n default get pod -l app=inflate-no-toleration -o wide
-            kubectl get node -o wide
-            kubectl get nodepool tainted -o yaml
+            kubectl -n "$NAMESPACE" describe deployment inflate
+            kubectl -n "$NAMESPACE" describe deployment inflate-no-toleration
+            kubectl -n "$NAMESPACE" get pod -l app=inflate -o wide
+            kubectl -n "$NAMESPACE" get pod -l app=inflate-no-toleration -o wide
+            kubectl -n "$NAMESPACE" get node -o wide
+            kubectl -n "$NAMESPACE" get nodepool tainted -o yaml
             kubectl get nodeclaims -A -o wide
             kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
       - podLogs:
@@ -113,8 +112,8 @@ spec:
       try:
       - script:
           content: |
-            kubectl scale -n default deployment inflate --replicas 0
-            kubectl scale -n default deployment inflate-no-toleration --replicas 0
+            kubectl -n "$NAMESPACE" scale deployment inflate --replicas 0
+            kubectl -n "$NAMESPACE" scale deployment inflate-no-toleration --replicas 0
     
     - name: Wait for NodeClaims to be deleted
       try:

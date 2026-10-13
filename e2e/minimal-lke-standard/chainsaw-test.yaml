@@ -2,7 +2,6 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  creationTimestamp: null
   name: minimal-lke-standard
   labels:
     all:
@@ -14,7 +13,7 @@ spec:
       try:
       - script:
           timeout: 30s
-          content: kubectl get nodeclaim -l karpenter.sh/nodepool=ml -o json
+          content: kubectl -n "$NAMESPACE" get nodeclaim -l karpenter.sh/nodepool=ml -o json
           check:
             ($error): ~
             (json_parse($stdout).items | length(@)): 0
@@ -48,7 +47,7 @@ spec:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
       - script:
-          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+          content: kubectl -n "$NAMESPACE" get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
@@ -63,21 +62,19 @@ spec:
             kind: Deployment
             metadata:
               name: inflate
-              namespace: default
             status:
               replicas: 5
               availableReplicas: 5
       catch:
       - script:
           content: |
-            kubectl -n default get deployment inflate -o yaml
-            kubectl -n default get pods -l app=inflate -o wide
-            kubectl -n default describe pods -l app=inflate
-            kubectl get nodes -l karpenter.sh/nodepool=ml -o wide
-            kubectl describe nodes -l karpenter.sh/nodepool=ml
-            kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+            kubectl -n "$NAMESPACE" get deployment inflate -o yaml
+            kubectl -n "$NAMESPACE" get pods -l app=inflate -o wide
+            kubectl -n "$NAMESPACE" describe pods -l app=inflate
+            kubectl -n "$NAMESPACE" get nodes -l karpenter.sh/nodepool=ml -o wide
+            kubectl -n "$NAMESPACE" describe nodes -l karpenter.sh/nodepool=ml
+            kubectl -n "$NAMESPACE" get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
-          namespace: default
           selector: app=inflate
           tail: 100
       - podLogs:
@@ -89,7 +86,7 @@ spec:
       try:
       - script:
           content: |
-            kubectl -n default scale deployment inflate --replicas 2
+            kubectl -n "$NAMESPACE" scale deployment inflate --replicas 2
           check:
             ($error): ~
 
@@ -112,7 +109,7 @@ spec:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
       - script:
-          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+          content: kubectl -n "$NAMESPACE" get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
@@ -127,21 +124,19 @@ spec:
             kind: Deployment
             metadata:
               name: inflate
-              namespace: default
             status:
               replicas: 2
               availableReplicas: 2
       catch:
       - script:
           content: |
-            kubectl -n default get deployment inflate -o yaml
-            kubectl -n default get pods -l app=inflate -o wide
-            kubectl -n default describe pods -l app=inflate
-            kubectl get nodes -l karpenter.sh/nodepool=ml -o wide
-            kubectl describe nodes -l karpenter.sh/nodepool=ml
-            kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+            kubectl -n "$NAMESPACE" get deployment inflate -o yaml
+            kubectl -n "$NAMESPACE" get pods -l app=inflate -o wide
+            kubectl -n "$NAMESPACE" describe pods -l app=inflate
+            kubectl -n "$NAMESPACE" get nodes -l karpenter.sh/nodepool=ml -o wide
+            kubectl -n "$NAMESPACE" describe nodes -l karpenter.sh/nodepool=ml
+            kubectl -n "$NAMESPACE" get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
-          namespace: default
           selector: app=inflate
           tail: 100
       - podLogs:
@@ -163,7 +158,7 @@ spec:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
       - script:
-          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+          content: kubectl -n "$NAMESPACE" get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
@@ -173,7 +168,7 @@ spec:
       try:
       - script:
           content: |
-            kubectl scale -n default deployment inflate --replicas 0
+            kubectl -n "$NAMESPACE" scale deployment inflate --replicas 0
           check:
             ($error): ~
 
@@ -191,7 +186,7 @@ spec:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
       - script:
-          content: kubectl -n default get events --sort-by=.metadata.creationTimestamp | tail -n 50
+          content: kubectl -n "$NAMESPACE" get events --sort-by=.metadata.creationTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
           selector: app.kubernetes.io/name=karpenter
