@@ -81,14 +81,18 @@ Inputs:
 
 ### Step 1: Fast idempotency
 
-- Query instances by tag `karpenter.sh/nodeclaim:<nodeClaimName>`.
-- If exactly one instance exists, return it (covers status update failure after instance tag write).
+- Query all instance pages for `utils.NodeClaimTag(nodeClaim.Name)` (`karpenter.sh/nodeclaim=<normalizedName>`).
+- If one or more instances match, return the first instance in the API response.
+- If multiple instances match, log the ownership tag, match count, and selected instance ID. Do not request more capacity.
+- After the NodeClaim records the selected provider ID, instance garbage collection can remove the other workers. Ownership tags do not prevent this cleanup.
 
 ### Step 2: Claim-or-scale loop (bounded by `DefaultCreateDeadline`)
 
 Repeat until deadline:
 
 - Lock mutex for `poolKey`.
+- Repeat the ownership lookup before pool discovery, candidate claiming, or scaling. This recovers a worker when an earlier ownership update succeeded but its response was lost.
+- Return a matching worker immediately. If the lookup fails, do not treat the failure as missing capacity.
 - Find or create the LKE pool for `(nodepoolName, instanceType)`.
 - Determine claimable instances:
   - **Standard:** pool membership from `GetLKENodePool(poolID).Linodes`.
@@ -117,61 +121,42 @@ On timeout: return a retryable `CreateError` (reason `NodePoolProvisioning`) so 
 sequenceDiagram
     autonumber
     actor NC as NodeClaim Controller
-    participant CP as CloudProvider.Create()
     participant LKE as LKE Provider
-    participant POOL as LKE NodePool API
     participant INST as Linode Instance API
-    participant M as Keyed Mutex (karpenterNodePool+type)
+    participant POOL as LKE NodePool API
+    participant M as Keyed Mutex
 
-    NC->>CP: Create(nodeClaim)
-    CP->>LKE: Create(nodeClaim)
-
-    %% Step 1: Fast idempotency
-    LKE->>INST: ListInstances(tag=karpenter.sh/nodeclaim:<nc>)
-    alt exactly one instance found
-        INST-->>LKE: instance
-        LKE-->>CP: return instance (with providerID)
-        CP-->>NC: return nodeClaim with providerID set
-    else No instances found with tag karpenter.sh/nodeclaim:<nc>
-        loop until deadline (`DefaultCreateDeadline`)
-            critical pool-key mutex
-                LKE->>M: Lock(poolKey)
-                LKE->>POOL: ListPools(cluster)
-                LKE->>LKE: filter by nodePool+type+managed
-
-                alt no pool found
-                    LKE->>POOL: CreatePool(count=1, pool tags)
-                    LKE->>INST: ListInstances(nodepool=<poolID>, lke<clusterID>, managed=true)
-                    LKE->>LKE: filter by instanceType and WITHOUT karpenter.sh/nodeclaim:* tag
-                    alt claimable instance found
-                        LKE->>INST: UpdateInstance(tags += karpenter.sh/nodeclaim:<nc>)
-                        LKE->>INST: GetInstance (verify tags applied, poll up to 5s every 1s)
-                        LKE->>M: Unlock(poolKey)
-                        LKE-->>CP: return instance (with providerID)
-                        CP-->>NC: return nodeClaim with providerID set
-                    else none claimable
-                        LKE->>M: Unlock(poolKey)
-                        Note over LKE: sleep 200ms, retry
-                    end
-                else pool exists
-                    LKE->>INST: ListInstances(nodepool=<poolID>, lke<clusterID>, managed=true)
-                    LKE->>LKE: filter by instanceType and WITHOUT karpenter.sh/nodeclaim:* tag
-                    alt claimable instance found
-                        LKE->>INST: UpdateInstance(tags += karpenter.sh/nodeclaim:<nc>)
-                        LKE->>INST: GetInstance (verify tags applied, poll up to 5s every 1s)
-                        LKE->>M: Unlock(poolKey)
-                        LKE-->>CP: return instance (with providerID)
-                        CP-->>NC: return nodeClaim with providerID set
-                    else none claimable
-                        LKE->>POOL: UpdatePool(count+1)
-                        LKE->>M: Unlock(poolKey)
-                        Note over LKE: sleep 200ms, retry
+    NC->>LKE: Create(nodeClaim)
+    LKE->>INST: List all pages matching ownership tag
+    alt ownership found
+        LKE->>LKE: Select first instance and log duplicates
+        LKE-->>NC: Return selected worker
+    else ownership missing
+        loop until create deadline
+            LKE->>M: Lock(poolKey)
+            LKE->>INST: Repeat ownership lookup
+            alt ownership found
+                LKE->>LKE: Select first instance and log duplicates
+                LKE->>M: Unlock(poolKey)
+                LKE-->>NC: Return selected worker
+            else ownership missing
+                LKE->>POOL: Find or create pool
+                LKE->>INST: Discover unclaimed workers
+                alt unclaimed worker found
+                    LKE->>INST: Apply ownership tag
+                    LKE->>INST: Verify ownership tag
+                else no unclaimed worker
+                    opt No acknowledged create or scale in this call
+                        LKE->>POOL: Scale existing pool by one
                     end
                 end
+                LKE->>M: Unlock(poolKey)
+                Note over LKE: Return verified worker or retry with capacity flags intact
+            else ownership lookup failed
+                LKE->>M: Unlock(poolKey)
+                Note over LKE: Retry transient errors without capacity changes
             end
         end
-        LKE-->>CP: CreateError(NodePoolProvisioning) on timeout
-        CP-->>NC: CreateError(NodePoolProvisioning) on timeout
     end
 ```
 
@@ -185,7 +170,7 @@ sequenceDiagram
   - Karpenter retries API errors with HTTP status 429 or 5xx.
 - **Pool and instance matching**:
   - If more than one pool matches a node pool name and instance type, Karpenter uses the first pool.
-  - If more than one instance matches a NodeClaim, Karpenter uses the first instance.
+  - If more than one instance matches a NodeClaim, Karpenter selects the first instance in the API response and logs the duplicate ownership. It leaves the other instances for garbage collection.
   - Karpenter does not check whether an instance has multiple NodeClaim tags.
 
 ### Plan availability
@@ -226,6 +211,7 @@ This section calls out **Linode API call volume by function**, the key **multipl
   - **Fast idempotency** (Step 1):
     - `ListInstances` via `utils.LookupInstanceByTag` (`pkg/utils/utils.go`) for `karpenter.sh/nodeclaim:<nodeClaimName>`.
   - **Claim-or-scale loop** (Step 2, bounded by `DefaultCreateDeadline`):
+    - Ownership recovery: `ListInstances` via `LookupInstanceByTag` reads all matching pages at the start of each locked attempt. A match returns before pool or worker mutations.
     - Pool discovery:
       - `ListLKENodePools` in `findOrCreatePool()`.
     - Standard-tier claim path:
