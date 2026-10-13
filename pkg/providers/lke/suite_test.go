@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1975,6 +1976,128 @@ var _ = Describe("LKENodeProvider", func() {
 	})
 
 	Context("Delete", func() {
+		DescribeTable("should preserve a concurrently created worker when deleting from a stale pool snapshot",
+			func(tier linodego.LKEVersionTier) {
+				ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+				nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+				instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+				Expect(err).ToNot(HaveOccurred())
+				instanceTypes = lo.Filter(instanceTypes, func(instanceType *corecloudprovider.InstanceType, _ int) bool {
+					return instanceType.Name == standard8GBType
+				})
+				Expect(instanceTypes).ToNot(BeEmpty())
+
+				poolID := 450
+				instanceID := 5501
+				poolTags := []string{
+					fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+					fmt.Sprintf("%s=true", v1.LabelLKEManaged),
+				}
+				linodeEnv.LinodeAPI.ClusterTier = tier
+				if tier == linodego.LKEVersionEnterprise {
+					poolTags = append(poolTags, fmt.Sprintf("nodepool=%d", poolID), fmt.Sprintf("lke%d", fake.DefaultClusterID))
+				}
+				pool := &linodego.LKENodePool{
+					ID:    poolID,
+					Count: 1,
+					Type:  standard8GBType,
+					Tags:  poolTags,
+					Linodes: []linodego.LKENodePoolLinode{
+						{InstanceID: instanceID, ID: "node-5501"},
+					},
+				}
+				linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+				now := time.Now()
+				instanceTags := append(append([]string(nil), poolTags...), utils.NodeClaimTag(nodeClaim.Name))
+				linodeEnv.LinodeAPI.Instances.Store(instanceID, linodego.Instance{
+					ID:           instanceID,
+					Type:         standard8GBType,
+					Tags:         instanceTags,
+					Created:      &now,
+					LKEClusterID: fake.DefaultClusterID,
+				})
+
+				pauseFirstList := make(chan struct{}, 1)
+				pauseFirstList <- struct{}{}
+				firstListRead := make(chan struct{})
+				resumeFirstList := make(chan struct{})
+				var resumeOnce sync.Once
+				resumeList := func() { resumeOnce.Do(func() { close(resumeFirstList) }) }
+				linodeEnv.LinodeAPI.AfterListLKENodePools = func(listCtx context.Context) {
+					select {
+					case <-pauseFirstList:
+						close(firstListRead)
+						select {
+						case <-resumeFirstList:
+						case <-listCtx.Done():
+						}
+					default:
+					}
+				}
+				provider := lke.NewDefaultProvider(
+					fake.DefaultClusterID,
+					tier,
+					fake.DefaultClusterName,
+					fake.DefaultRegion,
+					recorder,
+					linodeEnv.LinodeAPI,
+					linodeEnv.UnavailableOfferingsCache,
+					linodeEnv.NodePoolCache,
+					lke.ProviderConfig{CreateDeadline: 5 * time.Second, RetryDelay: time.Millisecond},
+				)
+
+				deleteResult := make(chan error, 1)
+				go func() {
+					deleteResult <- provider.Delete(ctx, strconv.Itoa(instanceID))
+				}()
+				deleteFinished := false
+				defer func() {
+					resumeList()
+					if !deleteFinished {
+						select {
+						case <-deleteResult:
+						case <-time.After(5 * time.Second):
+						}
+					}
+				}()
+				select {
+				case <-firstListRead:
+				case <-time.After(5 * time.Second):
+					Fail("Delete did not complete its initial pool lookup")
+				}
+
+				createNodeClaim := nodeClaim.DeepCopy()
+				createNodeClaim.Name = "concurrent-create"
+				createdInstance, err := provider.Create(ctx, nodeClass, createNodeClaim, map[string]string{}, instanceTypes)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(createdInstance).ToNot(BeNil())
+
+				resumeList()
+				select {
+				case err := <-deleteResult:
+					deleteFinished = true
+					Expect(err).ToNot(HaveOccurred())
+				case <-time.After(5 * time.Second):
+					Fail("Delete did not finish after the stale lookup was released")
+				}
+
+				storedPool, ok := linodeEnv.LinodeAPI.NodePools.Load(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID))
+				Expect(ok).To(BeTrue())
+				updatedPool, ok := storedPool.(*linodego.LKENodePool)
+				Expect(ok).To(BeTrue())
+				Expect(updatedPool.Linodes).To(HaveLen(1))
+				Expect(updatedPool.Linodes[0].InstanceID).To(Equal(createdInstance.ID))
+				_, oldInstanceExists := linodeEnv.LinodeAPI.Instances.Load(instanceID)
+				Expect(oldInstanceExists).To(BeFalse())
+				Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Calls()).To(Equal(1))
+				Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Calls()).To(Equal(0))
+				Expect(updatedPool.Count).To(Equal(1))
+			},
+			Entry("Standard LKE", linodego.LKEVersionStandard),
+			Entry("LKE-E", linodego.LKEVersionEnterprise),
+		)
+
 		Context("Standard tier", func() {
 			It("should delete individual node when pool has multiple nodes", func() {
 				poolID := 401

@@ -243,41 +243,43 @@ func (p *DefaultProvider) lookupExistingInstance(ctx context.Context, nodeClaim 
 
 func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceType, poolKey string, createdPool, scaledOnce *bool) (*instance.Instance, error) {
 	logger := log.FromContext(ctx)
-	return p.withPoolLock(ctx, poolKey, func() (*instance.Instance, error) {
+	var createdInstance *instance.Instance
+	err := p.withPoolLock(ctx, poolKey, func() error {
 		// Recheck under the lock on every retry to recover instances claimed by an earlier attempt.
 		existingInstance, err := p.lookupExistingInstance(ctx, nodeClaim)
 		if err != nil && !errors.Is(err, utils.ErrInstanceNotFound) {
-			return nil, err
+			return err
 		}
 		if existingInstance != nil {
-			return existingInstance, nil
+			createdInstance = existingInstance
+			return nil
 		}
 
 		pool, err := p.findOrCreatePool(ctx, nodeClass, nodeClaim, tags, instanceType, createdPool)
 		if err != nil {
 			if cloudprovider.IsInsufficientCapacityError(err) {
-				return nil, err
+				return err
 			}
-			return nil, cloudprovider.NewCreateError(err, "NodePoolCreationFailed", fmt.Sprintf("Failed to find or create LKE node pool: %s", err.Error()))
+			return cloudprovider.NewCreateError(err, "NodePoolCreationFailed", fmt.Sprintf("Failed to find or create LKE node pool: %s", err.Error()))
 		}
 
 		claimableInstance, err := p.findClaimableInstance(ctx, pool)
 		if err != nil && !isRetryableCreateError(err) {
-			return nil, err
+			return err
 		}
 
 		if claimableInstance != nil {
 			claimedInstance, err := p.claimInstance(ctx, claimableInstance, nodeClaim, nodeClass, pool)
 			if err != nil {
-				return nil, fmt.Errorf("%w: claiming instance %d: %w", ErrClaimFailed, claimableInstance.ID, err)
+				return fmt.Errorf("%w: claiming instance %d: %w", ErrClaimFailed, claimableInstance.ID, err)
 			}
-			inst := instance.NewLKEInstance(claimedInstance.ID, pool.Type, claimedInstance.Tags, p.region, claimedInstance.Created)
-			p.cacheNode(inst)
-			return inst, nil
+			createdInstance = instance.NewLKEInstance(claimedInstance.ID, pool.Type, claimedInstance.Tags, p.region, claimedInstance.Created)
+			p.cacheNode(createdInstance)
+			return nil
 		}
 
 		if *createdPool || *scaledOnce {
-			return nil, ErrNoClaimableInstance
+			return ErrNoClaimableInstance
 		}
 
 		_, err = p.client.UpdateLKENodePool(ctx, p.clusterID, pool.ID, linodego.LKENodePoolUpdateOptions{Count: pool.Count + 1})
@@ -286,16 +288,17 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 			// TODO: Revisit capacity classification when a reliable datacenter-level signal exists.
 			// Scale errors can describe networking or request limits, so they must not invalidate the offering.
 			if linodego.ErrHasStatus(err, http.StatusBadRequest) {
-				return nil, cloudprovider.NewCreateError(fmt.Errorf("scaling LKE node pool %d: %w", pool.ID, err), "NodePoolScaleFailed", fmt.Sprintf("Failed to scale LKE node pool %d: %s", pool.ID, err.Error()))
+				return cloudprovider.NewCreateError(fmt.Errorf("scaling LKE node pool %d: %w", pool.ID, err), "NodePoolScaleFailed", fmt.Sprintf("Failed to scale LKE node pool %d: %s", pool.ID, err.Error()))
 			}
-			return nil, fmt.Errorf("%w: scaling LKE node pool %d: %w", ErrPoolScaleFailed, pool.ID, err)
+			return fmt.Errorf("%w: scaling LKE node pool %d: %w", ErrPoolScaleFailed, pool.ID, err)
 		}
 		*scaledOnce = true
-		return nil, ErrNoClaimableInstance
+		return ErrNoClaimableInstance
 	})
+	return createdInstance, err
 }
 
-func (p *DefaultProvider) withPoolLock(ctx context.Context, key string, fn func() (*instance.Instance, error)) (*instance.Instance, error) {
+func (p *DefaultProvider) withPoolLock(ctx context.Context, key string, fn func() error) error {
 	p.poolMutex.LockKey(key)
 	defer func() {
 		if err := p.poolMutex.UnlockKey(key); err != nil {
@@ -646,8 +649,38 @@ func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	if len(lkePool.Linodes) <= 1 {
-		if err := p.client.DeleteLKENodePool(ctx, p.clusterID, lkePool.ID); err != nil {
+	poolTags := utils.TagListToMap(lkePool.Tags)
+	poolKey := makePoolKey(poolTags[karpv1.NodePoolLabelKey], lkePool.Type)
+	return p.withPoolLock(ctx, poolKey, func() error {
+		// The first lookup only identifies the lock key. Refresh membership after acquiring
+		// the lock so a concurrent Create cannot make this decision from a stale snapshot.
+		lkePool, err = p.findLKENodePoolFromLinodeInstanceID(ctx, instanceID)
+		if err != nil {
+			if cloudprovider.IsNodeClaimNotFoundError(err) {
+				p.nodeCache.Delete(id)
+			}
+			return err
+		}
+
+		if len(lkePool.Linodes) <= 1 {
+			if err := p.client.DeleteLKENodePool(ctx, p.clusterID, lkePool.ID); err != nil {
+				if linodego.IsNotFound(err) {
+					p.nodeCache.Delete(id)
+					return cloudprovider.NewNodeClaimNotFoundError(err)
+				}
+				return err
+			}
+			p.nodeCache.Delete(id)
+			return nil
+		}
+
+		poolNode, err := findNodeInPool(lkePool, instanceID)
+		if err != nil {
+			p.nodeCache.Delete(id)
+			return cloudprovider.NewNodeClaimNotFoundError(err)
+		}
+
+		if err := p.client.DeleteLKENodePoolNode(ctx, p.clusterID, poolNode.ID); err != nil {
 			if linodego.IsNotFound(err) {
 				p.nodeCache.Delete(id)
 				return cloudprovider.NewNodeClaimNotFoundError(err)
@@ -656,23 +689,7 @@ func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
 		}
 		p.nodeCache.Delete(id)
 		return nil
-	}
-
-	poolNode, err := findNodeInPool(lkePool, instanceID)
-	if err != nil {
-		p.nodeCache.Delete(id)
-		return cloudprovider.NewNodeClaimNotFoundError(err)
-	}
-
-	if err := p.client.DeleteLKENodePoolNode(ctx, p.clusterID, poolNode.ID); err != nil {
-		if linodego.IsNotFound(err) {
-			p.nodeCache.Delete(id)
-			return cloudprovider.NewNodeClaimNotFoundError(err)
-		}
-		return err
-	}
-	p.nodeCache.Delete(id)
-	return nil
+	})
 }
 
 func isRetryableCreateError(err error) bool {
