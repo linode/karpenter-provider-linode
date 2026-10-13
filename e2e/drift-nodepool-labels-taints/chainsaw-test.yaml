@@ -12,7 +12,7 @@ spec:
       try:
       - script:
           timeout: 30s
-          content: kubectl -n "$NAMESPACE" get nodeclaim -l karpenter.sh/nodepool=drift-labels-taints -o json
+          content: kubectl -n "$NAMESPACE" get nodeclaim -l karpenter.sh/nodepool=drift -o json
           check:
             ($error): ~
             (json_parse($stdout).items | length(@)): 0
@@ -60,8 +60,8 @@ spec:
           content: |
             set -euo pipefail
             marker=$(date +%s)
-            kubectl -n "$NAMESPACE" patch nodepool drift-labels-taints --type merge -p "{\"spec\":{\"template\":{\"metadata\":{\"labels\":{\"e2e.linode.dev/drift-marker\":\"$marker\"}},\"spec\":{\"taints\":[{\"key\":\"e2e.linode.dev/drift\",\"value\":\"$marker\",\"effect\":\"NoSchedule\"}]}}}}"
-            if kubectl -n "$NAMESPACE" wait --for=condition=Drifted nodeclaim -l karpenter.sh/nodepool=drift-labels-taints --timeout=5m; then
+            kubectl -n "$NAMESPACE" patch nodepool drift --type merge -p "{\"spec\":{\"template\":{\"metadata\":{\"labels\":{\"e2e.linode.dev/drift-marker\":\"$marker\"}},\"spec\":{\"taints\":[{\"key\":\"e2e.linode.dev/drift\",\"value\":\"$marker\",\"effect\":\"NoSchedule\"}]}}}}"
+            if kubectl -n "$NAMESPACE" wait --for=condition=Drifted nodeclaim -l karpenter.sh/nodepool=drift --timeout=5m; then
               echo "NodeClaim marked drifted"
               exit 0
             fi
@@ -73,7 +73,7 @@ spec:
           kind: NodeClaim
       - script:
           content: |
-            kubectl -n "$NAMESPACE" get nodepool drift-labels-taints -o yaml
+            kubectl -n "$NAMESPACE" get nodepool drift -o yaml
             kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
       - podLogs:
           namespace: kube-system
@@ -91,7 +91,7 @@ spec:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
           timeout: 20m
-          selector: karpenter.sh/nodepool=drift-labels-taints
+          selector: karpenter.sh/nodepool=drift
           for:
             deletion: {}
       catch:
