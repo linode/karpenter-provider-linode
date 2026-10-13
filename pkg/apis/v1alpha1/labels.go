@@ -32,6 +32,8 @@ func init() {
 	karpv1.RestrictedLabelDomains = karpv1.RestrictedLabelDomains.Insert(RestrictedLabelDomains...)
 	karpv1.WellKnownLabels = karpv1.WellKnownLabels.Union(LinodeWellKnownLabels)
 	karpv1.WellKnownLabels = karpv1.WellKnownLabels.Delete(unused...)
+	// Karpenter must recognize this CSI key to intersect volume topology requirements.
+	karpv1.WellKnownLabels = karpv1.WellKnownLabels.Insert(LabelBlockStorageCSIRegion)
 }
 
 var (
@@ -73,6 +75,7 @@ var (
 	LabelInstanceGeneration                  = apis.Group + "/instance-generation"
 	LabelInstanceMemory                      = apis.Group + "/instance-memory"
 	LabelInstanceDisk                        = apis.Group + "/instance-disk"
+	LabelBlockStorageCSIRegion               = "topology.linode.com/region"
 	LKEClusterNameTagKey                     = "lke-cluster-name"
 	NodePoolTagKey                           = karpv1.NodePoolLabelKey
 	NodeClassTagKey                          = LabelNodeClass

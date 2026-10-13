@@ -142,6 +142,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 		})
 		Expect(ok).To(BeTrue())
 		Expect(instanceType.Requirements.Get(corev1.LabelTopologyZone).Has(fake.DefaultRegion)).To(BeTrue())
+		Expect(instanceType.Requirements.Get("topology.linode.com/region").Any()).To(Equal(fake.DefaultRegion))
 		Expect(instanceType.Requirements.Get(karpv1.CapacityTypeLabelKey).Has(karpv1.CapacityTypeOnDemand)).To(BeTrue())
 
 		price, ok := instanceType.OfferingPrice(fake.DefaultRegion, karpv1.CapacityTypeOnDemand)
@@ -192,6 +193,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 			// Well known
 			karpv1.NodePoolLabelKey:        nodePool.Name,
 			corev1.LabelTopologyRegion:     fake.DefaultRegion,
+			"topology.linode.com/region":   fake.DefaultRegion,
 			corev1.LabelInstanceTypeStable: "g6-standard-2",
 			corev1.LabelOSStable:           "linux",
 			corev1.LabelArchStable:         "amd64",
@@ -217,7 +219,10 @@ var _ = Describe("InstanceTypeProvider", func() {
 		}
 		ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pods...)
 		for _, pod := range pods {
-			ExpectScheduled(ctx, env.Client, pod)
+			node := ExpectScheduled(ctx, env.Client, pod)
+			if region, ok := pod.Spec.NodeSelector["topology.linode.com/region"]; ok {
+				Expect(node.Labels["topology.linode.com/region"]).To(Equal(region))
+			}
 		}
 	})
 	Context("Overhead", func() {
