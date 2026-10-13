@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: inflate
-  namespace: default
   labels:
     e2e.linode.dev/cleanup: "true"
 spec:
@@ -22,7 +21,7 @@ spec:
         runAsGroup: 3000
         fsGroup: 2000
       nodeSelector:
-        e2e.linode.dev/consolidation-empty: "true"
+        e2e.linode.dev/empty: "true"
       tolerations:
       - key: e2e.linode.dev/test
         operator: Equal

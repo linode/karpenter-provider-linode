@@ -2,7 +2,6 @@
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  creationTimestamp: null
   name: consolidation-non-empty-step-scale
   labels:
     all:
@@ -13,7 +12,7 @@ spec:
       try:
       - script:
           timeout: 30s
-          content: kubectl get nodeclaim -l karpenter.sh/nodepool=consolidation-step-scale -o json
+          content: kubectl -n "$NAMESPACE" get nodeclaim -l karpenter.sh/nodepool=scale -o json
           check:
             ($error): ~
             (json_parse($stdout).items | length(@)): 0
@@ -37,7 +36,6 @@ spec:
             kind: Deployment
             metadata:
               name: inflate
-              namespace: default
             status:
               replicas: 5
               availableReplicas: 5
@@ -61,8 +59,8 @@ spec:
           timeout: 15m
           content: |
             set -euo pipefail
-            count=$(kubectl get nodeclaim \
-              -l karpenter.sh/nodepool=consolidation-step-scale,node.kubernetes.io/instance-type=g6-standard-4 \
+            count=$(kubectl -n "$NAMESPACE" get nodeclaim \
+              -l karpenter.sh/nodepool=scale,node.kubernetes.io/instance-type=g6-standard-4 \
               -o name | wc -l | tr -d ' ')
             if [ "$count" -lt 2 ]; then
               echo "Expected at least 2 g6-standard-4 NodeClaims, got $count"
@@ -88,28 +86,28 @@ spec:
           timeout: 20m
           content: |
             set -euo pipefail
-            kubectl -n default scale deployment inflate --replicas 8
-            kubectl -n default rollout status deployment/inflate --timeout=15m
-            kubectl -n default scale deployment inflate --replicas 2
-            kubectl -n default rollout status deployment/inflate --timeout=15m
+            kubectl -n "$NAMESPACE" scale deployment inflate --replicas 8
+            kubectl -n "$NAMESPACE" rollout status deployment/inflate --timeout=15m
+            kubectl -n "$NAMESPACE" scale deployment inflate --replicas 2
+            kubectl -n "$NAMESPACE" rollout status deployment/inflate --timeout=15m
             for _ in $(seq 1 60); do
-              total=$(kubectl get nodeclaim \
-                -l karpenter.sh/nodepool=consolidation-step-scale \
+              total=$(kubectl -n "$NAMESPACE" get nodeclaim \
+                -l karpenter.sh/nodepool=scale \
                 -o name | wc -l | tr -d ' ')
-              matching=$(kubectl get nodeclaim \
-                -l karpenter.sh/nodepool=consolidation-step-scale,node.kubernetes.io/instance-type=g6-standard-4 \
+              matching=$(kubectl -n "$NAMESPACE" get nodeclaim \
+                -l karpenter.sh/nodepool=scale,node.kubernetes.io/instance-type=g6-standard-4 \
                 -o name | wc -l | tr -d ' ')
               if [ "$total" -eq 1 ] && [ "$matching" -eq 1 ]; then
-                name=$(kubectl get nodeclaim \
-                  -l karpenter.sh/nodepool=consolidation-step-scale,node.kubernetes.io/instance-type=g6-standard-4 \
+                name=$(kubectl -n "$NAMESPACE" get nodeclaim \
+                  -l karpenter.sh/nodepool=scale,node.kubernetes.io/instance-type=g6-standard-4 \
                   -o jsonpath='{.items[0].metadata.name}')
-                kubectl wait "nodeclaim/$name" --for=condition=Ready --timeout=30s
+                kubectl -n "$NAMESPACE" wait "nodeclaim/$name" --for=condition=Ready --timeout=30s
                 exit 0
               fi
               sleep 15
             done
             echo "Expected exactly 1 g6-standard-4 NodeClaim after scale down, got:"
-            kubectl get nodeclaim -l karpenter.sh/nodepool=consolidation-step-scale
+            kubectl -n "$NAMESPACE" get nodeclaim -l karpenter.sh/nodepool=scale
             exit 1
       catch:
       - describe:
@@ -125,7 +123,7 @@ spec:
     - name: Scale inflate deployment to zero
       try:
       - script:
-          content: kubectl -n default scale deployment inflate --replicas 0
+          content: kubectl -n "$NAMESPACE" scale deployment inflate --replicas 0
 
     - name: Wait for NodeClaims to be deleted
       try:
@@ -133,7 +131,7 @@ spec:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
           timeout: 20m
-          selector: karpenter.sh/nodepool=consolidation-step-scale
+          selector: karpenter.sh/nodepool=scale
           for:
             deletion: {}
       catch:

@@ -375,8 +375,8 @@ pre-e2e-cleanup-and-sanity:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	export KUBECONFIG={{ KUBECONFIG }}
-	kubectl -n default delete deployment -l e2e.linode.dev/cleanup=true --ignore-not-found=true
-	kubectl -n default delete pod -l e2e.linode.dev/cleanup=true --ignore-not-found=true
+	kubectl delete deployment -A -l e2e.linode.dev/cleanup=true --ignore-not-found=true
+	kubectl delete pod -A -l e2e.linode.dev/cleanup=true --ignore-not-found=true
 	kubectl delete nodepool -l e2e.linode.dev/cleanup=true --ignore-not-found=true
 	kubectl delete linodenodeclass -l e2e.linode.dev/cleanup=true --ignore-not-found=true
 	kubectl delete nodeclaims --all --ignore-not-found=true
