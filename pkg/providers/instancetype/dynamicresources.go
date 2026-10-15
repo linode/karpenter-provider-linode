@@ -19,7 +19,6 @@ import (
 	"unique"
 
 	"github.com/linode/linodego/v2"
-	resourcev1 "k8s.io/api/resource/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 )
 
@@ -31,21 +30,26 @@ func nvidiaGPUResources(info *linodego.LinodeType) cloudprovider.DynamicResource
 	if info.GPUs <= 0 {
 		return cloudprovider.DynamicResources{}
 	}
+	model, known := nvidiaGPUMetadata[info.ID]
+	if !known {
+		model = nvidiaGPUModel{attributes: nvidiaGPUTypeAttributes}
+	}
 	devices := make([]cloudprovider.Device, info.GPUs)
 	for i := range devices {
 		devices[i] = cloudprovider.Device{
 			// These identities are local to scheduling simulation. The real driver
 			// publishes its own node-specific pool and device names.
-			Name: unique.Make(fmt.Sprintf("gpu-%d", i)),
-			Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
-				"type": {StringValue: new("gpu")},
-			},
+			Name:       unique.Make(fmt.Sprintf("gpu-%d", i)),
+			Attributes: model.attributes,
+			Capacity:   model.capacity,
 		}
 	}
 	return cloudprovider.DynamicResources{
 		ResourceSliceTemplates: []*cloudprovider.ResourceSliceTemplate{{
-			Driver:  unique.Make("gpu.nvidia.com"),
-			Pool:    cloudprovider.ResourcePool{Name: unique.Make("gpus")},
+			Driver: unique.Make("gpu.nvidia.com"),
+			// Core caches selector results by driver/pool/device across plans.
+			// Include the plan ID so one plan cannot reuse another's match.
+			Pool:    cloudprovider.ResourcePool{Name: unique.Make("gpus-" + info.ID)},
 			Devices: devices,
 		}},
 	}
