@@ -277,7 +277,7 @@ init-lke-cluster:
 	just wait-for-lke-kube-api
 
 # Destroy your LKE test cluster
-destroy-lke-cluster cluster_id:
+destroy-lke-cluster cluster_id: (get-lke-kubeconfig cluster_id)
 	#!/usr/bin/env bash
 	set -euo pipefail
 	export KUBECONFIG={{ KUBECONFIG }}
