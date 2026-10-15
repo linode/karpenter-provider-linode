@@ -5,6 +5,7 @@ metadata:
   name: scheduling-nodepool-label-selector
   labels:
     all:
+    pr:
     category.scheduling:
 spec:
   steps:

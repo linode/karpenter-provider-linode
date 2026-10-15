@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: blockstorage-incompatible
+  labels:
+    e2e.linode.dev/cleanup: "true"
+    e2e.linode.dev/blockstorage-topology: "true"
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: e2e-blockstorage-incompatible
+  csi:
+    driver: linodebs.csi.linode.com
+    volumeHandle: e2e-blockstorage-incompatible
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: topology.linode.com/region
+              operator: In
+              values:
+                - "($topology.incompatibleRegion)"
+  claimRef:
+    namespace: "($namespace)"
+    name: blockstorage-incompatible
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: blockstorage-incompatible
+  namespace: "($namespace)"
+  labels:
+    e2e.linode.dev/cleanup: "true"
+    e2e.linode.dev/blockstorage-topology: "true"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: e2e-blockstorage-incompatible
+  volumeName: blockstorage-incompatible
