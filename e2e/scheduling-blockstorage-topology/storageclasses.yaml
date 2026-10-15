@@ -1,0 +1,26 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: e2e-blockstorage-wffc
+  labels:
+    e2e.linode.dev/cleanup: "true"
+provisioner: linodebs.csi.linode.com
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: e2e-blockstorage-wffc-explicit
+  labels:
+    e2e.linode.dev/cleanup: "true"
+provisioner: linodebs.csi.linode.com
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+allowedTopologies:
+  - matchLabelExpressions:
+      - key: topology.linode.com/region
+        values:
+          - "($topology.region)"

@@ -5,6 +5,7 @@ metadata:
   name: drift-nodepool-labels-taints
   labels:
     all:
+    pr:
     category.drift:
 spec:
   steps:

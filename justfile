@@ -277,10 +277,17 @@ init-lke-cluster:
 	just wait-for-lke-kube-api
 
 # Destroy your LKE test cluster
-destroy-lke-cluster cluster_id:
+destroy-lke-cluster cluster_id: (get-lke-kubeconfig cluster_id)
 	#!/usr/bin/env bash
 	set -euo pipefail
 	export KUBECONFIG={{ KUBECONFIG }}
+	orphaned_pvs=$(kubectl get pv -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.storageClassName}{"\n"}{end}' | awk '$2 == "e2e-blockstorage-wffc" || $2 == "e2e-blockstorage-wffc-explicit" { print $1 }')
+	kubectl delete pvc -A -l e2e.linode.dev/blockstorage-topology=true --ignore-not-found=true --wait=true --timeout=10m
+	for pv in $orphaned_pvs; do
+		kubectl delete pv "$pv" --ignore-not-found=true --wait=true --timeout=10m
+	done
+	kubectl delete pv blockstorage-incompatible --ignore-not-found=true --wait=true --timeout=2m
+	kubectl delete storageclass e2e-blockstorage-wffc e2e-blockstorage-wffc-explicit --ignore-not-found=true --wait=true --timeout=2m
 	export LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }}
 	export LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }}
 	if [ "{{ CLUSTER_TIER }}" = "standard" ] && [ -f "{{ KUBECONFIG }}" ]; then
@@ -377,6 +384,13 @@ pre-e2e-cleanup-and-sanity:
 	export KUBECONFIG={{ KUBECONFIG }}
 	kubectl delete deployment -A -l e2e.linode.dev/cleanup=true --ignore-not-found=true
 	kubectl delete pod -A -l e2e.linode.dev/cleanup=true --ignore-not-found=true
+	orphaned_pvs=$(kubectl get pv -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.storageClassName}{"\n"}{end}' | awk '$2 == "e2e-blockstorage-wffc" || $2 == "e2e-blockstorage-wffc-explicit" { print $1 }')
+	kubectl delete pvc -A -l e2e.linode.dev/blockstorage-topology=true --ignore-not-found=true --wait=true --timeout=10m
+	for pv in $orphaned_pvs; do
+		kubectl delete pv "$pv" --ignore-not-found=true --wait=true --timeout=10m
+	done
+	kubectl delete pv blockstorage-incompatible --ignore-not-found=true --wait=true --timeout=2m
+	kubectl delete storageclass e2e-blockstorage-wffc e2e-blockstorage-wffc-explicit --ignore-not-found=true --wait=true --timeout=2m
 	kubectl delete nodepool -l e2e.linode.dev/cleanup=true --ignore-not-found=true
 	kubectl delete linodenodeclass -l e2e.linode.dev/cleanup=true --ignore-not-found=true
 	kubectl delete nodeclaims --all --ignore-not-found=true

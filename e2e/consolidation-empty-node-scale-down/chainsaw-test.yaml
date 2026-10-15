@@ -5,6 +5,7 @@ metadata:
   name: empty-node-scale-down
   labels:
     all:
+    pr:
     category.consolidation:
 spec:
   steps:

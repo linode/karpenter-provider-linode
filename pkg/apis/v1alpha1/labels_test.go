@@ -28,3 +28,11 @@ func TestTopologyZoneIsWellKnown(t *testing.T) {
 		t.Fatal("topology zone must remain a well-known label for offering compatibility")
 	}
 }
+
+func TestBlockStorageCSIRegionIsWellKnown(t *testing.T) {
+	t.Parallel()
+
+	if !karpv1.WellKnownLabels.Has(LabelBlockStorageCSIRegion) {
+		t.Fatal("Block Storage CSI region must be well-known for volume topology compatibility")
+	}
+}

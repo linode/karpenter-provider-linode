@@ -1,0 +1,294 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: scheduling-blockstorage-topology
+  labels:
+    all:
+    pr:
+    category.scheduling:
+spec:
+  steps:
+    - name: Make sure there are no lingering NodeClaims
+      try:
+      - script:
+          timeout: 30s
+          content: kubectl get nodeclaim -l karpenter.sh/nodepool=blockstorage-topology -o json
+          check:
+            ($error): ~
+            (json_parse($stdout).items | length(@)): 0
+
+    - name: Discover CSI region and create topology test storage
+      try:
+      - script:
+          shell: bash
+          shellArgs:
+            - -c
+          timeout: 30s
+          content: |
+            set -euo pipefail
+            bootstrap_node=$(kubectl get nodes -l '!karpenter.sh/nodepool' -o jsonpath='{.items[0].metadata.name}')
+            [ -n "$bootstrap_node" ]
+            region=$(kubectl get node "$bootstrap_node" -o jsonpath='{.metadata.labels.topology\.linode\.com/region}')
+            kubernetes_region=$(kubectl get node "$bootstrap_node" -o jsonpath='{.metadata.labels.topology\.kubernetes\.io/region}')
+            if [ -z "$region" ] || [ "$region" != "$kubernetes_region" ]; then
+              echo "CSI region '$region' does not match Kubernetes region '$kubernetes_region' on $bootstrap_node" >&2
+              exit 1
+            fi
+            case "$region" in
+              us-ord) incompatible_region=us-sea ;;
+              *) incompatible_region=us-ord ;;
+            esac
+            printf '{"region":"%s","incompatibleRegion":"%s"}' "$region" "$incompatible_region"
+          outputs:
+          - name: topology
+            value: (json_parse($stdout))
+      - apply:
+          file: storageclasses.yaml
+      - apply:
+          file: incompatible-volume.yaml
+      catch:
+      - script:
+          env:
+          - name: TEST_NAMESPACE
+            value: "($namespace)"
+          content: |
+            kubectl get nodes -o wide
+            kubectl get storageclass
+            kubectl get pv -o wide
+            kubectl -n "$TEST_NAMESPACE" get pvc -o wide
+            kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+
+    - name: Create isolated Block Storage NodePool
+      try:
+      - apply:
+          file: nodepool.yaml
+
+    - name: Create WaitForFirstConsumer claims and consumer Pod
+      try:
+      - apply:
+          file: claims.yaml
+      - apply:
+          file: consumer.yaml
+      catch:
+      - script:
+          env:
+          - name: TEST_NAMESPACE
+            value: "($namespace)"
+          content: |
+            kubectl -n "$TEST_NAMESPACE" get pvc -o wide
+            kubectl -n "$TEST_NAMESPACE" describe pod blockstorage-consumer
+            kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
+
+    - name: Wait for the WaitForFirstConsumer consumer Pod
+      try:
+      - assert:
+          timeout: 15m
+          resource:
+            apiVersion: v1
+            kind: Pod
+            metadata:
+              name: blockstorage-consumer
+              namespace: "($namespace)"
+            status:
+              phase: Running
+      catch:
+      - script:
+          env:
+          - name: TEST_NAMESPACE
+            value: "($namespace)"
+          content: |
+            kubectl -n "$TEST_NAMESPACE" get pod blockstorage-consumer -o yaml
+            kubectl -n "$TEST_NAMESPACE" get pvc -o wide
+            kubectl get pv -o yaml
+            kubectl get nodeclaims -o wide
+            kubectl get nodes -o wide
+            kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
+
+    - name: Verify predicted, registered, and bound-volume regions match
+      try:
+      - script:
+          env:
+          - name: TEST_NAMESPACE
+            value: "($namespace)"
+          shell: bash
+          shellArgs:
+            - -c
+          timeout: 30s
+          content: bash ./verify-topology.sh "$TEST_NAMESPACE" blockstorage-consumer blockstorage-topology
+      catch:
+      - script:
+          env:
+          - name: TEST_NAMESPACE
+            value: "($namespace)"
+          content: |
+            kubectl -n "$TEST_NAMESPACE" get pod blockstorage-consumer -o wide
+            kubectl -n "$TEST_NAMESPACE" get pvc -o wide
+            kubectl get pv -o yaml
+            kubectl get nodeclaims -o yaml
+            kubectl get nodes -o wide
+
+    - name: Delete the consumer to scale the NodePool back to zero
+      try:
+      - script:
+          env:
+          - name: TEST_NAMESPACE
+            value: "($namespace)"
+          timeout: 5m
+          content: kubectl -n "$TEST_NAMESPACE" delete pod blockstorage-consumer --wait=true --timeout=4m
+
+    - name: Wait for the original NodeClaim to be deleted
+      try:
+      - wait:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+          timeout: 10m
+          selector: karpenter.sh/nodepool=blockstorage-topology
+          for:
+            deletion: {}
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - script:
+          env:
+          - name: TEST_NAMESPACE
+            value: "($namespace)"
+          content: |
+            kubectl -n "$TEST_NAMESPACE" get pod blockstorage-consumer -o wide
+            kubectl -n "$TEST_NAMESPACE" get pvc -o wide
+            kubectl get nodes -o wide
+            kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+
+    - name: Recreate the consumer using the matching-region bound PVCs
+      try:
+      - apply:
+          file: consumer.yaml
+      - assert:
+          timeout: 15m
+          resource:
+            apiVersion: v1
+            kind: Pod
+            metadata:
+              name: blockstorage-consumer
+              namespace: "($namespace)"
+            status:
+              phase: Running
+      - script:
+          env:
+          - name: TEST_NAMESPACE
+            value: "($namespace)"
+          shell: bash
+          shellArgs:
+            - -c
+          timeout: 30s
+          content: bash ./verify-topology.sh "$TEST_NAMESPACE" blockstorage-consumer blockstorage-topology
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - script:
+          env:
+          - name: TEST_NAMESPACE
+            value: "($namespace)"
+          content: |
+            kubectl -n "$TEST_NAMESPACE" get pod blockstorage-consumer -o yaml
+            kubectl -n "$TEST_NAMESPACE" get pvc -o wide
+            kubectl get pv -o yaml
+            kubectl get nodes -o wide
+            kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
+
+    - name: Delete the replacement consumer and wait for scale down
+      try:
+      - script:
+          env:
+          - name: TEST_NAMESPACE
+            value: "($namespace)"
+          timeout: 5m
+          content: kubectl -n "$TEST_NAMESPACE" delete pod blockstorage-consumer --wait=true --timeout=4m
+      - wait:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+          timeout: 10m
+          selector: karpenter.sh/nodepool=blockstorage-topology
+          for:
+            deletion: {}
+
+    - name: Confirm the incompatible PVC is bound before scheduling its Pod
+      try:
+      - assert:
+          timeout: 1m
+          resource:
+            apiVersion: v1
+            kind: PersistentVolumeClaim
+            metadata:
+              name: blockstorage-incompatible
+              namespace: "($namespace)"
+            status:
+              phase: Bound
+
+    - name: Create a Pod whose bound volume is in another region
+      try:
+      - apply:
+          file: incompatible-consumer.yaml
+
+    - name: Verify the incompatible PVC remains unschedulable without creating workers
+      try:
+      - assert:
+          timeout: 3m
+          resource:
+            apiVersion: v1
+            kind: Pod
+            metadata:
+              name: blockstorage-incompatible-consumer
+              namespace: "($namespace)"
+            status:
+              phase: Pending
+              (conditions[?type == 'PodScheduled']):
+              - status: 'False'
+                reason: Unschedulable
+      - script:
+          shell: bash
+          shellArgs:
+            - -c
+          timeout: 90s
+          content: |
+            set -euo pipefail
+            for _ in $(seq 1 12); do
+              nodeclaims=$(kubectl get nodeclaims -l karpenter.sh/nodepool=blockstorage-topology -o jsonpath='{.items[*].metadata.name}')
+              nodes=$(kubectl get nodes -l e2e.linode.dev/blockstorage-topology=true -o jsonpath='{.items[*].metadata.name}')
+              if [ -n "$nodeclaims" ] || [ -n "$nodes" ]; then
+                echo "Incompatible PVC unexpectedly created NodeClaims '$nodeclaims' or nodes '$nodes'" >&2
+                exit 1
+              fi
+              sleep 5
+            done
+      catch:
+      - script:
+          env:
+          - name: TEST_NAMESPACE
+            value: "($namespace)"
+          content: |
+            kubectl -n "$TEST_NAMESPACE" describe pod blockstorage-incompatible-consumer
+            kubectl -n "$TEST_NAMESPACE" get pvc blockstorage-incompatible -o yaml
+            kubectl get pv blockstorage-incompatible -o yaml
+            kubectl get nodeclaims -o wide
+            kubectl get nodes -o wide
+            kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
