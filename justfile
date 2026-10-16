@@ -281,6 +281,11 @@ destroy-lke-cluster cluster_id: (get-lke-kubeconfig cluster_id)
 	#!/usr/bin/env bash
 	set -euo pipefail
 	export KUBECONFIG={{ KUBECONFIG }}
+	export LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }}
+	export LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }}
+	# Cleanup can run on a different runner than setup; authorize it before Kubernetes calls.
+	linode-cli lke cluster-acl-update '{{ cluster_id }}' {{ CLUSTER_ACL_FLAGS }}
+	just wait-for-lke-kube-api
 	orphaned_pvs=$(kubectl get pv -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.storageClassName}{"\n"}{end}' | awk '$2 == "e2e-blockstorage-wffc" || $2 == "e2e-blockstorage-wffc-explicit" { print $1 }')
 	kubectl delete pvc -A -l e2e.linode.dev/blockstorage-topology=true --ignore-not-found=true --wait=true --timeout=10m
 	for pv in $orphaned_pvs; do
@@ -288,8 +293,6 @@ destroy-lke-cluster cluster_id: (get-lke-kubeconfig cluster_id)
 	done
 	kubectl delete pv blockstorage-incompatible --ignore-not-found=true --wait=true --timeout=2m
 	kubectl delete storageclass e2e-blockstorage-wffc e2e-blockstorage-wffc-explicit --ignore-not-found=true --wait=true --timeout=2m
-	export LINODE_CLI_API_VERSION={{ LINODE_CLI_API_VERSION }}
-	export LINODE_CLI_API_HOST={{ LINODE_CLI_API_HOST }}
 	if [ "{{ CLUSTER_TIER }}" = "standard" ] && [ -f "{{ KUBECONFIG }}" ]; then
 		if kubectl get crd/cloudfirewalls.networking.linode.com >/dev/null 2>&1; then
 			kubectl -n kube-system delete \

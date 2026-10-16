@@ -31,6 +31,8 @@ jobs:
         with:
           egress-policy: block
           allowed-endpoints: >
+            *.linodelke.net:443
+            ipv4.icanhazip.com:443
             api.github.com:443
             api.linode.com:443
             api.segment.io:443

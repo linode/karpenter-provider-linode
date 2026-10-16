@@ -64,6 +64,18 @@ Use direct Chainsaw invocation when you want exactly one test file without intro
 chainsaw test e2e/minimal-lke-standard --config .chainsaw.yaml
 ```
 
+## Cluster cleanup access
+
+`just destroy-lke-cluster <cluster_id>` refreshes the cluster API ACL using
+`CLUSTER_ACL_FLAGS` (by default, the current runner's public IPv4 address), then
+waits for Kubernetes API access before deleting test resources and the cluster.
+Cleanup jobs run on a separate runner from setup, so they cannot reuse setup's
+IP allowlist.
+
+Cleanup runner egress policies must allow `ipv4.icanhazip.com:443` for IP
+discovery and the cluster API endpoint: `*.linodelke.net:443` for standard LKE
+or `*.enterprise.linodelke.net:6443` for LKE Enterprise.
+
 ## Authoring and maintenance rules
 
 When adding/updating an E2E test:
