@@ -11,12 +11,13 @@ spec:
   steps:
     - name: Make sure there are no lingering NodeClaims
       try:
-      - script:
-          timeout: 30s
-          content: kubectl get nodeclaim -l karpenter.sh/nodepool=storage-test -o json
-          check:
-            ($error): ~
-            (json_parse($stdout).items | length(@)): 0
+      - error:
+          resource:
+            apiVersion: karpenter.sh/v1
+            kind: NodeClaim
+            metadata:
+              labels:
+                karpenter.sh/nodepool: storage-test
 
     - name: Create an isolated ephemeral-storage NodePool
       try:
@@ -71,26 +72,28 @@ spec:
 
     - name: Confirm the Node and NodeClaim report ephemeral storage
       try:
-      - script:
-          shell: bash
-          shellArgs:
-            - -c
-          content: |
-            set -euo pipefail
-            node_name=$(kubectl -n "$NAMESPACE" get pod ephemeral-storage-fit -o go-template='{{.spec.nodeName}}')
-            test -n "$node_name"
-            node_capacity=$(kubectl get node "$node_name" -o go-template='{{index .status.capacity "ephemeral-storage"}}')
-            node_allocatable=$(kubectl get node "$node_name" -o go-template='{{index .status.allocatable "ephemeral-storage"}}')
-            nodeclaim_name=$(kubectl get nodeclaim -l karpenter.sh/nodepool=storage-test -o go-template='{{range .items}}{{.metadata.name}}{{end}}')
-            test -n "$nodeclaim_name"
-            claim_capacity=$(kubectl get nodeclaim "$nodeclaim_name" -o go-template='{{index .status.capacity "ephemeral-storage"}}')
-            claim_allocatable=$(kubectl get nodeclaim "$nodeclaim_name" -o go-template='{{index .status.allocatable "ephemeral-storage"}}')
-            test -n "$node_capacity"
-            test -n "$node_allocatable"
-            test -n "$claim_capacity"
-            test -n "$claim_allocatable"
-            printf 'Node capacity=%s allocatable=%s; NodeClaim capacity=%s allocatable=%s\n' \
-              "$node_capacity" "$node_allocatable" "$claim_capacity" "$claim_allocatable"
+      - assert:
+          timeout: 2m
+          resource:
+            apiVersion: karpenter.sh/v1
+            kind: NodeClaim
+            metadata:
+              labels:
+                karpenter.sh/nodepool: storage-test
+            status:
+              (capacity."ephemeral-storage" != null): true
+              (allocatable."ephemeral-storage" != null): true
+      - assert:
+          timeout: 2m
+          resource:
+            apiVersion: v1
+            kind: Node
+            metadata:
+              labels:
+                karpenter.sh/nodepool: storage-test
+            status:
+              (capacity."ephemeral-storage" != null): true
+              (allocatable."ephemeral-storage" != null): true
       catch:
       - script:
           content: |
@@ -107,28 +110,24 @@ spec:
 
     - name: Verify the oversized Pod remains unschedulable without another NodeClaim
       try:
+      - assert:
+          timeout: 3m
+          resource:
+            apiVersion: v1
+            kind: Pod
+            metadata:
+              name: ephemeral-storage-over-capacity
+            status:
+              phase: Pending
+              (conditions[?type == 'PodScheduled'] | [0].reason): Unschedulable
+      - sleep:
+          duration: 20s
       - script:
-          timeout: 4m
-          shell: bash
-          shellArgs:
-            - -c
-          content: |
-            set -euo pipefail
-            pod_phase=""
-            scheduling_reason=""
-            for _ in $(seq 1 36); do
-              pod_phase=$(kubectl -n "$NAMESPACE" get pod ephemeral-storage-over-capacity -o go-template='{{.status.phase}}')
-              scheduling_reason=$(kubectl -n "$NAMESPACE" get pod ephemeral-storage-over-capacity -o go-template='{{range .status.conditions}}{{if eq .type "PodScheduled"}}{{.reason}}{{end}}{{end}}')
-              if [[ "$pod_phase" == "Pending" && "$scheduling_reason" == "Unschedulable" ]]; then
-                break
-              fi
-              sleep 5
-            done
-            [[ "$pod_phase" == "Pending" ]]
-            [[ "$scheduling_reason" == "Unschedulable" ]]
-            sleep 20
-            nodeclaim_count=$(kubectl get nodeclaim -l karpenter.sh/nodepool=storage-test --no-headers | wc -l | tr -d '[:space:]')
-            [[ "$nodeclaim_count" == "1" ]]
+          timeout: 30s
+          content: kubectl get nodeclaim -l karpenter.sh/nodepool=storage-test -o json
+          check:
+            ($error): ~
+            (json_parse($stdout).items | length(@)): 1
       catch:
       - script:
           content: |
@@ -142,22 +141,37 @@ spec:
 
     - name: Delete the workloads and NodePool
       try:
-      - script:
-          timeout: 30s
-          content: |
-            kubectl -n "$NAMESPACE" delete pod ephemeral-storage-fit ephemeral-storage-over-capacity --ignore-not-found=true --wait=false
-            kubectl -n "$NAMESPACE" delete daemonset ephemeral-storage-daemon --ignore-not-found=true --wait=false
-            kubectl delete nodepool storage-test --ignore-not-found=true --wait=false
+      - delete:
+          ref:
+            apiVersion: v1
+            kind: Pod
+            name: ephemeral-storage-fit
+      - delete:
+          ref:
+            apiVersion: v1
+            kind: Pod
+            name: ephemeral-storage-over-capacity
+      - delete:
+          ref:
+            apiVersion: apps/v1
+            kind: DaemonSet
+            name: ephemeral-storage-daemon
+      - delete:
+          ref:
+            apiVersion: karpenter.sh/v1
+            kind: NodePool
+            name: storage-test
 
     - name: Wait for the test NodeClaims to be deleted
       try:
-      - wait:
-          apiVersion: karpenter.sh/v1
-          kind: NodeClaim
-          timeout: 20m
-          selector: karpenter.sh/nodepool=storage-test
-          for:
-            deletion: {}
+      - error:
+          timeout: 5m
+          resource:
+            apiVersion: karpenter.sh/v1
+            kind: NodeClaim
+            metadata:
+              labels:
+                karpenter.sh/nodepool: storage-test
       catch:
       - describe:
           apiVersion: karpenter.sh/v1
@@ -167,5 +181,8 @@ spec:
 
     - name: Delete the test LinodeNodeClass
       try:
-      - script:
-          content: kubectl delete linodenodeclass storage-test --ignore-not-found=true --wait=false
+      - delete:
+          ref:
+            apiVersion: karpenter.k8s.linode/v1alpha1
+            kind: LinodeNodeClass
+            name: storage-test
