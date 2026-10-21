@@ -213,6 +213,44 @@ func TestDRAWholeGPUAllocation(t *testing.T) {
 	}
 }
 
+func TestDRAPlanFamilies(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		plan, architecture string
+	}{
+		{plan: adaGPUInstanceType, architecture: "Ada Lovelace"},
+		{plan: "g2-gpu-rtx4000a4-m", architecture: "Ada Lovelace"},
+		{plan: "g2-gpu-rtx4000a16-future", architecture: "Ada Lovelace"},
+		{plan: blackwellGPUInstanceType, architecture: "Blackwell"},
+		{plan: "g3-gpu-rtxpro6000-blackwell-16", architecture: "Blackwell"},
+		{plan: "g2-gpu-rtx5000a1-s"},
+		{plan: "g4-gpu-rtxpro6000-blackwell-1"},
+		{plan: "prefix-g2-gpu-rtx4000a1-s"},
+		{plan: "g2-gpu-rtx4000a1-s-extra"},
+		{plan: "g2-gpu-rtx4000a0-s"},
+		{plan: "g2-gpu-rtx4000a1-"},
+		{plan: "g3-gpu-rtxpro6000-blackwell-0"},
+		{plan: "g3-gpu-rtxpro6000-blackwell-1-extra"},
+	} {
+		t.Run(tc.plan, func(t *testing.T) {
+			t.Parallel()
+			ctx := draContext(t)
+			it := instancetype.NewDefaultResolver(fake.DefaultRegion).Resolve(ctx, ptrToType(tc.plan, 2), draNodeClass())
+			assertGPUCount(t, it, 2)
+			assertAllocatorPlans(t, ctx, []*cloudprovider.InstanceType{it}, nvidiaWholeGPUSelector, []string{tc.plan})
+			var want []string
+			if tc.architecture != "" {
+				want = []string{tc.plan}
+			}
+			selector := nvidiaAttributeSelector("architecture", "device.attributes['gpu.nvidia.com'].architecture in ['Ada Lovelace', 'Blackwell']")
+			if tc.architecture != "" {
+				selector = nvidiaAttributeSelector("architecture", "device.attributes['gpu.nvidia.com'].architecture == '"+tc.architecture+"'")
+			}
+			assertAllocatorPlans(t, ctx, []*cloudprovider.InstanceType{it}, selector, want)
+		})
+	}
+}
+
 func assertAllocatorPlans(t *testing.T, ctx context.Context, candidates []*cloudprovider.InstanceType, selector string, want []string) {
 	t.Helper()
 	// Core's allocator converts selector errors into non-matches. Check clean
@@ -276,7 +314,7 @@ func TestDRASelectors(t *testing.T) {
 		resolver.Resolve(ctx, ptrToType(adaGPUInstanceType, 1), draNodeClass()),
 		resolver.Resolve(ctx, ptrToType(adaTwoGPUInstanceType, 2), draNodeClass()),
 		resolver.Resolve(ctx, ptrToType(blackwellGPUInstanceType, 1), draNodeClass()),
-		resolver.Resolve(ctx, ptrToType("g2-gpu-rtx4000a1-future", 1), draNodeClass()),
+		resolver.Resolve(ctx, ptrToType("g2-gpu-rtx5000a1-s", 1), draNodeClass()),
 		resolver.Resolve(ctx, ptrToType("test-cpu-plan", 0), draNodeClass()),
 	}
 	type selectorCase struct {

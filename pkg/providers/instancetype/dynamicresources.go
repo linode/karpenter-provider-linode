@@ -30,9 +30,12 @@ func nvidiaGPUResources(info *linodego.LinodeType) cloudprovider.DynamicResource
 	if info.GPUs <= 0 {
 		return cloudprovider.DynamicResources{}
 	}
-	model, known := nvidiaGPUMetadata[info.ID]
-	if !known {
-		model = nvidiaGPUModel{attributes: nvidiaGPUTypeAttributes}
+	model := nvidiaGPUModel{attributes: nvidiaGPUTypeAttributes}
+	for pattern, metadata := range nvidiaGPUMetadata {
+		if pattern.MatchString(info.ID) {
+			model = metadata
+			break
+		}
 	}
 	devices := make([]cloudprovider.Device, info.GPUs)
 	for i := range devices {

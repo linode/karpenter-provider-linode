@@ -252,16 +252,22 @@ spec:
 
 Always guard optional fields with a CEL `in` check before you read them. A missing map key can cause an evaluation error. With the guards, a selector that needs missing metadata does not match the plan, and scheduling does not choose that plan for the claim.
 
-The provider does not guess attributes from a plan name, a related plan, or current hardware. An unknown plan ID therefore will never matches a metadata selector.
+Plans outside the supported model-family patterns keep count/type-only predictions. They do not match selectors that require model metadata.
 
 ## Plan catalog
 
-The catalog covers only these exact plan IDs.
+The catalog matches plan IDs with these anchored regular expressions. New GPU counts and VM sizes within these model families inherit the same per-GPU metadata without a provider release.
 
-| GPU | Plan IDs |
+| GPU | Plan ID pattern |
 |---|---|
-| RTX 4000 Ada | `g2-gpu-rtx4000a1-s`, `g2-gpu-rtx4000a1-m`, `g2-gpu-rtx4000a1-l`, `g2-gpu-rtx4000a1-xl`, `g2-gpu-rtx4000a2-s`, `g2-gpu-rtx4000a2-m`, `g2-gpu-rtx4000a2-hs`, `g2-gpu-rtx4000a4-s`, `g2-gpu-rtx4000a4-m` |
-| RTX PRO 6000 Blackwell | `g3-gpu-rtxpro6000-blackwell-1`, `g3-gpu-rtxpro6000-blackwell-2`, `g3-gpu-rtxpro6000-blackwell-4` |
+| RTX 4000 Ada | `^g2-gpu-rtx4000a[1-9]\d*-[a-z]+$` |
+| RTX PRO 6000 Blackwell | `^g3-gpu-rtxpro6000-blackwell-[1-9]\d*$` |
+
+This assumes that matching plans retain the named GPU model. A different model or naming convention needs a catalog change. To list current GPU plans, use `linode-cli linodes types --class gpu`; the catalog does not track availability.
+
+Model identity and CUDA compute capability are fixed hardware properties, not installed software versions. Ada has compute capability 8.9; RTX PRO 6000 Blackwell has 12.0. Native compilation starts with CUDA Toolkit [11.8 for Ada](https://docs.nvidia.com/cuda/ada-compatibility-guide/index.html#building-applications-using-cuda-toolkit-11-8) and [12.8 for Blackwell](https://docs.nvidia.com/cuda/blackwell-compatibility-guide/index.html#building-applications-using-cuda-toolkit-12-8). Older applications can still work through compatible cubins or forward-compatible PTX; these toolkit versions are not runtime requirements predicted by the provider.
+
+Memory quantities describe the capacity of one GPU, not aggregate VM memory.
 
 The API GPU count sets the number of predicted devices. It is separate from the model metadata. A plan ID in the catalog does not guarantee that:
 
@@ -290,10 +296,10 @@ This feature supports only whole-GPU claims. It does not support:
 
 This section is for contributors.
 
-To add a plan, update the explicit plan-ID mapping. Add a plan only when you have evidence for its GPU model and per-device metadata.
+Update the model-family regex map only for a new GPU model or naming convention, not for each new plan size. Add a family only when you have evidence for its GPU model and per-device metadata.
 
 1. Record the source of each value. Mark which values come from captured device data and which come from online estimates.
-2. Add focused tests for each new plan. Cover the API-derived device count, all five metadata values, and the fail-closed behavior for unknown IDs.
+2. Add focused tests for family matches, new GPU counts and sizes, and near-miss IDs that must remain count/type-only. Keep device counts API-derived.
 3. Compare the selectors with the NVIDIA DRA attribute and capacity types.
 
-Do not add guessed suffixes, future IDs, aggregate memory, or a plan only because its name looks like a known model.
+Keep patterns anchored and model-specific. Do not infer metadata for a different GPU model or use aggregate VM memory.

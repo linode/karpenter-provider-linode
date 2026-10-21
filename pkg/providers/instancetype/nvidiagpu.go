@@ -15,6 +15,8 @@ limitations under the License.
 package instancetype
 
 import (
+	"regexp"
+
 	resourcev1 "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -23,37 +25,29 @@ var (
 	nvidiaGPUTypeAttributes = map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
 		"type": {StringValue: new("gpu")},
 	}
+	// Model identity and compute capability are fixed hardware properties; installed CUDA/driver versions are not predicted.
 	nvidiaAda = nvidiaGPUModel{attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
 		"type":                  {StringValue: new("gpu")},
 		"productName":           {StringValue: new("NVIDIA RTX 4000 Ada Generation")},
 		"brand":                 {StringValue: new("NvidiaRTX")},
 		"architecture":          {StringValue: new("Ada Lovelace")},
-		"cudaComputeCapability": {VersionValue: new("8.9.0")},
+		"cudaComputeCapability": {VersionValue: new("8.9.0")}, // sm_89; native compilation starts with CUDA 11.8.
 	}, capacity: map[resourcev1.QualifiedName]resourcev1.DeviceCapacity{
-		"memory": {Value: resource.MustParse("20475Mi")},
+		"memory": {Value: resource.MustParse("20475Mi")}, // Per-GPU capacity captured from a live Ada ResourceSlice.
 	}}
 	nvidiaBlackwell = nvidiaGPUModel{attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
 		"type":                  {StringValue: new("gpu")},
 		"productName":           {StringValue: new("NVIDIA RTX PRO 6000 Blackwell Server Edition")},
 		"brand":                 {StringValue: new("Nvidia")},
 		"architecture":          {StringValue: new("Blackwell")},
-		"cudaComputeCapability": {VersionValue: new("12.0.0")},
+		"cudaComputeCapability": {VersionValue: new("12.0.0")}, // sm_120; native compilation starts with CUDA 12.8.
 	}, capacity: map[resourcev1.QualifiedName]resourcev1.DeviceCapacity{
-		"memory": {Value: resource.MustParse("97887Mi")},
+		"memory": {Value: resource.MustParse("97887Mi")}, // NVML-reported capacity per GPU, not aggregate VM memory.
 	}}
-	nvidiaGPUMetadata = map[string]nvidiaGPUModel{
-		"g2-gpu-rtx4000a1-s":            nvidiaAda,
-		"g2-gpu-rtx4000a1-m":            nvidiaAda,
-		"g2-gpu-rtx4000a1-l":            nvidiaAda,
-		"g2-gpu-rtx4000a1-xl":           nvidiaAda,
-		"g2-gpu-rtx4000a2-s":            nvidiaAda,
-		"g2-gpu-rtx4000a2-m":            nvidiaAda,
-		"g2-gpu-rtx4000a2-hs":           nvidiaAda,
-		"g2-gpu-rtx4000a4-s":            nvidiaAda,
-		"g2-gpu-rtx4000a4-m":            nvidiaAda,
-		"g3-gpu-rtxpro6000-blackwell-1": nvidiaBlackwell,
-		"g3-gpu-rtxpro6000-blackwell-2": nvidiaBlackwell,
-		"g3-gpu-rtxpro6000-blackwell-4": nvidiaBlackwell,
+	// Match model families so new GPU counts and VM sizes need no catalog update.
+	nvidiaGPUMetadata = map[*regexp.Regexp]nvidiaGPUModel{
+		regexp.MustCompile(`^g2-gpu-rtx4000a[1-9]\d*-[a-z]+$`):       nvidiaAda,
+		regexp.MustCompile(`^g3-gpu-rtxpro6000-blackwell-[1-9]\d*$`): nvidiaBlackwell,
 	}
 )
 
