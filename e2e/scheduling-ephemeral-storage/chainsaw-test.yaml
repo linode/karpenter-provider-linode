@@ -5,6 +5,7 @@ metadata:
   name: scheduling-ephemeral-storage
   labels:
     all:
+    pr:
     category.scheduling:
 spec:
   steps:
@@ -12,7 +13,7 @@ spec:
       try:
       - script:
           timeout: 30s
-          content: kubectl get nodeclaim -l karpenter.sh/nodepool=ephemeral-storage -o json
+          content: kubectl get nodeclaim -l karpenter.sh/nodepool=storage-test -o json
           check:
             ($error): ~
             (json_parse($stdout).items | length(@)): 0
@@ -80,7 +81,7 @@ spec:
             test -n "$node_name"
             node_capacity=$(kubectl get node "$node_name" -o go-template='{{index .status.capacity "ephemeral-storage"}}')
             node_allocatable=$(kubectl get node "$node_name" -o go-template='{{index .status.allocatable "ephemeral-storage"}}')
-            nodeclaim_name=$(kubectl get nodeclaim -l karpenter.sh/nodepool=ephemeral-storage -o go-template='{{range .items}}{{.metadata.name}}{{end}}')
+            nodeclaim_name=$(kubectl get nodeclaim -l karpenter.sh/nodepool=storage-test -o go-template='{{range .items}}{{.metadata.name}}{{end}}')
             test -n "$nodeclaim_name"
             claim_capacity=$(kubectl get nodeclaim "$nodeclaim_name" -o go-template='{{index .status.capacity "ephemeral-storage"}}')
             claim_allocatable=$(kubectl get nodeclaim "$nodeclaim_name" -o go-template='{{index .status.allocatable "ephemeral-storage"}}')
@@ -126,7 +127,7 @@ spec:
             [[ "$pod_phase" == "Pending" ]]
             [[ "$scheduling_reason" == "Unschedulable" ]]
             sleep 20
-            nodeclaim_count=$(kubectl get nodeclaim -l karpenter.sh/nodepool=ephemeral-storage --no-headers | wc -l | tr -d '[:space:]')
+            nodeclaim_count=$(kubectl get nodeclaim -l karpenter.sh/nodepool=storage-test --no-headers | wc -l | tr -d '[:space:]')
             [[ "$nodeclaim_count" == "1" ]]
       catch:
       - script:
@@ -146,7 +147,7 @@ spec:
           content: |
             kubectl -n "$NAMESPACE" delete pod ephemeral-storage-fit ephemeral-storage-over-capacity --ignore-not-found=true --wait=false
             kubectl -n "$NAMESPACE" delete daemonset ephemeral-storage-daemon --ignore-not-found=true --wait=false
-            kubectl delete nodepool ephemeral-storage --ignore-not-found=true --wait=false
+            kubectl delete nodepool storage-test --ignore-not-found=true --wait=false
 
     - name: Wait for the test NodeClaims to be deleted
       try:
@@ -154,7 +155,7 @@ spec:
           apiVersion: karpenter.sh/v1
           kind: NodeClaim
           timeout: 20m
-          selector: karpenter.sh/nodepool=ephemeral-storage
+          selector: karpenter.sh/nodepool=storage-test
           for:
             deletion: {}
       catch:
@@ -167,4 +168,4 @@ spec:
     - name: Delete the test LinodeNodeClass
       try:
       - script:
-          content: kubectl delete linodenodeclass ephemeral-storage --ignore-not-found=true --wait=false
+          content: kubectl delete linodenodeclass storage-test --ignore-not-found=true --wait=false
