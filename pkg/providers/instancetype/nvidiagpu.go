@@ -33,7 +33,7 @@ var (
 		"architecture":          {StringValue: new("Ada Lovelace")},
 		"cudaComputeCapability": {VersionValue: new("8.9.0")}, // sm_89; native compilation starts with CUDA 11.8.
 	}, capacity: map[resourcev1.QualifiedName]resourcev1.DeviceCapacity{
-		"memory": {Value: resource.MustParse("20475Mi")}, // Per-GPU capacity captured from a live Ada ResourceSlice.
+		"memory": {Value: resource.MustParse("20475Mi")},
 	}}
 	nvidiaBlackwell = nvidiaGPUModel{attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{
 		"type":                  {StringValue: new("gpu")},
@@ -42,7 +42,7 @@ var (
 		"architecture":          {StringValue: new("Blackwell")},
 		"cudaComputeCapability": {VersionValue: new("12.0.0")}, // sm_120; native compilation starts with CUDA 12.8.
 	}, capacity: map[resourcev1.QualifiedName]resourcev1.DeviceCapacity{
-		"memory": {Value: resource.MustParse("97887Mi")}, // NVML-reported capacity per GPU, not aggregate VM memory.
+		"memory": {Value: resource.MustParse("97887Mi")},
 	}}
 	// Match model families so new GPU counts and VM sizes need no catalog update.
 	nvidiaGPUMetadata = map[*regexp.Regexp]nvidiaGPUModel{
