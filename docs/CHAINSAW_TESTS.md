@@ -23,7 +23,7 @@ Key references:
 | Selector | Command | Runs | Typical use |
 |---|---|---|---|
 | `all` | `CHAINSAW_SELECTOR=all just run-e2e` | All Chainsaw suites | Full local run / nightly parity |
-| `pr` | `CHAINSAW_SELECTOR=pr just run-e2e` | PR smoke tests (currently only `minimal-lke-standard`) | Matches PR workflow selector |
+| `pr` | `CHAINSAW_SELECTOR=pr just run-e2e` | PR smoke tests | Matches PR workflow selector |
 | `category.baseline` | `CHAINSAW_SELECTOR=category.baseline just run-e2e` | Baseline lifecycle behavior | Verify core provider health quickly |
 | `category.scheduling` | `CHAINSAW_SELECTOR=category.scheduling just run-e2e` | Scheduling behavior suites | Debug pod placement / constraints |
 | `category.consolidation` | `CHAINSAW_SELECTOR=category.consolidation just run-e2e` | Consolidation behavior suites | Debug scale-down/replacement behavior |
@@ -37,6 +37,7 @@ Key references:
 | scheduling-nodepool-label-selector | `e2e/scheduling-nodepool-label-selector/chainsaw-test.yaml` | `all`, `pr`, `category.scheduling` | NodePool label targeting via pod `nodeSelector`, and confirms pods land on expected node/nodepool | Ensures constraint-based scheduling works and avoids silent misplacement of workloads |
 | scheduling-blockstorage-topology | `e2e/scheduling-blockstorage-topology/chainsaw-test.yaml` | `all`, `pr`, `category.scheduling` | WaitForFirstConsumer claims with and without allowed topologies, scale-from-zero and replacement for matching bound PVCs, and rejection of incompatible PVC regions | Verifies predicted CSI region labels match CSI registration and prevent provisioning into an incompatible volume region |
 | scheduling-taints-tolerations | `e2e/scheduling-taints-tolerations/chainsaw-test.yaml` | `all`, `pr`, `category.scheduling` | Taint/toleration behavior with one tolerated and one non-tolerated workload | Prevents regressions where taints are ignored or non-tolerated pods are scheduled incorrectly |
+| scheduling-ephemeral-storage | `e2e/scheduling-ephemeral-storage/chainsaw-test.yaml` | `all`, `pr`, `category.scheduling` | Confirms Pod and DaemonSet ephemeral-storage requests schedule, worker and NodeClaim report storage, and a request above usable storage remains unschedulable without another NodeClaim | Guards predicted ephemeral-storage capacity, scheduling fit, and over-capacity rejection on Standard and Enterprise LKE |
 | consolidation-empty-node-scale-down | `e2e/consolidation-empty-node-scale-down/chainsaw-test.yaml` | `all`, `pr`, `category.consolidation` | NodeClaim count reduction on a dedicated consolidation NodePool after scale-down | Validates empty/underutilized consolidation behavior with deterministic pool constraints |
 | consolidation-non-empty-step-scale | `e2e/consolidation-non-empty-step-scale/chainsaw-test.yaml` | `all`, `pr`, `category.consolidation` | Non-empty replacement signal on a dedicated consolidation NodePool after stepped scale changes | Covers disruptive consolidation edge cases while avoiding default-pool sizing bias |
 | drift-nodepool-labels-taints | `e2e/drift-nodepool-labels-taints/chainsaw-test.yaml` | `all`, `pr`, `category.drift` | Drift-triggered replacement when a drift-specific NodePool template labels/taints change | Ensures NodePool template mutations propagate through replacement in an isolated test-owned pool |
