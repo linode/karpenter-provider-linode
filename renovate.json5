@@ -55,6 +55,13 @@
         "k8s.io/**",
         "sigs.k8s.io/**",
       ]
+    },
+    {
+      "description": "Group Go version and golangci-lint which needs to update with Go version bumps",
+      "matchManagers": ["mise", "gomod"],
+      "matchDepNames": ["go", "golangci-lint"],
+      "groupName": "go version",
+      "groupSlug": "go-version",
     }
   ]
 }
