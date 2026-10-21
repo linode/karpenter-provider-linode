@@ -61,6 +61,20 @@ The provider can operate in two distinct modes, controlled by the `KARPENTER_MOD
 
 The `LinodeNodeClass` allows you to configure specific settings for the nodes managed by Karpenter. Support for specific fields depends on the [Mode](#modes) you are running.
 
+### Predicted ephemeral storage
+
+The pre-registration estimate uses the Linode plan's advertised disk size as local storage capacity ([plan details](https://techdocs.akamai.com/cloud-computing/docs/compute-instance-plan-types)).
+
+The scheduler's usable ephemeral storage is capacity minus `kubeReserved`, `systemReserved`, and the effective filesystem
+eviction threshold. The default hard thresholds (`nodefs.available`: 10%, `imagefs.available`: 15%) reserve the stricter
+15% once, rather than being added together. A non-empty `evictionHard` map replaces the default hard filesystem thresholds,
+while configured soft thresholds are combined conservatively using the stricter value. These percentages come from the [documented default kubelet hard eviction thresholds](https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/#hard-eviction-thresholds).
+
+Once a worker registers, its reported `Node.Status.Capacity` replaces the prediction for each reported memory and
+ephemeral-storage resource. Later observations for the same instance type and image can lower that cached capacity, but
+do not raise it; the first registered worker therefore overrides the prediction, and subsequent workers retain the
+lowest observed capacity per resource.
+
 ### Field Reference
 
 | Field | Type | Supported Modes | Description |

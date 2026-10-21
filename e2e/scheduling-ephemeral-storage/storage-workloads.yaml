@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ephemeral-storage-daemon
+  labels:
+    e2e.linode.dev/cleanup: "true"
+spec:
+  selector:
+    matchLabels:
+      app: ephemeral-storage-daemon
+  template:
+    metadata:
+      labels:
+        app: ephemeral-storage-daemon
+        e2e.linode.dev/cleanup: "true"
+    spec:
+      terminationGracePeriodSeconds: 0
+      nodeSelector:
+        e2e.linode.dev/ephemeral-storage: "true"
+      tolerations:
+        - key: e2e.linode.dev/test
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      containers:
+        - name: pause
+          image: mirror.registry.linodelke.net/k8s/pause:3.9
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+              ephemeral-storage: 1Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ephemeral-storage-fit
+  labels:
+    e2e.linode.dev/cleanup: "true"
+spec:
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  nodeSelector:
+    e2e.linode.dev/ephemeral-storage: "true"
+  tolerations:
+    - key: e2e.linode.dev/test
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+  containers:
+    - name: pause
+      image: mirror.registry.linodelke.net/k8s/pause:3.9
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+          ephemeral-storage: 1Mi

@@ -23,6 +23,7 @@ import (
 	"github.com/linode/linodego/v2"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/tools/record"
 	clock "k8s.io/utils/clock/testing"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -33,6 +34,7 @@ import (
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 	"sigs.k8s.io/karpenter/pkg/test/v1alpha1"
+	"sigs.k8s.io/karpenter/pkg/utils/resources"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
 	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
@@ -279,6 +281,67 @@ var _ = Describe("InstanceTypeProvider", func() {
 				Expect(it.Overhead.SystemReserved.Memory().String()).To(Equal("20Gi"))
 				Expect(it.Overhead.SystemReserved.StorageEphemeral().String()).To(Equal("10Gi"))
 			})
+		})
+		Context("Ephemeral Storage", func() {
+			It("should predict the plan disk and reserve the default filesystem eviction threshold once", func() {
+				it := instancetype.NewInstanceType(ctx, &info, fake.DefaultRegion, nil, nil, nil, nil, nil, nil)
+				allocatable := it.Allocatable()
+
+				Expect(it.Capacity.StorageEphemeral().String()).To(Equal("160Gi"))
+				Expect(it.Overhead.KubeReserved.StorageEphemeral().String()).To(Equal("1Gi"))
+				Expect(it.Overhead.EvictionThreshold.StorageEphemeral().Cmp(resource.MustParse("24Gi"))).To(Equal(0))
+				Expect(allocatable.StorageEphemeral().Cmp(resource.MustParse("135Gi"))).To(Equal(0))
+			})
+
+			It("should subtract kubelet reservations and use the strictest shared-filesystem eviction signal", func() {
+				it := instancetype.NewInstanceType(
+					ctx,
+					&info,
+					fake.DefaultRegion,
+					nil,
+					nil,
+					map[string]string{string(corev1.ResourceEphemeralStorage): "3Gi"},
+					map[string]string{string(corev1.ResourceEphemeralStorage): "2Gi"},
+					map[string]string{
+						"nodefs.available":  "10%",
+						"imagefs.available": "15%",
+					},
+					map[string]string{"nodefs.available": "20%"},
+				)
+				allocatable := it.Allocatable()
+
+				Expect(it.Overhead.KubeReserved.StorageEphemeral().String()).To(Equal("3Gi"))
+				Expect(it.Overhead.SystemReserved.StorageEphemeral().String()).To(Equal("2Gi"))
+				Expect(it.Overhead.EvictionThreshold.StorageEphemeral().Cmp(resource.MustParse("32Gi"))).To(Equal(0))
+				Expect(allocatable.StorageEphemeral().Cmp(resource.MustParse("123Gi"))).To(Equal(0))
+			})
+
+			It("should fit combined pod and DaemonSet requests up to usable storage only", func() {
+				it := instancetype.NewInstanceType(ctx, &info, fake.DefaultRegion, nil, nil, nil, nil, nil, nil)
+				podRequest := resource.MustParse("120Gi")
+				daemonSetRequest := resource.MustParse("15Gi")
+				podRequest.Add(daemonSetRequest)
+				requests := corev1.ResourceList{corev1.ResourceEphemeralStorage: podRequest}
+
+				Expect(resources.Fits(requests, it.Allocatable())).To(BeTrue())
+
+				overCapacity := podRequest.DeepCopy()
+				overCapacity.Add(resource.MustParse("1Mi"))
+				requests[corev1.ResourceEphemeralStorage] = overCapacity
+				Expect(resources.Fits(requests, it.Allocatable())).To(BeFalse())
+			})
+		})
+
+		It("should include kubelet settings in the instance type cache key", func() {
+			resolver := instancetype.NewDefaultResolver(fake.DefaultRegion)
+			originalKey := resolver.CacheKey(nodeClass)
+			nodeClass.Spec.Kubelet = &v1.KubeletConfiguration{
+				KubeReserved: map[string]string{
+					string(corev1.ResourceEphemeralStorage): "2Gi",
+				},
+			}
+
+			Expect(resolver.CacheKey(nodeClass)).NotTo(Equal(originalKey))
 		})
 	})
 })
