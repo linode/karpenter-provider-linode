@@ -120,7 +120,7 @@ type LinodeAPIBehavior struct {
 	ListTypesOutput               AtomicPtr[[]linodego.LinodeType]
 	GetRegionAvailabilityOutput   AtomicPtr[[]linodego.RegionAvailability]
 	GetTypeBehavior               MockedFunction[string, *linodego.LinodeType]
-	GetRegionAvailabilityBehavior MockedFunction[linodego.ListOptions, []linodego.RegionAvailability]
+	GetRegionAvailabilityBehavior MockedFunction[string, []linodego.RegionAvailability]
 	CreateInstanceBehavior        MockedFunction[linodego.InstanceCreateOptions, *linodego.Instance]
 	GetInstanceBehavior           MockedFunction[int, *linodego.Instance]
 	DeleteInstanceBehavior        MockedFunction[int, error]
@@ -187,11 +187,17 @@ func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.Lino
 	return *linodeType, err
 }
 
-func (l *LinodeClient) GetRegionAvailability(_ context.Context, _ string) ([]linodego.RegionAvailability, error) {
-	if l.GetRegionAvailabilityOutput.IsNil() {
-		return nil, nil
+func (l *LinodeClient) GetRegionAvailability(_ context.Context, regionID string) ([]linodego.RegionAvailability, error) {
+	out, err := l.GetRegionAvailabilityBehavior.Invoke(&regionID, func(linodeID *string) (*[]linodego.RegionAvailability, error) {
+		if l.GetRegionAvailabilityOutput.IsNil() {
+			return nil, nil
+		}
+		return l.GetRegionAvailabilityOutput.Clone(), nil
+	})
+	if err != nil || out == nil {
+		return nil, err
 	}
-	return *l.GetRegionAvailabilityOutput.Clone(), nil
+	return *out, nil
 }
 
 func (l *LinodeClient) GetInstance(_ context.Context, linodeID int) (*linodego.Instance, error) {
