@@ -56,8 +56,6 @@ spec:
       try:
       - script:
           shell: bash
-          shellArgs:
-            - -c
           timeout: 15m
           content: |
             set -euo pipefail
