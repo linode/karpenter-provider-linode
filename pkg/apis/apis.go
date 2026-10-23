@@ -22,7 +22,7 @@ import (
 	_ "embed"
 )
 
-//go:generate controller-gen crd object:headerFile="../../hack/boilerplate.go.txt" paths="./..." output:crd:artifacts:config=crds
+//go:generate controller-gen crd:omitToolVersion=true object:headerFile="../../hack/boilerplate.go.txt" paths="./..." output:crd:artifacts:config=crds
 var (
 	Group              = "karpenter.k8s.linode"
 	CompatibilityGroup = "compatibility." + Group
