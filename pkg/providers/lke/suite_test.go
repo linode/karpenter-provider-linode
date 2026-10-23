@@ -2134,7 +2134,8 @@ var _ = Describe("LKENodeProvider", func() {
 					resumeList()
 					if !deleteFinished {
 						select {
-						case <-deleteResult:
+						case err := <-deleteResult:
+							Expect(err).ToNot(HaveOccurred())
 						case <-time.After(5 * time.Second):
 						}
 					}

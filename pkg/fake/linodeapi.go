@@ -188,9 +188,9 @@ func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.Lino
 }
 
 func (l *LinodeClient) GetRegionAvailability(_ context.Context, regionID string) ([]linodego.RegionAvailability, error) {
-	out, err := l.GetRegionAvailabilityBehavior.Invoke(&regionID, func(linodeID *string) (*[]linodego.RegionAvailability, error) {
+	out, err := l.GetRegionAvailabilityBehavior.Invoke(&regionID, func(linodeID *string) (avail *[]linodego.RegionAvailability, err error) {
 		if l.GetRegionAvailabilityOutput.IsNil() {
-			return nil, nil
+			return nil, err
 		}
 		return l.GetRegionAvailabilityOutput.Clone(), nil
 	})
