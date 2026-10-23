@@ -282,10 +282,14 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 			return ErrNoClaimableInstance
 		}
 
+		// TODO: Remove when an unavailable capacity signal exists for LKENodePool update.
+		if err := p.checkPlanAvailability(ctx, instanceType); err != nil {
+			return err
+		}
+
 		_, err = p.client.UpdateLKENodePool(ctx, p.clusterID, pool.ID, linodego.LKENodePoolUpdateOptions{Count: pool.Count + 1})
 		if err != nil {
 			logger.Error(err, "failed to scale pool", "poolID", pool.ID)
-			// TODO: Revisit capacity classification when a reliable datacenter-level signal exists.
 			// Scale errors can describe networking or request limits, so they must not invalidate the offering.
 			if linodego.ErrHasStatus(err, http.StatusBadRequest) {
 				return cloudprovider.NewCreateError(fmt.Errorf("scaling LKE node pool %d: %w", pool.ID, err), "NodePoolScaleFailed", fmt.Sprintf("Failed to scale LKE node pool %d: %s", pool.ID, err.Error()))
@@ -296,6 +300,30 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 		return ErrNoClaimableInstance
 	})
 	return createdInstance, err
+}
+
+// checkPlanAvailability returns an insufficient capacity error when the region explicitly reports the plan as
+// unavailable or when the plan is missing from the response. Lookup failures fail open so scaling can still be attempted.
+func (p *DefaultProvider) checkPlanAvailability(ctx context.Context, instanceType string) error {
+	var err error
+	availability, err := p.client.GetRegionAvailability(ctx, p.region)
+	if err != nil {
+		log.FromContext(ctx).V(1).Info("failed to check region availability before scaling pool; proceeding anyway", "region", p.region, "instanceType", instanceType, "error", err.Error())
+		return nil
+	}
+
+	for _, a := range availability {
+		if a.Plan == instanceType {
+			if a.Available {
+				return nil
+			}
+			break
+		}
+	}
+
+	err = fmt.Errorf("instance type %s is not available in region %s", instanceType, p.region)
+	p.unavailableOfferings.MarkUnavailable(ctx, err.Error(), instanceType, p.region)
+	return cloudprovider.NewInsufficientCapacityError(err)
 }
 
 func (p *DefaultProvider) withPoolLock(ctx context.Context, key string, fn func() error) error {
