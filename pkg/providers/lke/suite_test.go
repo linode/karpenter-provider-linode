@@ -29,7 +29,6 @@ import (
 	"github.com/linode/linodego/v2"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
 	corecloudprovider "sigs.k8s.io/karpenter/pkg/cloudprovider"
@@ -249,12 +248,10 @@ var _ = Describe("LKENodeProvider", func() {
 		// Keep the generated NodePool tag within Linode's 50-character limit.
 		nodePoolObj.Name = "lke-pool"
 		nodeClaim = coretest.NodeClaim(karpv1.NodeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{
-					karpv1.NodePoolLabelKey:     nodePoolObj.Name,
-					corev1.LabelTopologyZone:    fake.DefaultRegion,
-					karpv1.CapacityTypeLabelKey: karpv1.CapacityTypeOnDemand,
-				},
+			Labels: map[string]string{
+				karpv1.NodePoolLabelKey:     nodePoolObj.Name,
+				corev1.LabelTopologyZone:    fake.DefaultRegion,
+				karpv1.CapacityTypeLabelKey: karpv1.CapacityTypeOnDemand,
 			},
 			Spec: karpv1.NodeClaimSpec{
 				Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
@@ -731,6 +728,87 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(node.ID).ToNot(Equal(instanceID))
 
 					Expect(linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Calls()).To(BeNumerically(">=", 1))
+				})
+
+				Context("Region availability check", func() {
+					const poolType = "g6-standard-2"
+					storeFullPool := func(poolID, instanceID int) {
+						pool := &linodego.LKENodePool{
+							ID:    poolID,
+							Type:  poolType,
+							Count: 1,
+							Tags: []string{
+								fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+								fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
+							},
+							Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID, ID: fmt.Sprintf("node-%d", instanceID)}},
+						}
+						linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), pool)
+						now := time.Now()
+						linodeEnv.LinodeAPI.Instances.Store(instanceID, linodego.Instance{
+							ID:      instanceID,
+							Tags:    []string{fmt.Sprintf("%s=%s", v1.NodeClaimTagKey, "other-nodeclaim")},
+							Created: &now,
+						})
+					}
+					create := func() (*instance.Instance, error) {
+						ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+						nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+						instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+						Expect(err).ToNot(HaveOccurred())
+						return linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+					}
+
+					It("should not scale the pool and should mark the offering unavailable when the plan is unavailable in the region", func() {
+						storeFullPool(230, 3030)
+						linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Set(&[]linodego.RegionAvailability{
+							{Region: fake.DefaultRegion, Plan: poolType, Available: false},
+						})
+
+						node, err := create()
+						Expect(err).To(HaveOccurred())
+						Expect(node).To(BeNil())
+						Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeTrue())
+						Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(poolType, fake.DefaultRegion)).To(BeTrue())
+						Expect(linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Calls()).To(Equal(0))
+					})
+
+					It("should scale the pool when the plan is available in the region", func() {
+						storeFullPool(231, 3031)
+						linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Set(&[]linodego.RegionAvailability{
+							{Region: fake.DefaultRegion, Plan: poolType, Available: true},
+						})
+
+						node, err := create()
+						Expect(err).ToNot(HaveOccurred())
+						Expect(node).ToNot(BeNil())
+						Expect(linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Calls()).To(BeNumerically(">=", 1))
+					})
+
+					It("should still scale the pool when the availability lookup fails", func() {
+						storeFullPool(232, 3032)
+						linodeEnv.LinodeAPI.GetRegionAvailabilityBehavior.Error.Set(errors.New("availability API unavailable"))
+
+						node, err := create()
+						Expect(err).ToNot(HaveOccurred())
+						Expect(node).ToNot(BeNil())
+						Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(poolType, fake.DefaultRegion)).To(BeFalse())
+						Expect(linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Calls()).To(BeNumerically(">=", 1))
+					})
+
+					It("should not scale the pool when the plan is absent from the availability response", func() {
+						storeFullPool(233, 3033)
+						linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Set(&[]linodego.RegionAvailability{
+							{Region: fake.DefaultRegion, Plan: "g6-some-other-plan", Available: false},
+						})
+
+						node, err := create()
+						Expect(err).To(HaveOccurred())
+						Expect(node).To(BeNil())
+						Expect(corecloudprovider.IsInsufficientCapacityError(err)).To(BeTrue())
+						Expect(linodeEnv.UnavailableOfferingsCache.IsUnavailable(poolType, fake.DefaultRegion)).To(BeTrue())
+						Expect(linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Calls()).To(Equal(0))
+					})
 				})
 
 				It("should return a create error without marking capacity unavailable when scaling fails", func() {
@@ -2056,7 +2134,8 @@ var _ = Describe("LKENodeProvider", func() {
 					resumeList()
 					if !deleteFinished {
 						select {
-						case <-deleteResult:
+						case err := <-deleteResult:
+							Expect(err).ToNot(HaveOccurred())
 						case <-time.After(5 * time.Second):
 						}
 					}
