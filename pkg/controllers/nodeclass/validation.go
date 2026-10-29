@@ -40,7 +40,7 @@ import (
 
 const (
 	requeueAfterTime = 10 * time.Minute
-	// Requeue invalid lkeK8sVersion checks quickly so readiness flips soon after an
+	// Requeue invalid lkeK8sVersion/firewallID checks quickly so readiness flips soon after an
 	// external LKE control plane upgrade becomes visible in the Linode API.
 	lkeVersionRequeueAfterTime = time.Minute
 )
@@ -49,6 +49,7 @@ const (
 	ConditionReasonTagValidationFailed               = "TagValidationFailed"
 	ConditionReasonLKEK8sVersionUnsupported          = "LKEK8sVersionUnsupported"
 	ConditionReasonLKEK8sVersionControlPlaneMismatch = "LKEK8sVersionControlPlaneMismatch"
+	ConditionReasonLKEFirewallIDUnsupported          = "LKEFirewallIDUnsupported"
 	ConditionReasonUnsupportedInstanceFields         = "UnsupportedInstanceFields"
 	ConditionReasonUnsupportedLKEFields              = "UnsupportedLKEFields"
 )
@@ -57,6 +58,7 @@ var ValidationConditionMessages = map[string]string{
 	ConditionReasonTagValidationFailed:               "LinodeNodeClass tags violate provider-managed key or 50-character length requirements",
 	ConditionReasonLKEK8sVersionUnsupported:          "lkeK8sVersion is only supported for LKE Enterprise clusters",
 	ConditionReasonLKEK8sVersionControlPlaneMismatch: "lkeK8sVersion requires the LKE cluster control plane to already be on the same version",
+	ConditionReasonLKEFirewallIDUnsupported:          "firewallID is only supported for LKE Enterprise clusters",
 	ConditionReasonUnsupportedInstanceFields:         "LinodeNodeClass sets instance-only fields that are not supported in LKE mode",
 	ConditionReasonUnsupportedLKEFields:              "LinodeNodeClass sets LKE-only fields that are not supported in instance mode",
 }
@@ -120,7 +122,7 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 	if err := v.validateInstanceUnsupportedFields(ctx, nodeClass); err != nil {
 		return reconcile.Result{}, err
 	}
-	if res, err := v.validateLKEK8sVersion(ctx, nodeClass); err != nil || !lo.IsEmpty(res) {
+	if res, err := v.validateLKEClusterTier(ctx, nodeClass); err != nil || !lo.IsEmpty(res) {
 		return res, err
 	}
 
@@ -245,12 +247,14 @@ func (v *Validation) validateInstanceUnsupportedFields(ctx context.Context, node
 	return reconcile.TerminalError(fmt.Errorf("validating nodeclass: LKE-only fields are not supported in instance mode: %s", strings.Join(setFields, ", ")))
 }
 
-func (v *Validation) validateLKEK8sVersion(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) (reconcile.Result, error) {
-	if options.FromContext(ctx).Mode != "lke" || nodeClass.Spec.LKEK8sVersion == nil {
+// validateLKEClusterTier validates fields that depend on the LKE cluster tier (lkeK8sVersion and
+// firewallID), fetching the cluster at most once.
+func (v *Validation) validateLKEClusterTier(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) (reconcile.Result, error) {
+	if options.FromContext(ctx).Mode != "lke" || (nodeClass.Spec.LKEK8sVersion == nil && nodeClass.Spec.FirewallID == nil) {
 		return reconcile.Result{}, nil
 	}
 	if v.clusterID == 0 {
-		return reconcile.Result{}, fmt.Errorf("validating lkeK8sVersion, LKE cluster ID is not configured")
+		return reconcile.Result{}, fmt.Errorf("validating LKE cluster tier fields, LKE cluster ID is not configured")
 	}
 
 	cluster, err := v.linodeClient.GetLKECluster(ctx, v.clusterID)
@@ -258,23 +262,30 @@ func (v *Validation) validateLKEK8sVersion(ctx context.Context, nodeClass *v1alp
 		return reconcile.Result{}, fmt.Errorf("getting LKE cluster %d: %w", v.clusterID, err)
 	}
 
-	desiredVersion := *nodeClass.Spec.LKEK8sVersion
 	switch linodego.LKEVersionTier(cluster.Tier) {
 	case linodego.LKEVersionEnterprise:
+		if nodeClass.Spec.LKEK8sVersion == nil {
+			return reconcile.Result{}, nil
+		}
+		desiredVersion := *nodeClass.Spec.LKEK8sVersion
 		if cluster.K8sVersion == desiredVersion {
 			return reconcile.Result{}, nil
 		}
 		message := fmt.Sprintf("lkeK8sVersion %q requires the LKE cluster control plane to already be on %q, current cluster version is %q", desiredVersion, desiredVersion, cluster.K8sVersion)
-		nodeClass.StatusConditions().SetFalse(v1alpha1.ConditionTypeValidationSucceeded, ConditionReasonLKEK8sVersionControlPlaneMismatch, message)
-		v.recorder.Publish(LKEK8sVersionValidationFailedEvent(nodeClass, ConditionReasonLKEK8sVersionControlPlaneMismatch, message))
-		return reconcile.Result{RequeueAfter: lkeVersionRequeueAfterTime}, nil
+		return v.failLKEClusterTierValidation(nodeClass, ConditionReasonLKEK8sVersionControlPlaneMismatch, message), nil
 	case linodego.LKEVersionStandard:
-		message := "lkeK8sVersion is only supported for LKE Enterprise clusters"
-		nodeClass.StatusConditions().SetFalse(v1alpha1.ConditionTypeValidationSucceeded, ConditionReasonLKEK8sVersionUnsupported, message)
-		v.recorder.Publish(LKEK8sVersionValidationFailedEvent(nodeClass, ConditionReasonLKEK8sVersionUnsupported, message))
-		return reconcile.Result{RequeueAfter: lkeVersionRequeueAfterTime}, nil
+		if nodeClass.Spec.LKEK8sVersion != nil {
+			return v.failLKEClusterTierValidation(nodeClass, ConditionReasonLKEK8sVersionUnsupported, ValidationConditionMessages[ConditionReasonLKEK8sVersionUnsupported]), nil
+		}
+		return v.failLKEClusterTierValidation(nodeClass, ConditionReasonLKEFirewallIDUnsupported, ValidationConditionMessages[ConditionReasonLKEFirewallIDUnsupported]), nil
 	}
-	return reconcile.Result{}, fmt.Errorf("validating lkeK8sVersion, unsupported LKE version tier %q", cluster.Tier)
+	return reconcile.Result{}, fmt.Errorf("validating LKE cluster tier fields, unsupported LKE version tier %q", cluster.Tier)
+}
+
+func (v *Validation) failLKEClusterTierValidation(nodeClass *v1alpha1.LinodeNodeClass, reason, message string) reconcile.Result {
+	nodeClass.StatusConditions().SetFalse(v1alpha1.ConditionTypeValidationSucceeded, reason, message)
+	v.recorder.Publish(LKEValidationFailedEvent(nodeClass, reason, message))
+	return reconcile.Result{RequeueAfter: lkeVersionRequeueAfterTime}
 }
 
 func (*Validation) cacheKey(nodeClass *v1alpha1.LinodeNodeClass, tags map[string]string) string {

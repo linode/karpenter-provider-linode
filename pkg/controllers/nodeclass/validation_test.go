@@ -216,6 +216,45 @@ var _ = Describe("NodeClass Validation", func() {
 		Expect(linodeEnv.EventRecorder.Calls(nodeclass.ConditionReasonLKEK8sVersionUnsupported)).To(Equal(1))
 	})
 
+	It("should set ValidationSucceeded false for firewallID on standard tier", func() {
+		nodeClass.Spec.FirewallID = new(123)
+		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		res := ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+		Expect(res.RequeueAfter).To(Equal(time.Minute))
+		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).IsFalse()).To(BeTrue())
+		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).Reason).To(Equal(nodeclass.ConditionReasonLKEFirewallIDUnsupported))
+		Expect(nodeClass.StatusConditions().Get(status.ConditionReady).IsFalse()).To(BeTrue())
+		Expect(linodeEnv.EventRecorder.Calls(nodeclass.ConditionReasonLKEFirewallIDUnsupported)).To(Equal(1))
+	})
+
+	It("should set ValidationSucceeded true for firewallID on enterprise tier", func() {
+		nodeClass.Spec.FirewallID = new(123)
+		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionEnterprise
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		res := ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+		Expect(res.RequeueAfter).To(Equal(10 * time.Minute))
+		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).IsTrue()).To(BeTrue())
+		Expect(linodeEnv.EventRecorder.Events()).To(BeEmpty())
+	})
+
+	It("should not look up the cluster when neither firewallID nor lkeK8sVersion is set", func() {
+		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).IsTrue()).To(BeTrue())
+		Expect(linodeEnv.LinodeAPI.GetLKEClusterBehavior.Calls()).To(Equal(0))
+	})
+
 	It("should set ValidationSucceeded false when lkeK8sVersion does not match the enterprise control plane", func() {
 		nodeClass.Spec.LKEK8sVersion = new("v1.32.8+lke13")
 		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionEnterprise

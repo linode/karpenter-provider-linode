@@ -34,7 +34,7 @@ func WaitingOnNodeClaimTerminationEvent(nodeClass *v1alpha1.LinodeNodeClass, nam
 	}
 }
 
-func LKEK8sVersionValidationFailedEvent(nodeClass *v1alpha1.LinodeNodeClass, reason, message string) events.Event {
+func LKEValidationFailedEvent(nodeClass *v1alpha1.LinodeNodeClass, reason, message string) events.Event {
 	return events.Event{
 		InvolvedObject: nodeClass,
 		Type:           corev1.EventTypeWarning,
