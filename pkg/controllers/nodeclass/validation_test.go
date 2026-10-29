@@ -72,6 +72,81 @@ var _ = Describe("NodeClass Validation", func() {
 		Expect(nodeClass.StatusConditions().Get(status.ConditionReady).IsTrue()).To(BeTrue())
 	})
 
+	DescribeTable("should fail validation when instance-only fields are set in LKE mode", func(mutate func(*v1.LinodeNodeClass), field string) {
+		mutate(nodeClass)
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		err := ExpectObjectReconcileFailed(ctx, env.Client, controller, nodeClass)
+		Expect(err).To(HaveOccurred())
+
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+		condition := nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded)
+		Expect(condition.IsFalse()).To(BeTrue())
+		Expect(condition.Reason).To(Equal(nodeclass.ConditionReasonUnsupportedInstanceFields))
+		Expect(condition.Message).To(ContainSubstring(field))
+		Expect(nodeClass.StatusConditions().Get(status.ConditionReady).IsFalse()).To(BeTrue())
+	},
+		Entry("image", func(nc *v1.LinodeNodeClass) { nc.Spec.Image = "linode/ubuntu22.04" }, "image"),
+		Entry("authorizedKeys", func(nc *v1.LinodeNodeClass) { nc.Spec.AuthorizedKeys = []string{"ssh-rsa AAAA"} }, "authorizedKeys"),
+		Entry("authorizedUsers", func(nc *v1.LinodeNodeClass) { nc.Spec.AuthorizedUsers = []string{"admin"} }, "authorizedUsers"),
+		Entry("backupsEnabled", func(nc *v1.LinodeNodeClass) { nc.Spec.BackupsEnabled = true }, "backupsEnabled"),
+		Entry("placementGroup", func(nc *v1.LinodeNodeClass) { nc.Spec.PlacementGroup = &v1.InstanceCreatePlacementGroupOptions{ID: 1} }, "placementGroup"),
+		Entry("vpcID", func(nc *v1.LinodeNodeClass) { id := 123; nc.Spec.VPCID = &id }, "vpcID"),
+		Entry("ipv6Options", func(nc *v1.LinodeNodeClass) { nc.Spec.IPv6Options = &v1.IPv6CreateOptions{} }, "ipv6Options"),
+		Entry("configuration", func(nc *v1.LinodeNodeClass) { nc.Spec.Configuration = &v1.InstanceConfiguration{} }, "configuration"),
+		Entry("swapSize", func(nc *v1.LinodeNodeClass) { size := 512; nc.Spec.SwapSize = &size }, "swapSize"),
+		Entry("diskEncryption", func(nc *v1.LinodeNodeClass) { nc.Spec.DiskEncryption = linodego.InstanceDiskEncryption("enabled") }, "diskEncryption"),
+	)
+
+	It("should report all unsupported instance-only fields set in LKE mode", func() {
+		nodeClass.Spec.Image = "linode/ubuntu22.04"
+		nodeClass.Spec.BackupsEnabled = true
+		vpcID := 7
+		nodeClass.Spec.VPCID = &vpcID
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		err := ExpectObjectReconcileFailed(ctx, env.Client, controller, nodeClass)
+		Expect(err).To(HaveOccurred())
+
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+		condition := nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded)
+		Expect(condition.IsFalse()).To(BeTrue())
+		Expect(condition.Reason).To(Equal(nodeclass.ConditionReasonUnsupportedInstanceFields))
+		Expect(condition.Message).To(And(ContainSubstring("image"), ContainSubstring("backupsEnabled"), ContainSubstring("vpcID")))
+		Expect(nodeClass.StatusConditions().Get(status.ConditionReady).IsFalse()).To(BeTrue())
+	})
+
+	It("should fail validation when LKE-only fields are set in instance mode", func() {
+		mode := "instance"
+		ctx = options.ToContext(ctx, test.Options(test.OptionsFields{Mode: &mode}))
+		nodeClass.Spec.LKEK8sVersion = new("v1.31.9+lke7")
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		err := ExpectObjectReconcileFailed(ctx, env.Client, controller, nodeClass)
+		Expect(err).To(HaveOccurred())
+
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+		condition := nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded)
+		Expect(condition.IsFalse()).To(BeTrue())
+		Expect(condition.Reason).To(Equal(nodeclass.ConditionReasonUnsupportedLKEFields))
+		Expect(condition.Message).To(ContainSubstring("lkeK8sVersion"))
+		Expect(nodeClass.StatusConditions().Get(status.ConditionReady).IsFalse()).To(BeTrue())
+	})
+
+	It("should allow instance-only fields when not in LKE mode", func() {
+		mode := "instance"
+		ctx = options.ToContext(ctx, test.Options(test.OptionsFields{Mode: &mode}))
+		nodeClass.Spec.Image = "linode/ubuntu22.04"
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		res := ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+		Expect(res.RequeueAfter).To(Equal(10 * time.Minute))
+		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).IsTrue()).To(BeTrue())
+		Expect(nodeClass.StatusConditions().Get(status.ConditionReady).IsTrue()).To(BeTrue())
+	})
+
 	It("should reject overlong user tags before LKE API validation", func() {
 		tag := "env=" + strings.Repeat("a", 47)
 		nodeClass.Spec.Tags = []string{tag}
@@ -139,6 +214,62 @@ var _ = Describe("NodeClass Validation", func() {
 		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).Reason).To(Equal(nodeclass.ConditionReasonLKEK8sVersionUnsupported))
 		Expect(nodeClass.StatusConditions().Get(status.ConditionReady).IsFalse()).To(BeTrue())
 		Expect(linodeEnv.EventRecorder.Calls(nodeclass.ConditionReasonLKEK8sVersionUnsupported)).To(Equal(1))
+	})
+
+	It("should set ValidationSucceeded false for firewallID on standard tier", func() {
+		nodeClass.Spec.FirewallID = new(123)
+		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		res := ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+		Expect(res.RequeueAfter).To(Equal(time.Minute))
+		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).IsFalse()).To(BeTrue())
+		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).Reason).To(Equal(nodeclass.ConditionReasonLKEFirewallIDUnsupported))
+		Expect(nodeClass.StatusConditions().Get(status.ConditionReady).IsFalse()).To(BeTrue())
+		Expect(linodeEnv.EventRecorder.Calls(nodeclass.ConditionReasonLKEFirewallIDUnsupported)).To(Equal(1))
+	})
+
+	It("should report both lkeK8sVersion and firewallID on standard tier", func() {
+		nodeClass.Spec.LKEK8sVersion = new("v1.32.8+lke13")
+		nodeClass.Spec.FirewallID = new(123)
+		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		res := ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+		condition := nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded)
+		Expect(res.RequeueAfter).To(Equal(time.Minute))
+		Expect(condition.IsFalse()).To(BeTrue())
+		Expect(condition.Reason).To(Equal(nodeclass.ConditionReasonLKEEnterpriseFieldsUnsupported))
+		Expect(condition.Message).To(And(ContainSubstring("lkeK8sVersion"), ContainSubstring("firewallID")))
+		Expect(linodeEnv.EventRecorder.Calls(nodeclass.ConditionReasonLKEEnterpriseFieldsUnsupported)).To(Equal(1))
+	})
+
+	It("should set ValidationSucceeded true for firewallID on enterprise tier", func() {
+		nodeClass.Spec.FirewallID = new(123)
+		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionEnterprise
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		res := ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+		Expect(res.RequeueAfter).To(Equal(10 * time.Minute))
+		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).IsTrue()).To(BeTrue())
+		Expect(linodeEnv.EventRecorder.Events()).To(BeEmpty())
+	})
+
+	It("should not look up the cluster when neither firewallID nor lkeK8sVersion is set", func() {
+		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).IsTrue()).To(BeTrue())
+		Expect(linodeEnv.LinodeAPI.GetLKEClusterBehavior.Calls()).To(Equal(0))
 	})
 
 	It("should set ValidationSucceeded false when lkeK8sVersion does not match the enterprise control plane", func() {
