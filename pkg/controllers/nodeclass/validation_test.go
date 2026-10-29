@@ -231,6 +231,23 @@ var _ = Describe("NodeClass Validation", func() {
 		Expect(linodeEnv.EventRecorder.Calls(nodeclass.ConditionReasonLKEFirewallIDUnsupported)).To(Equal(1))
 	})
 
+	It("should report both lkeK8sVersion and firewallID on standard tier", func() {
+		nodeClass.Spec.LKEK8sVersion = new("v1.32.8+lke13")
+		nodeClass.Spec.FirewallID = new(123)
+		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
+
+		ExpectApplied(ctx, env.Client, nodeClass)
+		res := ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+
+		condition := nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded)
+		Expect(res.RequeueAfter).To(Equal(time.Minute))
+		Expect(condition.IsFalse()).To(BeTrue())
+		Expect(condition.Reason).To(Equal(nodeclass.ConditionReasonLKEEnterpriseFieldsUnsupported))
+		Expect(condition.Message).To(And(ContainSubstring("lkeK8sVersion"), ContainSubstring("firewallID")))
+		Expect(linodeEnv.EventRecorder.Calls(nodeclass.ConditionReasonLKEEnterpriseFieldsUnsupported)).To(Equal(1))
+	})
+
 	It("should set ValidationSucceeded true for firewallID on enterprise tier", func() {
 		nodeClass.Spec.FirewallID = new(123)
 		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionEnterprise

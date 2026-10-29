@@ -40,9 +40,9 @@ import (
 
 const (
 	requeueAfterTime = 10 * time.Minute
-	// Requeue invalid lkeK8sVersion/firewallID checks quickly so readiness flips soon after an
-	// external LKE control plane upgrade becomes visible in the Linode API.
-	lkeVersionRequeueAfterTime = time.Minute
+	// Requeue invalid LKE cluster tier checks (lkeK8sVersion, firewallID) quickly so readiness flips
+	// soon after an external LKE cluster change becomes visible in the Linode API.
+	lkeTierRequeueAfterTime = time.Minute
 )
 
 const (
@@ -50,6 +50,7 @@ const (
 	ConditionReasonLKEK8sVersionUnsupported          = "LKEK8sVersionUnsupported"
 	ConditionReasonLKEK8sVersionControlPlaneMismatch = "LKEK8sVersionControlPlaneMismatch"
 	ConditionReasonLKEFirewallIDUnsupported          = "LKEFirewallIDUnsupported"
+	ConditionReasonLKEEnterpriseFieldsUnsupported    = "LKEEnterpriseFieldsUnsupported"
 	ConditionReasonUnsupportedInstanceFields         = "UnsupportedInstanceFields"
 	ConditionReasonUnsupportedLKEFields              = "UnsupportedLKEFields"
 )
@@ -59,6 +60,7 @@ var ValidationConditionMessages = map[string]string{
 	ConditionReasonLKEK8sVersionUnsupported:          "lkeK8sVersion is only supported for LKE Enterprise clusters",
 	ConditionReasonLKEK8sVersionControlPlaneMismatch: "lkeK8sVersion requires the LKE cluster control plane to already be on the same version",
 	ConditionReasonLKEFirewallIDUnsupported:          "firewallID is only supported for LKE Enterprise clusters",
+	ConditionReasonLKEEnterpriseFieldsUnsupported:    "lkeK8sVersion and firewallID are only supported for LKE Enterprise clusters",
 	ConditionReasonUnsupportedInstanceFields:         "LinodeNodeClass sets instance-only fields that are not supported in LKE mode",
 	ConditionReasonUnsupportedLKEFields:              "LinodeNodeClass sets LKE-only fields that are not supported in instance mode",
 }
@@ -274,10 +276,14 @@ func (v *Validation) validateLKEClusterTier(ctx context.Context, nodeClass *v1al
 		message := fmt.Sprintf("lkeK8sVersion %q requires the LKE cluster control plane to already be on %q, current cluster version is %q", desiredVersion, desiredVersion, cluster.K8sVersion)
 		return v.failLKEClusterTierValidation(nodeClass, ConditionReasonLKEK8sVersionControlPlaneMismatch, message), nil
 	case linodego.LKEVersionStandard:
-		if nodeClass.Spec.LKEK8sVersion != nil {
-			return v.failLKEClusterTierValidation(nodeClass, ConditionReasonLKEK8sVersionUnsupported, ValidationConditionMessages[ConditionReasonLKEK8sVersionUnsupported]), nil
+		reason := ConditionReasonLKEEnterpriseFieldsUnsupported
+		switch {
+		case nodeClass.Spec.LKEK8sVersion != nil && nodeClass.Spec.FirewallID == nil:
+			reason = ConditionReasonLKEK8sVersionUnsupported
+		case nodeClass.Spec.LKEK8sVersion == nil && nodeClass.Spec.FirewallID != nil:
+			reason = ConditionReasonLKEFirewallIDUnsupported
 		}
-		return v.failLKEClusterTierValidation(nodeClass, ConditionReasonLKEFirewallIDUnsupported, ValidationConditionMessages[ConditionReasonLKEFirewallIDUnsupported]), nil
+		return v.failLKEClusterTierValidation(nodeClass, reason, ValidationConditionMessages[reason]), nil
 	}
 	return reconcile.Result{}, fmt.Errorf("validating LKE cluster tier fields, unsupported LKE version tier %q", cluster.Tier)
 }
@@ -285,7 +291,7 @@ func (v *Validation) validateLKEClusterTier(ctx context.Context, nodeClass *v1al
 func (v *Validation) failLKEClusterTierValidation(nodeClass *v1alpha1.LinodeNodeClass, reason, message string) reconcile.Result {
 	nodeClass.StatusConditions().SetFalse(v1alpha1.ConditionTypeValidationSucceeded, reason, message)
 	v.recorder.Publish(LKEValidationFailedEvent(nodeClass, reason, message))
-	return reconcile.Result{RequeueAfter: lkeVersionRequeueAfterTime}
+	return reconcile.Result{RequeueAfter: lkeTierRequeueAfterTime}
 }
 
 func (*Validation) cacheKey(nodeClass *v1alpha1.LinodeNodeClass, tags map[string]string) string {
