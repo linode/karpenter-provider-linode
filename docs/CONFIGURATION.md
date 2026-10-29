@@ -46,7 +46,7 @@ The provider can operate in two distinct modes, controlled by the `KARPENTER_MOD
 * Provisions nodes by creating **LKE Node Pools** with a count of 1.
 * The nodes are automatically joined to your LKE cluster.
 * **Pros**: Simplest setup, managed by LKE.
-* **Cons**: Limited customization (cannot use custom images or advanced networking/storage options usually available to raw Linodes).
+* **Cons**: Limited customization (cannot use custom images or advanced networking/storage options usually available to raw Linodes). Instance-only `LinodeNodeClass` fields are rejected in this mode.
 
 ### Instance Mode (`instance`)
 
@@ -77,18 +77,26 @@ lowest observed capacity per resource.
 
 ### Field Reference
 
+Fields marked **Instance** or **LKE** are only meaningful in that mode. Setting an **Instance**-only field while running in `lke` mode (or an **LKE**-only field while running in `instance` mode) is rejected: the `LinodeNodeClass` reports `ValidationSucceeded=False` with reason `UnsupportedInstanceFields` or `UnsupportedLKEFields` (listing the offending fields) and does not become `Ready`.
+
 | Field | Type | Supported Modes | Description |
 | ------- | ------ | ----------------- | ------------- |
 | `tags` | `[]string` | **All** | Tags to apply to Linode instances. Each complete tag is limited to 50 characters. In LKE mode, user tags are reconciled directly on instances; generated Karpenter-managed pool tags also must fit the limit and are rejected rather than shortened. |
 | `firewallID` | `int` | **All** | The ID of the Cloud Firewall to attach. |
-| `lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for LKE Enterprise worker nodes. Upgrade the cluster control plane to this version first; otherwise reconciliation fails and replacement NodeClaims will not come up on the requested version. For Enterprise clusters, the update strategy automatically defaults to `on_recycle`. |
-| `image` | `string` | **Instance** | The Image ID to deploy (default: `linode/ubuntu22.04`). |
-| `authorizedKeys` | `[]string` | **Instance** | SSH Public Keys to add to the `root` user. |
-| `authorizedUsers` | `[]string` | **Instance** | List of Linode usernames whose SSH keys will be added. |
-| `backupsEnabled` | `bool` | **Instance** | Enable backups service for the instance. |
-| `diskEncryption` | `enum` | **Instance** | `enabled` or `disabled`. |
-| `swapSize` | `int` | **Instance** | Size of the swap disk in MiB. |
-| `placementGroup` | `object` | **Instance** | Place instance in a specific Placement Group (see below). |
+| `kubelet` | `object` | **All** | Kubelet settings (e.g. `kubeReserved`, `systemReserved`, eviction thresholds). Currently used only for Karpenter's allocatable capacity and ephemeral storage estimates; the provider does not push them to nodes. |
+| `lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for LKE Enterprise worker nodes. Upgrade the cluster control plane to this version first; otherwise reconciliation fails and replacement NodeClaims will not come up on the requested version. For Enterprise clusters, the update strategy automatically defaults to `on_recycle`. Rejected in `instance` mode. |
+| `image` | `string` | **Instance** | The Image ID to deploy (default: `linode/ubuntu22.04`). Rejected in `lke` mode. |
+| `authorizedKeys` | `[]string` | **Instance** | SSH Public Keys to add to the `root` user. Rejected in `lke` mode. |
+| `authorizedUsers` | `[]string` | **Instance** | List of Linode usernames whose SSH keys will be added. Rejected in `lke` mode. |
+| `backupsEnabled` | `bool` | **Instance** | Enable backups service for the instance. Rejected in `lke` mode. |
+| `diskEncryption` | `enum` | **Instance** | `enabled` or `disabled`. Rejected in `lke` mode (not yet sent to LKE node pools). |
+| `swapSize` | `int` | **Instance** | Size of the swap disk in MiB. Rejected in `lke` mode. |
+| `placementGroup` | `object` | **Instance** | Place instance in a specific Placement Group (`id`, `compliant_only`). Rejected in `lke` mode. |
+| `osDisk` | `object` | **Instance** | Root disk configuration. Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
+| `dataDisks` | `object` | **Instance** | Additional disks (`sdb`–`sdh`). Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
+| `configuration` | `object` | **Instance** | Instance configuration profile (e.g. `kernel`). Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
+| `vpcID` | `int` | **Instance** | ID of an existing VPC. Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
+| `ipv6Options` | `object` | **Instance** | IPv6 options (`enableSLAAC`, `enableRanges`, `isPublicIPv6`). Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
 
 ### Taints and Standard Labels
 
