@@ -170,7 +170,20 @@ func (v *Validation) validateLKEUnsupportedFields(ctx context.Context, nodeClass
 		return nil
 	}
 
-	spec := nodeClass.Spec
+	setFields := instanceOnlyFieldsSet(&nodeClass.Spec)
+	if len(setFields) == 0 {
+		return nil
+	}
+
+	nodeClass.StatusConditions().SetFalse(
+		v1.ConditionTypeValidationSucceeded,
+		ConditionReasonUnsupportedInstanceFields,
+		fmt.Sprintf("%s: %s", ValidationConditionMessages[ConditionReasonUnsupportedInstanceFields], strings.Join(setFields, ", ")),
+	)
+	return reconcile.TerminalError(fmt.Errorf("validating nodeclass: instance-only fields are not supported in LKE mode: %s", strings.Join(setFields, ", ")))
+}
+
+func instanceOnlyFieldsSet(spec *v1alpha1.LinodeNodeClassSpec) []string {
 	var setFields []string
 	if len(spec.AuthorizedKeys) > 0 {
 		setFields = append(setFields, "authorizedKeys")
@@ -212,16 +225,7 @@ func (v *Validation) validateLKEUnsupportedFields(ctx context.Context, nodeClass
 		setFields = append(setFields, "diskEncryption")
 	}
 
-	if len(setFields) == 0 {
-		return nil
-	}
-
-	nodeClass.StatusConditions().SetFalse(
-		v1.ConditionTypeValidationSucceeded,
-		ConditionReasonUnsupportedInstanceFields,
-		fmt.Sprintf("%s: %s", ValidationConditionMessages[ConditionReasonUnsupportedInstanceFields], strings.Join(setFields, ", ")),
-	)
-	return reconcile.TerminalError(fmt.Errorf("validating nodeclass: instance-only fields are not supported in LKE mode: %s", strings.Join(setFields, ", ")))
+	return setFields
 }
 
 // validateInstanceUnsupportedFields rejects LinodeNodeClasses that set LKE-only fields while
