@@ -364,9 +364,7 @@ func (p *DefaultProvider) findOrCreatePool(ctx context.Context, nodeClass *v1alp
 		Labels: lkeLabelsFromNodeClaim(nodeClaim),
 		Taints: convertToLkeTaints(nodeClaim.Spec.Taints),
 	}
-	if nodeClass.Spec.FirewallID != nil {
-		createOpts.FirewallID = nodeClass.Spec.FirewallID
-	}
+	// Leave FirewallID unset so LKE associates the cluster's default Firewall.
 	if nodeClass.Spec.LKEK8sVersion != nil {
 		createOpts.K8sVersion = nodeClass.Spec.LKEK8sVersion
 	}

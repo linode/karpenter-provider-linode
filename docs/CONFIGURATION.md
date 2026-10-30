@@ -82,7 +82,7 @@ Fields marked **Instance** or **LKE** are only meaningful in that mode. Setting 
 | Field | Type | Supported Modes | Description |
 | ------- | ------ | ----------------- | ------------- |
 | `tags` | `[]string` | **All** | Tags to apply to Linode instances. Each complete tag is limited to 50 characters. In LKE mode, user tags are reconciled directly on instances; generated Karpenter-managed pool tags also must fit the limit and are rejected rather than shortened. |
-| `firewallID` | `int` | **All** | The ID of the Cloud Firewall to attach. In `lke` mode this is only supported for LKE Enterprise clusters; on Standard clusters the `LinodeNodeClass` reports `ValidationSucceeded=False` with reason `LKEFirewallIDUnsupported` (or `LKEEnterpriseFieldsUnsupported` when `lkeK8sVersion` is also set). |
+| `firewallID` | `int` | **Instance** | The ID of the Cloud Firewall to attach to a directly created Linode instance. Rejected in `lke` mode; LKE node pools use the cluster's default Firewall. |
 | `kubelet` | `object` | **All** | Kubelet settings (e.g. `kubeReserved`, `systemReserved`, eviction thresholds). Currently used only for Karpenter's allocatable capacity and ephemeral storage estimates; the provider does not push them to nodes. |
 | `lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for LKE Enterprise worker nodes. Upgrade the cluster control plane to this version first; otherwise reconciliation fails and replacement NodeClaims will not come up on the requested version. For Enterprise clusters, the update strategy automatically defaults to `on_recycle`. Rejected in `instance` mode. |
 | `image` | `string` | **Instance** | The Image ID to deploy (default: `linode/ubuntu22.04`). Rejected in `lke` mode. |
@@ -119,7 +119,6 @@ spec:
   tags:
     - "karpenter-node"
     - "env:production"
-  firewallID: 12345
 ```
 
 ### Example: Instance Mode
@@ -132,6 +131,7 @@ metadata:
 spec:
   tags:
     - "custom-workload"
+  firewallID: 12345
   image: "linode/ubuntu22.04"
   authorizedUsers:
     - "my-user"

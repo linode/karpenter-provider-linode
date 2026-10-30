@@ -307,8 +307,9 @@ spec:
                 - disabled
                 type: string
               firewallID:
-                description: firewallID is the id of the cloud firewall to apply to
-                  the Linode Instance.
+                description: |-
+                  firewallID is the ID of the Cloud Firewall to attach to directly created Linode
+                  instances. In LKE mode, node pools use the cluster's default Firewall instead.
                 type: integer
               image:
                 description: image is the Linode image to use for the instance.
