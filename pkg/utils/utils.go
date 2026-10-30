@@ -372,14 +372,14 @@ type backoffEntry struct {
 // BackoffTracker tracks consecutive failures per key and rejects further attempts until an
 // exponentially growing delay has elapsed, so a persistently failing API call isn't hammered.
 type BackoffTracker struct {
-	entries *cache.Cache
-	base    time.Duration
-	max     time.Duration
+	entries  *cache.Cache
+	base     time.Duration
+	maxDelay time.Duration
 }
 
 // NewBackoffTracker creates a new BackoffTracker with a cache with a default expiration of an hour
-func NewBackoffTracker(base, max time.Duration) *BackoffTracker {
-	return &BackoffTracker{entries: cache.New(time.Hour, 10*time.Minute), base: base, max: max}
+func NewBackoffTracker(base, maxDelay time.Duration) *BackoffTracker {
+	return &BackoffTracker{cache.New(time.Hour, 10*time.Minute), base, maxDelay}
 }
 
 // Check returns an error wrapping the last failure while key is backing off, or nil when an attempt is allowed.
@@ -403,7 +403,7 @@ func (b *BackoffTracker) RecordFailure(key string, err error) {
 	if v, ok := b.entries.Get(key); ok {
 		prev := v.(backoffEntry)
 		entry.failures = prev.failures + 1
-		entry.delay = min(prev.delay*2, b.max)
+		entry.delay = min(prev.delay*2, b.maxDelay)
 	}
 	entry.retryAt = time.Now().Add(entry.delay)
 	b.entries.SetDefault(key, entry)

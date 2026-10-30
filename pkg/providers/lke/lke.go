@@ -215,11 +215,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 	// Last node pool API failure of the most recent attempt. It is recorded once per Create call,
 	// not per attempt, so the in-call retries below don't escalate the backoff on their own.
 	var poolErr error
-	defer func() {
-		if poolErr != nil && utils.IsRetryableError(poolErr) {
-			p.poolBackoff.RecordFailure(poolKey, poolErr)
-		}
-	}()
+	defer func() { p.recordPoolFailure(poolKey, poolErr) }()
 	// Keep successful capacity mutations across retries while discovery catches up.
 	createdPool, scaledOnce := false, false
 	// Last actionable retry failure; defaults to the expected wait so the timeout always has a cause.
@@ -230,15 +226,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 		}
 
 		inst, err := p.attemptCreate(ctx, nodeClass, nodeClaim, tags, instanceType, poolKey, &createdPool, &scaledOnce)
-		var reqErr *poolRequestError
-		poolErr = nil
-		switch {
-		case errors.As(err, &reqErr):
-			poolErr = reqErr.error
-		case err == nil || errors.Is(err, ErrNoClaimableInstance):
-			// The pool API calls succeeded, so any earlier failure is resolved.
-			p.poolBackoff.Clear(poolKey)
-		}
+		poolErr = p.observePoolAttempt(poolKey, err)
 		if err != nil {
 			if isRetryableCreateError(err) || utils.IsRetryableError(err) {
 				// Waiting for a scaled node to appear is expected; only record real failures
@@ -260,6 +248,25 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 		"NodePoolProvisioning",
 		fmt.Sprintf("Timed out waiting for LKE instance to become available: %s", lastRetryErr),
 	)
+}
+
+// observePoolAttempt returns the node pool API failure behind an attempt's error, if any. An attempt
+// that reached the pool successfully resolves any earlier failure, so the backoff is cleared.
+func (p *DefaultProvider) observePoolAttempt(poolKey string, err error) error {
+	var reqErr *poolRequestError
+	switch {
+	case errors.As(err, &reqErr):
+		return reqErr.error
+	case err == nil || errors.Is(err, ErrNoClaimableInstance):
+		p.poolBackoff.Clear(poolKey)
+	}
+	return nil
+}
+
+func (p *DefaultProvider) recordPoolFailure(poolKey string, poolErr error) {
+	if poolErr != nil && utils.IsRetryableError(poolErr) {
+		p.poolBackoff.RecordFailure(poolKey, poolErr)
+	}
 }
 
 func (p *DefaultProvider) resolveCreateInstanceType(ctx context.Context, instanceTypes []*cloudprovider.InstanceType, nodeClaim *karpv1.NodeClaim) (string, error) {
