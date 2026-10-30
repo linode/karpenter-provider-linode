@@ -18,6 +18,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -2250,7 +2252,8 @@ var _ = Describe("LKENodeProvider", func() {
 				listErr := &linodego.Error{Code: http.StatusTooManyRequests, Message: "rate limited"}
 				linodeEnv.LinodeAPI.ListLKENodePoolsBehavior.Error.Set(listErr)
 
-				err := linodeEnv.LKENodeProvider.Delete(ctx, "999999")
+				// Distinct ID: the 429 puts this instance into delete backoff on the shared provider.
+				err := linodeEnv.LKENodeProvider.Delete(ctx, "999998")
 				Expect(err).To(HaveOccurred())
 				Expect(corecloudprovider.IsNodeClaimNotFoundError(err)).To(BeFalse())
 				Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolBehavior.Calls()).To(Equal(0))
@@ -2317,6 +2320,99 @@ var _ = Describe("LKENodeProvider", func() {
 				err := linodeEnv.LKENodeProvider.Delete(ctx, "888")
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("delete fail"))
+			})
+
+			Context("delete backoff", func() {
+				const instanceID = 9001
+				var backoffProvider *lke.DefaultProvider
+
+				BeforeEach(func() {
+					backoffProvider = lke.NewDefaultProvider(
+						fake.DefaultClusterID,
+						linodego.LKEVersionStandard,
+						fake.DefaultClusterName,
+						fake.DefaultRegion,
+						recorder,
+						linodeEnv.LinodeAPI,
+						linodeEnv.UnavailableOfferingsCache,
+						linodeEnv.NodePoolCache,
+						lke.ProviderConfig{DeleteBackoffBase: 50 * time.Millisecond, DeleteBackoffMax: time.Second},
+					)
+					pool := &linodego.LKENodePool{
+						ID: 900,
+						Tags: []string{
+							fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+							fmt.Sprintf("%s=true", v1.LabelLKEManaged),
+						},
+						Linodes: []linodego.LKENodePoolLinode{
+							{InstanceID: instanceID, ID: "node-9001"},
+							{InstanceID: 9002, ID: "node-9002"},
+						},
+					}
+					linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, pool.ID), pool)
+				})
+
+				It("should not call the API again while backing off after a retryable error", func() {
+					linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: "unavailable"}, fake.MaxCalls(1))
+
+					err := backoffProvider.Delete(ctx, strconv.Itoa(instanceID))
+					Expect(err).To(HaveOccurred())
+					Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Calls()).To(Equal(1))
+					listCalls := linodeEnv.LinodeAPI.ListLKENodePoolsBehavior.Calls()
+
+					err = backoffProvider.Delete(ctx, strconv.Itoa(instanceID))
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("backing off"))
+					Expect(err.Error()).To(ContainSubstring("unavailable"))
+					Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Calls()).To(Equal(1))
+					Expect(linodeEnv.LinodeAPI.ListLKENodePoolsBehavior.Calls()).To(Equal(listCalls))
+				})
+
+				It("should retry and clear the backoff once the delay elapses", func() {
+					linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: "unavailable"}, fake.MaxCalls(1))
+					Expect(backoffProvider.Delete(ctx, strconv.Itoa(instanceID))).ToNot(Succeed())
+
+					Eventually(func() error {
+						return backoffProvider.Delete(ctx, strconv.Itoa(instanceID))
+					}).WithTimeout(2 * time.Second).WithPolling(10 * time.Millisecond).Should(Succeed())
+					Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Calls()).To(Equal(2))
+				})
+
+				for name, retryableErr := range map[string]error{
+					"429":               &linodego.Error{Code: http.StatusTooManyRequests, Message: "slow down"},
+					"500":               &linodego.Error{Code: http.StatusInternalServerError, Message: "internal"},
+					"502":               &linodego.Error{Code: http.StatusBadGateway, Message: "bad gateway"},
+					"503":               &linodego.Error{Code: http.StatusServiceUnavailable, Message: "unavailable"},
+					"504":               &linodego.Error{Code: http.StatusGatewayTimeout, Message: "gateway timeout"},
+					"408":               &linodego.Error{Code: http.StatusRequestTimeout, Message: "request timeout"},
+					"error-sourced":     &linodego.Error{Code: linodego.ErrorFromError, Message: "wrapped error"},
+					"network timeout":   &net.DNSError{Err: "i/o timeout", IsTimeout: true},
+					"deadline exceeded": context.DeadlineExceeded,
+					"unexpected EOF":    io.ErrUnexpectedEOF,
+				} {
+					It(fmt.Sprintf("should back off on retryable error: %s", name), func() {
+						linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Error.Set(retryableErr, fake.MaxCalls(1))
+
+						Expect(backoffProvider.Delete(ctx, strconv.Itoa(instanceID))).ToNot(Succeed())
+						err := backoffProvider.Delete(ctx, strconv.Itoa(instanceID))
+						Expect(err).To(HaveOccurred())
+						Expect(err.Error()).To(ContainSubstring("backing off"))
+						Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Calls()).To(Equal(1))
+					})
+				}
+
+				for name, nonRetryableErr := range map[string]error{
+					"403":           &linodego.Error{Code: http.StatusForbidden, Message: "forbidden"},
+					"non-API error": fmt.Errorf("unknown"),
+				} {
+					It(fmt.Sprintf("should not back off on non-retryable error: %s", name), func() {
+						linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Error.Set(nonRetryableErr, fake.MaxCalls(1))
+
+						Expect(backoffProvider.Delete(ctx, strconv.Itoa(instanceID))).ToNot(Succeed())
+						Expect(backoffProvider.Delete(ctx, strconv.Itoa(instanceID))).To(Succeed())
+						Expect(linodeEnv.LinodeAPI.DeleteLKENodePoolNodeBehavior.Calls()).To(Equal(2))
+					})
+				}
 			})
 		})
 

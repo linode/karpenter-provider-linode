@@ -21,7 +21,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -50,6 +52,8 @@ const (
 	DefaultCreateDeadline               = 10 * time.Second
 	DefaultTagVerificationTimeout       = 4 * time.Second
 	DefaultRetryDelay                   = 2 * time.Second
+	DefaultDeleteBackoffBase            = 10 * time.Second
+	DefaultDeleteBackoffMax             = 5 * time.Minute
 	lkeLabelsTaintsWaitingTaintKey      = "lke.linode.com/labels-taints"
 	lkeLabelsTaintsWaitingTaintValue    = "waiting"
 	lkeEnterpriseCiliumNotReadyTaintKey = "node.cilium.io/agent-not-ready"
@@ -119,6 +123,7 @@ type DefaultProvider struct {
 	client               sdk.LinodeAPI
 	unavailableOfferings *linodecache.UnavailableOfferings
 	nodeCache            *cache.Cache
+	deleteBackoff        *cache.Cache
 	poolMutex            keymutex.KeyMutex
 	config               ProviderConfig
 }
@@ -127,6 +132,17 @@ type ProviderConfig struct {
 	CreateDeadline         time.Duration
 	TagVerificationTimeout time.Duration
 	RetryDelay             time.Duration
+	// DeleteBackoffBase and DeleteBackoffMax bound the exponential backoff applied to
+	// repeated non-transient Delete failures for the same instance.
+	DeleteBackoffBase time.Duration
+	DeleteBackoffMax  time.Duration
+}
+
+type deleteBackoffEntry struct {
+	failures int
+	delay    time.Duration
+	retryAt  time.Time
+	err      error
 }
 
 func NewDefaultProvider(
@@ -149,6 +165,12 @@ func NewDefaultProvider(
 	if config.RetryDelay == 0 {
 		config.RetryDelay = DefaultRetryDelay
 	}
+	if config.DeleteBackoffBase == 0 {
+		config.DeleteBackoffBase = DefaultDeleteBackoffBase
+	}
+	if config.DeleteBackoffMax == 0 {
+		config.DeleteBackoffMax = DefaultDeleteBackoffMax
+	}
 	return &DefaultProvider{
 		clusterID:            clusterID,
 		clusterTier:          clusterTier,
@@ -158,6 +180,7 @@ func NewDefaultProvider(
 		client:               client,
 		unavailableOfferings: unavailableOfferings,
 		nodeCache:            nodePoolCache,
+		deleteBackoff:        cache.New(time.Hour, 10*time.Minute),
 		poolMutex:            keymutex.NewHashed(0),
 		config:               config,
 	}
@@ -661,7 +684,70 @@ func isKarpenterManagedPool(pool *linodego.LKENodePool) bool {
 	return hasNodePoolLabel && hasLKEManagedLabel
 }
 
+// Delete removes the instance from its LKE node pool. Retryable failures (see isRetryableError,
+// e.g. a 429 or 503) are retried with exponential backoff, and calls made while backing off fail
+// fast without touching the Linode API.
 func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
+	if err := p.checkDeleteBackoff(id); err != nil {
+		return err
+	}
+	err := p.delete(ctx, id)
+	p.recordDeleteResult(id, err)
+	return err
+}
+
+func (p *DefaultProvider) checkDeleteBackoff(id string) error {
+	v, ok := p.deleteBackoff.Get(id)
+	if !ok {
+		return nil
+	}
+	entry := v.(deleteBackoffEntry)
+	remaining := time.Until(entry.retryAt)
+	if remaining <= 0 {
+		return nil
+	}
+	return fmt.Errorf("deleting instance %s is backing off for %s after %d failed attempts: %w", id, remaining.Round(time.Second), entry.failures, entry.err)
+}
+
+func (p *DefaultProvider) recordDeleteResult(id string, err error) {
+	if err == nil || cloudprovider.IsNodeClaimNotFoundError(err) {
+		p.deleteBackoff.Delete(id)
+		return
+	}
+	if !isRetryableError(err) {
+		return
+	}
+	entry := deleteBackoffEntry{failures: 1, delay: p.config.DeleteBackoffBase, err: err}
+	if v, ok := p.deleteBackoff.Get(id); ok {
+		prev := v.(deleteBackoffEntry)
+		entry.failures = prev.failures + 1
+		entry.delay = min(prev.delay*2, p.config.DeleteBackoffMax)
+	}
+	entry.retryAt = time.Now().Add(entry.delay)
+	p.deleteBackoff.SetDefault(id, entry)
+}
+
+// isRetryableError determines if the error is retryable, meaning a controller that
+// encounters this error should requeue reconciliation to try again later
+func isRetryableError(err error) bool {
+	// net.Error covers *url.Error and other network-level timeouts. These are not
+	// wrapped as *linodego.Error by linodego v2, so ErrHasStatus misses them.
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	return linodego.ErrHasStatus(
+		err,
+		http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusGatewayTimeout,
+		http.StatusServiceUnavailable,
+		http.StatusRequestTimeout,
+		linodego.ErrorFromError) || errors.Is(err, http.ErrHandlerTimeout) || errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.ErrUnexpectedEOF)
+}
+
+func (p *DefaultProvider) delete(ctx context.Context, id string) error {
 	instanceID, err := strconv.Atoi(id)
 	if err != nil {
 		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("parsing instance ID: %w", err))
