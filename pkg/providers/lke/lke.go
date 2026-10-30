@@ -50,6 +50,8 @@ const (
 	DefaultCreateDeadline               = 10 * time.Second
 	DefaultTagVerificationTimeout       = 4 * time.Second
 	DefaultRetryDelay                   = 2 * time.Second
+	DefaultBackoffBase                  = 10 * time.Second
+	DefaultBackoffMax                   = 5 * time.Minute
 	lkeLabelsTaintsWaitingTaintKey      = "lke.linode.com/labels-taints"
 	lkeLabelsTaintsWaitingTaintValue    = "waiting"
 	lkeEnterpriseCiliumNotReadyTaintKey = "node.cilium.io/agent-not-ready"
@@ -110,6 +112,12 @@ var ErrClaimFailed = errors.New("claim failed")
 var ErrPoolScaleFailed = errors.New("pool scale failed")
 var ErrCreateTimeout = errors.New("timed out waiting for claimable instance")
 
+// poolRequestError marks a failure of an LKE node pool API request (list, create or update) as
+// opposed to instance-level failures, which must not put the whole pool into backoff.
+type poolRequestError struct{ error }
+
+func (e *poolRequestError) Unwrap() error { return e.error }
+
 type DefaultProvider struct {
 	clusterID            int
 	clusterTier          linodego.LKEVersionTier
@@ -119,6 +127,8 @@ type DefaultProvider struct {
 	client               sdk.LinodeAPI
 	unavailableOfferings *linodecache.UnavailableOfferings
 	nodeCache            *cache.Cache
+	deleteBackoff        *utils.BackoffTracker
+	poolBackoff          *utils.BackoffTracker
 	poolMutex            keymutex.KeyMutex
 	config               ProviderConfig
 }
@@ -127,6 +137,10 @@ type ProviderConfig struct {
 	CreateDeadline         time.Duration
 	TagVerificationTimeout time.Duration
 	RetryDelay             time.Duration
+	// BackoffBase and BackoffMax bound the exponential backoff applied to repeated retryable
+	// LKE node pool API failures (delete, and pool create/update during Create).
+	BackoffBase time.Duration
+	BackoffMax  time.Duration
 }
 
 func NewDefaultProvider(
@@ -149,6 +163,12 @@ func NewDefaultProvider(
 	if config.RetryDelay == 0 {
 		config.RetryDelay = DefaultRetryDelay
 	}
+	if config.BackoffBase == 0 {
+		config.BackoffBase = DefaultBackoffBase
+	}
+	if config.BackoffMax == 0 {
+		config.BackoffMax = DefaultBackoffMax
+	}
 	return &DefaultProvider{
 		clusterID:            clusterID,
 		clusterTier:          clusterTier,
@@ -158,6 +178,8 @@ func NewDefaultProvider(
 		client:               client,
 		unavailableOfferings: unavailableOfferings,
 		nodeCache:            nodePoolCache,
+		deleteBackoff:        utils.NewBackoffTracker(config.BackoffBase, config.BackoffMax),
+		poolBackoff:          utils.NewBackoffTracker(config.BackoffBase, config.BackoffMax),
 		poolMutex:            keymutex.NewHashed(0),
 		config:               config,
 	}
@@ -186,7 +208,14 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 	}
 
 	poolKey := makePoolKey(nodeClaim.Labels[karpv1.NodePoolLabelKey], instanceType)
+	if err := p.poolBackoff.Check(poolKey, fmt.Sprintf("LKE node pool %s", poolKey)); err != nil {
+		return nil, cloudprovider.NewCreateError(err, "NodePoolBackingOff", fmt.Sprintf("Backing off after repeated LKE node pool API failures: %s", err))
+	}
 	deadline := time.Now().Add(p.config.CreateDeadline)
+	// Last node pool API failure of the most recent attempt. It is recorded once per Create call,
+	// not per attempt, so the in-call retries below don't escalate the backoff on their own.
+	var poolErr error
+	defer func() { p.recordPoolFailure(poolKey, poolErr) }()
 	// Keep successful capacity mutations across retries while discovery catches up.
 	createdPool, scaledOnce := false, false
 	// Last actionable retry failure; defaults to the expected wait so the timeout always has a cause.
@@ -197,6 +226,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 		}
 
 		inst, err := p.attemptCreate(ctx, nodeClass, nodeClaim, tags, instanceType, poolKey, &createdPool, &scaledOnce)
+		poolErr = p.observePoolAttempt(poolKey, err)
 		if err != nil {
 			if isRetryableCreateError(err) || utils.IsRetryableError(err) {
 				// Waiting for a scaled node to appear is expected; only record real failures
@@ -218,6 +248,25 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 		"NodePoolProvisioning",
 		fmt.Sprintf("Timed out waiting for LKE instance to become available: %s", lastRetryErr),
 	)
+}
+
+// observePoolAttempt returns the node pool API failure behind an attempt's error, if any. An attempt
+// that reached the pool successfully resolves any earlier failure, so the backoff is cleared.
+func (p *DefaultProvider) observePoolAttempt(poolKey string, err error) error {
+	var reqErr *poolRequestError
+	switch {
+	case errors.As(err, &reqErr):
+		return reqErr.error
+	case err == nil || errors.Is(err, ErrNoClaimableInstance):
+		p.poolBackoff.Clear(poolKey)
+	}
+	return nil
+}
+
+func (p *DefaultProvider) recordPoolFailure(poolKey string, poolErr error) {
+	if poolErr != nil && utils.IsRetryableError(poolErr) {
+		p.poolBackoff.RecordFailure(poolKey, poolErr)
+	}
 }
 
 func (p *DefaultProvider) resolveCreateInstanceType(ctx context.Context, instanceTypes []*cloudprovider.InstanceType, nodeClaim *karpv1.NodeClaim) (string, error) {
@@ -260,7 +309,7 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 			if cloudprovider.IsInsufficientCapacityError(err) {
 				return err
 			}
-			return cloudprovider.NewCreateError(err, "NodePoolCreationFailed", fmt.Sprintf("Failed to find or create LKE node pool: %s", err.Error()))
+			return cloudprovider.NewCreateError(&poolRequestError{err}, "NodePoolCreationFailed", fmt.Sprintf("Failed to find or create LKE node pool: %s", err.Error()))
 		}
 
 		claimableInstance, err := p.findClaimableInstance(ctx, pool)
@@ -291,10 +340,11 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 		if err != nil {
 			logger.Error(err, "failed to scale pool", "poolID", pool.ID)
 			// Scale errors can describe networking or request limits, so they must not invalidate the offering.
-			if linodego.ErrHasStatus(err, http.StatusBadRequest) {
+			// Non-retryable errors can't succeed on retry, so fail immediately.
+			if !utils.IsRetryableError(err) {
 				return cloudprovider.NewCreateError(fmt.Errorf("scaling LKE node pool %d: %w", pool.ID, err), "NodePoolScaleFailed", fmt.Sprintf("Failed to scale LKE node pool %d: %s", pool.ID, err.Error()))
 			}
-			return fmt.Errorf("%w: scaling LKE node pool %d: %w", ErrPoolScaleFailed, pool.ID, err)
+			return &poolRequestError{fmt.Errorf("%w: scaling LKE node pool %d: %w", ErrPoolScaleFailed, pool.ID, err)}
 		}
 		*scaledOnce = true
 		return ErrNoClaimableInstance
@@ -661,7 +711,32 @@ func isKarpenterManagedPool(pool *linodego.LKENodePool) bool {
 	return hasNodePoolLabel && hasLKEManagedLabel
 }
 
+// Delete removes the instance from its LKE node pool. Retryable failures (see isRetryableError,
+// e.g. a 429 or 503) are retried with exponential backoff, and calls made while backing off fail
+// fast without touching the Linode API.
 func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
+	if err := p.checkDeleteBackoff(id); err != nil {
+		return err
+	}
+	err := p.delete(ctx, id)
+	p.recordDeleteResult(id, err)
+	return err
+}
+
+func (p *DefaultProvider) checkDeleteBackoff(id string) error {
+	return p.deleteBackoff.Check(id, fmt.Sprintf("deleting instance %s", id))
+}
+
+func (p *DefaultProvider) recordDeleteResult(id string, err error) {
+	switch {
+	case err == nil || cloudprovider.IsNodeClaimNotFoundError(err):
+		p.deleteBackoff.Clear(id)
+	case utils.IsRetryableError(err):
+		p.deleteBackoff.RecordFailure(id, err)
+	}
+}
+
+func (p *DefaultProvider) delete(ctx context.Context, id string) error {
 	instanceID, err := strconv.Atoi(id)
 	if err != nil {
 		return cloudprovider.NewNodeClaimNotFoundError(fmt.Errorf("parsing instance ID: %w", err))
