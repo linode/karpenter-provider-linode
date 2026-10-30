@@ -137,6 +137,7 @@ var _ = Describe("NodeClass Validation", func() {
 		mode := "instance"
 		ctx = options.ToContext(ctx, test.Options(test.OptionsFields{Mode: &mode}))
 		nodeClass.Spec.Image = "linode/ubuntu22.04"
+		nodeClass.Spec.FirewallID = new(123)
 
 		ExpectApplied(ctx, env.Client, nodeClass)
 		res := ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
@@ -216,52 +217,28 @@ var _ = Describe("NodeClass Validation", func() {
 		Expect(linodeEnv.EventRecorder.Calls(nodeclass.ConditionReasonLKEK8sVersionUnsupported)).To(Equal(1))
 	})
 
-	It("should set ValidationSucceeded false for firewallID on standard tier", func() {
-		nodeClass.Spec.FirewallID = new(123)
-		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
+	DescribeTable("should reject firewallID in LKE mode",
+		func(tier linodego.LKEVersionTier) {
+			nodeClass.Spec.FirewallID = new(123)
+			linodeEnv.LinodeAPI.ClusterTier = tier
 
-		ExpectApplied(ctx, env.Client, nodeClass)
-		res := ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
-		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+			ExpectApplied(ctx, env.Client, nodeClass)
+			err := ExpectObjectReconcileFailed(ctx, env.Client, controller, nodeClass)
+			Expect(err).To(HaveOccurred())
+			nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 
-		Expect(res.RequeueAfter).To(Equal(time.Minute))
-		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).IsFalse()).To(BeTrue())
-		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).Reason).To(Equal(nodeclass.ConditionReasonLKEFirewallIDUnsupported))
-		Expect(nodeClass.StatusConditions().Get(status.ConditionReady).IsFalse()).To(BeTrue())
-		Expect(linodeEnv.EventRecorder.Calls(nodeclass.ConditionReasonLKEFirewallIDUnsupported)).To(Equal(1))
-	})
+			condition := nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded)
+			Expect(condition.IsFalse()).To(BeTrue())
+			Expect(condition.Reason).To(Equal(nodeclass.ConditionReasonUnsupportedInstanceFields))
+			Expect(condition.Message).To(ContainSubstring("firewallID"))
+			Expect(nodeClass.StatusConditions().Get(status.ConditionReady).IsFalse()).To(BeTrue())
+			Expect(linodeEnv.LinodeAPI.GetLKEClusterBehavior.Calls()).To(Equal(0))
+		},
+		Entry("Standard tier", linodego.LKEVersionStandard),
+		Entry("Enterprise tier", linodego.LKEVersionEnterprise),
+	)
 
-	It("should report both lkeK8sVersion and firewallID on standard tier", func() {
-		nodeClass.Spec.LKEK8sVersion = new("v1.32.8+lke13")
-		nodeClass.Spec.FirewallID = new(123)
-		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
-
-		ExpectApplied(ctx, env.Client, nodeClass)
-		res := ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
-		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
-
-		condition := nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded)
-		Expect(res.RequeueAfter).To(Equal(time.Minute))
-		Expect(condition.IsFalse()).To(BeTrue())
-		Expect(condition.Reason).To(Equal(nodeclass.ConditionReasonLKEEnterpriseFieldsUnsupported))
-		Expect(condition.Message).To(And(ContainSubstring("lkeK8sVersion"), ContainSubstring("firewallID")))
-		Expect(linodeEnv.EventRecorder.Calls(nodeclass.ConditionReasonLKEEnterpriseFieldsUnsupported)).To(Equal(1))
-	})
-
-	It("should set ValidationSucceeded true for firewallID on enterprise tier", func() {
-		nodeClass.Spec.FirewallID = new(123)
-		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionEnterprise
-
-		ExpectApplied(ctx, env.Client, nodeClass)
-		res := ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
-		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
-
-		Expect(res.RequeueAfter).To(Equal(10 * time.Minute))
-		Expect(nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded).IsTrue()).To(BeTrue())
-		Expect(linodeEnv.EventRecorder.Events()).To(BeEmpty())
-	})
-
-	It("should not look up the cluster when neither firewallID nor lkeK8sVersion is set", func() {
+	It("should not look up the cluster when lkeK8sVersion is not set", func() {
 		linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
 
 		ExpectApplied(ctx, env.Client, nodeClass)

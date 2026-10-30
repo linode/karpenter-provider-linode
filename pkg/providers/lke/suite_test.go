@@ -1042,7 +1042,7 @@ var _ = Describe("LKENodeProvider", func() {
 			})
 
 			Context("Create options", func() {
-				It("should propagate optional NodeClass fields", func() {
+				It("should omit the NodeClass firewall ID from the pool request", func() {
 					firewallID := 123
 					nodeClass.Spec.FirewallID = new(firewallID)
 
@@ -1054,8 +1054,7 @@ var _ = Describe("LKENodeProvider", func() {
 					_, _ = linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 
 					input := linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.CalledWithInput.At(0)
-					Expect(input.Opts.FirewallID).ToNot(BeNil())
-					Expect(*input.Opts.FirewallID).To(Equal(firewallID))
+					Expect(input.Opts.FirewallID).To(BeNil())
 					Expect(input.Opts.K8sVersion).To(BeNil())
 					Expect(input.Opts.UpdateStrategy).To(BeNil())
 				})
@@ -1743,7 +1742,7 @@ var _ = Describe("LKENodeProvider", func() {
 			})
 
 			Context("Create options", func() {
-				It("should propagate optional NodeClass fields", func() {
+				It("should omit the NodeClass firewall ID while propagating the Kubernetes version", func() {
 					firewallID := 123
 					version := fake.DefaultClusterVersion
 					nodeClass.Spec.FirewallID = new(firewallID)
@@ -1766,8 +1765,7 @@ var _ = Describe("LKENodeProvider", func() {
 					_, _ = enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
 
 					input := linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.CalledWithInput.At(0)
-					Expect(input.Opts.FirewallID).ToNot(BeNil())
-					Expect(*input.Opts.FirewallID).To(Equal(firewallID))
+					Expect(input.Opts.FirewallID).To(BeNil())
 					Expect(input.Opts.K8sVersion).ToNot(BeNil())
 					Expect(*input.Opts.K8sVersion).To(Equal(version))
 					Expect(input.Opts.UpdateStrategy).ToNot(BeNil())
