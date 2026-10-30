@@ -21,9 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -129,8 +127,8 @@ type DefaultProvider struct {
 	client               sdk.LinodeAPI
 	unavailableOfferings *linodecache.UnavailableOfferings
 	nodeCache            *cache.Cache
-	deleteBackoff        *backoffTracker
-	poolBackoff          *backoffTracker
+	deleteBackoff        *utils.BackoffTracker
+	poolBackoff          *utils.BackoffTracker
 	poolMutex            keymutex.KeyMutex
 	config               ProviderConfig
 }
@@ -180,8 +178,8 @@ func NewDefaultProvider(
 		client:               client,
 		unavailableOfferings: unavailableOfferings,
 		nodeCache:            nodePoolCache,
-		deleteBackoff:        newBackoffTracker(config.BackoffBase, config.BackoffMax),
-		poolBackoff:          newBackoffTracker(config.BackoffBase, config.BackoffMax),
+		deleteBackoff:        utils.NewBackoffTracker(config.BackoffBase, config.BackoffMax),
+		poolBackoff:          utils.NewBackoffTracker(config.BackoffBase, config.BackoffMax),
 		poolMutex:            keymutex.NewHashed(0),
 		config:               config,
 	}
@@ -210,7 +208,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 	}
 
 	poolKey := makePoolKey(nodeClaim.Labels[karpv1.NodePoolLabelKey], instanceType)
-	if err := p.poolBackoff.check(poolKey, fmt.Sprintf("LKE node pool %s", poolKey)); err != nil {
+	if err := p.poolBackoff.Check(poolKey, fmt.Sprintf("LKE node pool %s", poolKey)); err != nil {
 		return nil, cloudprovider.NewCreateError(err, "NodePoolBackingOff", fmt.Sprintf("Backing off after repeated LKE node pool API failures: %s", err))
 	}
 	deadline := time.Now().Add(p.config.CreateDeadline)
@@ -218,8 +216,8 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 	// not per attempt, so the in-call retries below don't escalate the backoff on their own.
 	var poolErr error
 	defer func() {
-		if poolErr != nil && isRetryableError(poolErr) {
-			p.poolBackoff.recordFailure(poolKey, poolErr)
+		if poolErr != nil && utils.IsRetryableError(poolErr) {
+			p.poolBackoff.RecordFailure(poolKey, poolErr)
 		}
 	}()
 	// Keep successful capacity mutations across retries while discovery catches up.
@@ -239,7 +237,7 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.Linode
 			poolErr = reqErr.error
 		case err == nil || errors.Is(err, ErrNoClaimableInstance):
 			// The pool API calls succeeded, so any earlier failure is resolved.
-			p.poolBackoff.clear(poolKey)
+			p.poolBackoff.Clear(poolKey)
 		}
 		if err != nil {
 			if isRetryableCreateError(err) || utils.IsRetryableError(err) {
@@ -336,7 +334,7 @@ func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1
 			logger.Error(err, "failed to scale pool", "poolID", pool.ID)
 			// Scale errors can describe networking or request limits, so they must not invalidate the offering.
 			// Non-retryable errors can't succeed on retry, so fail immediately.
-			if !isRetryableError(err) {
+			if !utils.IsRetryableError(err) {
 				return cloudprovider.NewCreateError(fmt.Errorf("scaling LKE node pool %d: %w", pool.ID, err), "NodePoolScaleFailed", fmt.Sprintf("Failed to scale LKE node pool %d: %s", pool.ID, err.Error()))
 			}
 			return &poolRequestError{fmt.Errorf("%w: scaling LKE node pool %d: %w", ErrPoolScaleFailed, pool.ID, err)}
@@ -719,36 +717,16 @@ func (p *DefaultProvider) Delete(ctx context.Context, id string) error {
 }
 
 func (p *DefaultProvider) checkDeleteBackoff(id string) error {
-	return p.deleteBackoff.check(id, fmt.Sprintf("deleting instance %s", id))
+	return p.deleteBackoff.Check(id, fmt.Sprintf("deleting instance %s", id))
 }
 
 func (p *DefaultProvider) recordDeleteResult(id string, err error) {
 	switch {
 	case err == nil || cloudprovider.IsNodeClaimNotFoundError(err):
-		p.deleteBackoff.clear(id)
-	case isRetryableError(err):
-		p.deleteBackoff.recordFailure(id, err)
+		p.deleteBackoff.Clear(id)
+	case utils.IsRetryableError(err):
+		p.deleteBackoff.RecordFailure(id, err)
 	}
-}
-
-// isRetryableError determines if the error is retryable, meaning a controller that
-// encounters this error should requeue reconciliation to try again later
-func isRetryableError(err error) bool {
-	// net.Error covers *url.Error and other network-level timeouts. These are not
-	// wrapped as *linodego.Error by linodego v2, so ErrHasStatus misses them.
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
-		return true
-	}
-	return linodego.ErrHasStatus(
-		err,
-		http.StatusTooManyRequests,
-		http.StatusInternalServerError,
-		http.StatusBadGateway,
-		http.StatusGatewayTimeout,
-		http.StatusServiceUnavailable,
-		http.StatusRequestTimeout,
-		linodego.ErrorFromError) || errors.Is(err, http.ErrHandlerTimeout) || errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.ErrUnexpectedEOF)
 }
 
 func (p *DefaultProvider) delete(ctx context.Context, id string) error {
