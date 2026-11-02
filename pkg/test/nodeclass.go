@@ -21,7 +21,7 @@ import (
 	"github.com/imdario/mergo"
 	"sigs.k8s.io/karpenter/pkg/test"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 )
 
 func LinodeNodeClass(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {

@@ -23,11 +23,13 @@ import (
 	corecontrollers "sigs.k8s.io/karpenter/pkg/controllers"
 	"sigs.k8s.io/karpenter/pkg/controllers/state"
 	coreoperator "sigs.k8s.io/karpenter/pkg/operator"
+	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
 	"github.com/linode/karpenter-provider-linode/pkg/controllers"
 	"github.com/linode/karpenter-provider-linode/pkg/operator"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
+	"github.com/linode/karpenter-provider-linode/pkg/webhooks"
 )
 
 func main() {
@@ -36,6 +38,16 @@ func main() {
 	if err != nil {
 		log.FromContext(ctx).Error(err, "Failed to create Linode operator")
 		os.Exit(1)
+	}
+	if opts := options.FromContext(ctx); !opts.DisableWebhook {
+		if err := webhooks.Register(op.Manager, op.Clock, webhooks.Config{
+			Namespace:   opts.SystemNamespace,
+			ServiceName: coreoptions.FromContext(ctx).ServiceName,
+			Port:        opts.WebhookPort,
+		}); err != nil {
+			log.FromContext(ctx).Error(err, "Failed to register the conversion webhook")
+			os.Exit(1)
+		}
 	}
 
 	linodeCloudProvider := cloudprovider.New(

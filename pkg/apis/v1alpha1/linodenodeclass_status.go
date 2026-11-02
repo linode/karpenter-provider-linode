@@ -19,10 +19,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-const (
-	ConditionTypeValidationSucceeded = "ValidationSucceeded"
-)
-
 // LinodeImage contains resolved LinodeImage selector values utilized for node launch
 type LinodeImage struct {
 	// ID of the Image
@@ -50,8 +46,4 @@ type LinodeNodeClassStatus struct {
 	// Conditions contains signals for health and readiness
 	// +optional
 	Conditions []status.Condition `json:"conditions,omitempty"`
-}
-
-func (in *LinodeNodeClass) LinodeImages() []LinodeImage {
-	return in.Status.LinodeImages
 }
