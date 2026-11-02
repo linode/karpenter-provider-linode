@@ -59,7 +59,7 @@ ci-non-test: verify vulncheck
 tools:
 	#!/usr/bin/env bash
 	set -euo pipefail
-	for tool in controller-gen govulncheck setup-envtest; do
+	for tool in controller-gen conversion-gen govulncheck setup-envtest; do
 		command -v "$tool" >/dev/null
 	done
 

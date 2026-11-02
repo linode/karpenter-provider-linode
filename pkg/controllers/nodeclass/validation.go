@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/events"
 
-	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
@@ -94,7 +94,7 @@ func NewValidationReconciler(
 	}
 }
 
-func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) (reconcile.Result, error) {
+func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass) (reconcile.Result, error) {
 	nodeClaim := &v1.NodeClaim{
 		Spec: v1.NodeClaimSpec{
 			NodeClassRef: &v1.NodeClassReference{
@@ -149,7 +149,7 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 	return reconcile.Result{RequeueAfter: requeueAfterTime}, nil
 }
 
-func (v *Validation) validateTags(nodeClass *v1alpha1.LinodeNodeClass, generatedTags map[string]string) error {
+func (v *Validation) validateTags(nodeClass *v1beta1.LinodeNodeClass, generatedTags map[string]string) error {
 	err := errors.Join(
 		utils.ValidateTags(nodeClass.Spec.Tags),
 		utils.ValidateTagLengths(nodeClass.Spec.Tags),
@@ -165,7 +165,7 @@ func (v *Validation) validateTags(nodeClass *v1alpha1.LinodeNodeClass, generated
 // validateLKEUnsupportedFields rejects LinodeNodeClasses that set instance-only fields while
 // running in LKE mode. LKE node pools use the cluster's default Firewall instead of a NodeClass
 // firewallID; rejecting these fields avoids silently ignoring user configuration.
-func (v *Validation) validateLKEUnsupportedFields(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) error {
+func (v *Validation) validateLKEUnsupportedFields(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass) error {
 	if options.FromContext(ctx).Mode != "lke" {
 		return nil
 	}
@@ -183,7 +183,7 @@ func (v *Validation) validateLKEUnsupportedFields(ctx context.Context, nodeClass
 	return reconcile.TerminalError(fmt.Errorf("validating nodeclass: instance-only fields are not supported in LKE mode: %s", strings.Join(setFields, ", ")))
 }
 
-func instanceOnlyFieldsSet(spec *v1alpha1.LinodeNodeClassSpec) []string {
+func instanceOnlyFieldsSet(spec *v1beta1.LinodeNodeClassSpec) []string {
 	var setFields []string
 	if len(spec.AuthorizedKeys) > 0 {
 		setFields = append(setFields, "authorizedKeys")
@@ -230,7 +230,7 @@ func instanceOnlyFieldsSet(spec *v1alpha1.LinodeNodeClassSpec) []string {
 
 // validateInstanceUnsupportedFields rejects LinodeNodeClasses that set LKE-only fields while
 // running in instance mode, where they would otherwise be silently ignored.
-func (v *Validation) validateInstanceUnsupportedFields(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) error {
+func (v *Validation) validateInstanceUnsupportedFields(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass) error {
 	if options.FromContext(ctx).Mode != "instance" {
 		return nil
 	}
@@ -244,7 +244,7 @@ func (v *Validation) validateInstanceUnsupportedFields(ctx context.Context, node
 	}
 
 	nodeClass.StatusConditions().SetFalse(
-		v1alpha1.ConditionTypeValidationSucceeded,
+		v1beta1.ConditionTypeValidationSucceeded,
 		ConditionReasonUnsupportedLKEFields,
 		fmt.Sprintf("%s: %s", ValidationConditionMessages[ConditionReasonUnsupportedLKEFields], strings.Join(setFields, ", ")),
 	)
@@ -252,7 +252,7 @@ func (v *Validation) validateInstanceUnsupportedFields(ctx context.Context, node
 }
 
 // validateLKEClusterTier validates lkeK8sVersion against the LKE cluster tier and control-plane version.
-func (v *Validation) validateLKEClusterTier(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) (reconcile.Result, error) {
+func (v *Validation) validateLKEClusterTier(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass) (reconcile.Result, error) {
 	if options.FromContext(ctx).Mode != "lke" || nodeClass.Spec.LKEK8sVersion == nil {
 		return reconcile.Result{}, nil
 	}
@@ -286,13 +286,13 @@ func (v *Validation) validateLKEClusterTier(ctx context.Context, nodeClass *v1al
 	return reconcile.Result{}, fmt.Errorf("validating LKE cluster tier fields, unsupported LKE version tier %q", cluster.Tier)
 }
 
-func (v *Validation) failLKEClusterTierValidation(nodeClass *v1alpha1.LinodeNodeClass, reason, message string) reconcile.Result {
-	nodeClass.StatusConditions().SetFalse(v1alpha1.ConditionTypeValidationSucceeded, reason, message)
+func (v *Validation) failLKEClusterTierValidation(nodeClass *v1beta1.LinodeNodeClass, reason, message string) reconcile.Result {
+	nodeClass.StatusConditions().SetFalse(v1beta1.ConditionTypeValidationSucceeded, reason, message)
 	v.recorder.Publish(LKEValidationFailedEvent(nodeClass, reason, message))
 	return reconcile.Result{RequeueAfter: lkeTierRequeueAfterTime}
 }
 
-func (*Validation) cacheKey(nodeClass *v1alpha1.LinodeNodeClass, tags map[string]string) string {
+func (*Validation) cacheKey(nodeClass *v1beta1.LinodeNodeClass, tags map[string]string) string {
 	hash := lo.Must(hashstructure.Hash([]any{
 		nodeClass.Spec,
 		nodeClass.Annotations,
@@ -302,7 +302,7 @@ func (*Validation) cacheKey(nodeClass *v1alpha1.LinodeNodeClass, tags map[string
 }
 
 // clearCacheEntries removes all cache entries associated with the given nodeclass from the validation cache
-func (v *Validation) clearCacheEntries(nodeClass *v1alpha1.LinodeNodeClass) {
+func (v *Validation) clearCacheEntries(nodeClass *v1beta1.LinodeNodeClass) {
 	var toDelete []string
 	for key := range v.cache.Items() {
 		parts := strings.Split(key, ":")

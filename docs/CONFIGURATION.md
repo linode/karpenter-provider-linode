@@ -21,6 +21,9 @@ This guide details the configuration options for the Karpenter Provider for Lino
 | `VM_MEMORY_OVERHEAD_PERCENT` | Additional memory overhead to simplify calculation (0.075 = 7.5%). | No | `0.075` |
 | `IGNORE_DRA_REQUESTS` | Karpenter core setting. Set to `false` to enable alpha whole-GPU DRA scheduling. See [DRA](DRA.md). | No | `true` |
 | `DISABLE_DRY_RUN` | Set to `true` to disable dry-run validation for LinodeNodeClasses. | No | `false` |
+| `DISABLE_WEBHOOK` | Set to `true` to disable the CRD conversion webhook. The Helm chart sets this from `webhook.enabled`. See [API versions](#api-versions-and-conversion). | No | `true` (`false` in the chart) |
+| `WEBHOOK_PORT` | Port the CRD conversion webhook listens on. | No | `8443` |
+| `SYSTEM_NAMESPACE` | Namespace Karpenter runs in; locates the webhook certificate Secret. The chart sets it from the pod namespace. | **Yes** (when the webhook is enabled) | - |
 
 These environment variables are injected into the controller pod via a Kubernetes Secret. By default, the Helm chart creates a secret called `karpl-credentials` from the `apiToken`, `apiURL`, `apiVersion`, and `region` values.
 
@@ -56,6 +59,16 @@ The provider can operate in two distinct modes, controlled by the `KARPENTER_MOD
   * It currently **lacks bootstrapping and cluster joining logic** (such as User Data injection). Instances will start but will not join the Kubernetes cluster.
 * **Pros**: Full control over the instance configuration (SSH keys, placement groups, etc.).
 * **Note**: `VPCID` and custom disk configurations are defined in the API but not yet fully implemented in the provider logic.
+
+## API versions and conversion
+
+`LinodeNodeClass` is served as `karpenter.k8s.linode/v1beta1` (storage version) and the deprecated `karpenter.k8s.linode/v1alpha1`. The two versions have identical schemas, so existing `v1alpha1` objects keep working and are converted to `v1beta1` on read. Update your manifests to `apiVersion: karpenter.k8s.linode/v1beta1`.
+
+Conversion is performed by a webhook served by the Karpenter controller (enabled by default in the chart via `webhook.enabled`). On startup the controller generates a self-signed CA and serving certificate into the `<karpenter-service-name>-cert` Secret and publishes the CA in the `linodenodeclasses.karpenter.k8s.linode` CRD's `spec.conversion`. No cert-manager is required. The controller needs permission to `get`/`update` that Secret and `get`/`update` the CRD, which the chart grants.
+
+Objects already persisted as `v1alpha1` are rewritten as `v1beta1` the next time they are updated. To migrate them eagerly, re-apply them, e.g. `kubectl get linodenodeclasses -o json | kubectl replace -f -`.
+
+Regenerate the conversion functions after changing either API version with `just verify` (requires `conversion-gen`, installed by `mise install`).
 
 ## LinodeNodeClass Spec
 
@@ -111,7 +124,7 @@ Karpenter taints and LKE node pool taints have different lifecycles:
 ### Example: LKE Mode
 
 ```yaml
-apiVersion: karpenter.k8s.linode/v1alpha1
+apiVersion: karpenter.k8s.linode/v1beta1
 kind: LinodeNodeClass
 metadata:
   name: default
@@ -124,7 +137,7 @@ spec:
 ### Example: Instance Mode
 
 ```yaml
-apiVersion: karpenter.k8s.linode/v1alpha1
+apiVersion: karpenter.k8s.linode/v1beta1
 kind: LinodeNodeClass
 metadata:
   name: custom-instance

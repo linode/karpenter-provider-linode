@@ -39,7 +39,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/events"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
 
-	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
@@ -185,7 +185,7 @@ func NewDefaultProvider(
 	}
 }
 
-func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*instance.Instance, error) {
+func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceTypes []*cloudprovider.InstanceType) (*instance.Instance, error) {
 	if err := utils.ValidateTagLengths(utils.MapToTagList(tags)); err != nil {
 		return nil, cloudprovider.NewCreateError(
 			err,
@@ -290,7 +290,7 @@ func (p *DefaultProvider) lookupExistingInstance(ctx context.Context, nodeClaim 
 	return p.hydrateInstanceFromLinode(ctx, existingInstance)
 }
 
-func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceType, poolKey string, createdPool, scaledOnce *bool) (*instance.Instance, error) {
+func (p *DefaultProvider) attemptCreate(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceType, poolKey string, createdPool, scaledOnce *bool) (*instance.Instance, error) {
 	logger := log.FromContext(ctx)
 	var createdInstance *instance.Instance
 	err := p.withPoolLock(ctx, poolKey, func() error {
@@ -386,7 +386,7 @@ func (p *DefaultProvider) withPoolLock(ctx context.Context, key string, fn func(
 	return fn()
 }
 
-func (p *DefaultProvider) findOrCreatePool(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceType string, createdPool *bool) (*linodego.LKENodePool, error) {
+func (p *DefaultProvider) findOrCreatePool(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, tags map[string]string, instanceType string, createdPool *bool) (*linodego.LKENodePool, error) {
 	// Step 1: Find existing pool
 	pools, err := p.client.ListLKENodePools(ctx, p.clusterID, nil)
 	if err != nil {
@@ -479,7 +479,7 @@ func (p *DefaultProvider) matchesPoolKey(pool *linodego.LKENodePool, instanceTyp
 	return tags[karpv1.NodePoolLabelKey] == nodePoolName
 }
 
-func (p *DefaultProvider) reconcilePoolVersion(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass, pool *linodego.LKENodePool) error {
+func (p *DefaultProvider) reconcilePoolVersion(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass, pool *linodego.LKENodePool) error {
 	if nodeClass.Spec.LKEK8sVersion == nil {
 		return nil
 	}
@@ -529,7 +529,7 @@ func (p *DefaultProvider) findClaimableInstanceStandard(ctx context.Context, poo
 		// Check if instance is already claimed by a NodeClaim
 		// If not claimed, return it for claiming
 		tags := utils.TagListToMap(linodeInstance.Tags)
-		if _, exists := tags[v1alpha1.NodeClaimTagKey]; !exists {
+		if _, exists := tags[v1beta1.NodeClaimTagKey]; !exists {
 			return linodeInstance, nil
 		}
 	}
@@ -546,7 +546,7 @@ func (p *DefaultProvider) findClaimableInstanceEnterprise(ctx context.Context, p
 	filter := linodego.Filter{}
 	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("nodepool=%d", pool.ID))
 	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("lke%d", p.clusterID))
-	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%v=%v", v1alpha1.LabelLKEManaged, "true"))
+	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%v=%v", v1beta1.LabelLKEManaged, "true"))
 	filterJSON, err := filter.MarshalJSON()
 	if err != nil {
 		return nil, fmt.Errorf("building filter: %w", err)
@@ -564,7 +564,7 @@ func (p *DefaultProvider) findClaimableInstanceEnterprise(ctx context.Context, p
 		}
 		// Check if instance is already claimed by a NodeClaim
 		tags := utils.TagListToMap(linodeInstance.Tags)
-		if _, exists := tags[v1alpha1.NodeClaimTagKey]; !exists {
+		if _, exists := tags[v1beta1.NodeClaimTagKey]; !exists {
 			return &linodeInstance, nil
 		}
 	}
@@ -572,13 +572,13 @@ func (p *DefaultProvider) findClaimableInstanceEnterprise(ctx context.Context, p
 	return nil, ErrNoClaimableInstance
 }
 
-func (p *DefaultProvider) claimInstance(ctx context.Context, linodeInstance *linodego.Instance, nodeClaim *karpv1.NodeClaim, nodeClass *v1alpha1.LinodeNodeClass, pool *linodego.LKENodePool) (*linodego.Instance, error) {
+func (p *DefaultProvider) claimInstance(ctx context.Context, linodeInstance *linodego.Instance, nodeClaim *karpv1.NodeClaim, nodeClass *v1beta1.LinodeNodeClass, pool *linodego.LKENodePool) (*linodego.Instance, error) {
 	newTags := lo.Assign(
 		utils.TagListToMap(linodeInstance.Tags),
 		utils.TagListToMap(pool.Tags),
 		utils.TagListToMap(nodeClass.Spec.Tags),
 		map[string]string{
-			v1alpha1.NodeClaimTagKey: utils.NormalizeNodeClaimTagValue(nodeClaim.Name),
+			v1beta1.NodeClaimTagKey: utils.NormalizeNodeClaimTagValue(nodeClaim.Name),
 		},
 	)
 	finalTags := append(utils.MapToTagList(newTags), utils.OpaqueTags(linodeInstance.Tags)...)
@@ -674,7 +674,7 @@ func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...instance.O
 
 func (p *DefaultProvider) List(ctx context.Context) ([]*instance.Instance, error) {
 	filter := linodego.Filter{}
-	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%s=%s", v1alpha1.LabelLKEManaged, "true"))
+	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%s=%s", v1beta1.LabelLKEManaged, "true"))
 	if p.clusterTier == linodego.LKEVersionEnterprise {
 		filter.AddField(linodego.Contains, "tags", fmt.Sprintf("lke%d", p.clusterID))
 	}
@@ -707,7 +707,7 @@ func (p *DefaultProvider) List(ctx context.Context) ([]*instance.Instance, error
 func isKarpenterManagedPool(pool *linodego.LKENodePool) bool {
 	tags := utils.TagListToMap(pool.Tags)
 	_, hasNodePoolLabel := tags[karpv1.NodePoolLabelKey]
-	_, hasLKEManagedLabel := tags[v1alpha1.LabelLKEManaged]
+	_, hasLKEManagedLabel := tags[v1beta1.LabelLKEManaged]
 	return hasNodePoolLabel && hasLKEManagedLabel
 }
 

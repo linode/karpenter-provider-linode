@@ -23,6 +23,7 @@ import (
 )
 
 //go:generate controller-gen crd:omitToolVersion=true object:headerFile="../../hack/boilerplate.go.txt" paths="./..." output:crd:artifacts:config=crds
+//go:generate conversion-gen --go-header-file ../../hack/boilerplate.go.txt --output-file zz_generated.conversion.go github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1
 var (
 	Group              = "karpenter.k8s.linode"
 	CompatibilityGroup = "compatibility." + Group
