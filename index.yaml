@@ -2,6 +2,28 @@ apiVersion: v1
 entries:
   karpenter:
   - apiVersion: v2
+    appVersion: v0.1.9
+    created: "2026-11-03T14:32:18.337539134Z"
+    description: A Helm chart for LKE Karpenter provider.
+    digest: d498eea5a421ef232af06d4a48e7bde04ba6e7e47a400acec2e3b246a5e1a790
+    home: https://github.com/linode/karpenter-provider-linode/
+    icon: https://repository-images.githubusercontent.com/278480393/dab059c8-caa1-4b55-aaa7-3d30e47a5616
+    keywords:
+    - cluster
+    - node
+    - scheduler
+    - autoscaling
+    - lifecycle
+    maintainers:
+    - name: linode
+    name: karpenter
+    sources:
+    - https://github.com/linode/karpenter-provider-linode/
+    type: application
+    urls:
+    - https://github.com/linode/karpenter-provider-linode/releases/download/helm-karpenter-v0.1.9/karpenter-v0.1.9.tgz
+    version: v0.1.9
+  - apiVersion: v2
     appVersion: v0.1.8
     created: "2026-10-27T15:43:23.757134475Z"
     description: A Helm chart for LKE Karpenter provider.
@@ -112,6 +134,29 @@ entries:
     - https://github.com/linode/karpenter-provider-linode/releases/download/helm-karpenter-v0.1.3/karpenter-v0.1.3.tgz
     version: v0.1.3
   karpenter-crd:
+  - apiVersion: v2
+    appVersion: v0.1.9
+    created: "2026-11-03T14:32:18.08125968Z"
+    description: A Helm chart for LKE Karpenter provider Custom Resource Definitions
+      (CRDs)
+    digest: 70a1fa6f7e79ec06c9301176d04343504c3213799d762acf35421d40ee7116e8
+    home: https://github.com/linode/karpenter-provider-linode/
+    icon: https://repository-images.githubusercontent.com/278480393/dab059c8-caa1-4b55-aaa7-3d30e47a5616
+    keywords:
+    - cluster
+    - node
+    - scheduler
+    - autoscaling
+    - lifecycle
+    maintainers:
+    - name: linode
+    name: karpenter-crd
+    sources:
+    - https://github.com/linode/karpenter-provider-linode/
+    type: application
+    urls:
+    - https://github.com/linode/karpenter-provider-linode/releases/download/helm-karpenter-crd-v0.1.9/karpenter-crd-v0.1.9.tgz
+    version: v0.1.9
   - apiVersion: v2
     appVersion: v0.1.8
     created: "2026-10-27T15:43:23.462939636Z"
@@ -227,4 +272,4 @@ entries:
     urls:
     - https://github.com/linode/karpenter-provider-linode/releases/download/helm-v0.1.3/karpenter-crd-v0.1.3.tgz
     version: v0.1.3
-generated: "2026-10-27T15:43:23.757159822Z"
+generated: "2026-11-03T14:32:18.337590731Z"
