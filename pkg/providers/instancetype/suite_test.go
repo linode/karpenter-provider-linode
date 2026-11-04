@@ -24,6 +24,7 @@ import (
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	clock "k8s.io/utils/clock/testing"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -107,6 +108,8 @@ var _ = Describe("InstanceTypeProvider", func() {
 		)
 		nodeClass.StatusConditions().SetTrue(status.ConditionReady)
 		nodePool = coretest.NodePool(karpv1.NodePool{
+			// Keep the name short: Linode limits tags to 50 characters and the nodepool tag is "karpenter.sh/nodepool=<name>".
+			ObjectMeta: metav1.ObjectMeta{Name: "test-nodepool"},
 			Spec: karpv1.NodePoolSpec{
 				Template: karpv1.NodeClaimTemplate{
 					Spec: karpv1.NodeClaimTemplateSpec{
