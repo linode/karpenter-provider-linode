@@ -44,6 +44,9 @@ type Options struct {
 	LKECreateDeadline         time.Duration
 	LKETagVerificationTimeout time.Duration
 	LKERetryDelay             time.Duration
+	DisableWebhook            bool
+	WebhookPort               int
+	SystemNamespace           string
 }
 
 func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
@@ -56,6 +59,9 @@ func (o *Options) AddFlags(fs *coreoptions.FlagSet) {
 	fs.DurationVar(&o.LKECreateDeadline, "lke-create-deadline", env.WithDefaultDuration("LKE_CREATE_DEADLINE", 10*time.Second), "Maximum time to wait for an LKE node pool instance to become claimable.")
 	fs.DurationVar(&o.LKETagVerificationTimeout, "lke-tag-verification-timeout", env.WithDefaultDuration("LKE_TAG_VERIFICATION_TIMEOUT", 4*time.Second), "Maximum time to wait for LKE instance tags to be observed after claim.")
 	fs.DurationVar(&o.LKERetryDelay, "lke-retry-delay", env.WithDefaultDuration("LKE_RETRY_DELAY", 2*time.Second), "Delay between LKE create retries when claimable instances are not yet available.")
+	fs.BoolVarWithEnv(&o.DisableWebhook, "disable-webhook", "DISABLE_WEBHOOK", true, "If true, then do not serve the CRD conversion webhook.")
+	fs.IntVar(&o.WebhookPort, "webhook-port", env.WithDefaultInt("WEBHOOK_PORT", 8443), "The port the CRD conversion webhook listens on.")
+	fs.StringVar(&o.SystemNamespace, "system-namespace", env.WithDefaultString("SYSTEM_NAMESPACE", ""), "The namespace Karpenter runs in, used to locate the conversion webhook certificate secret. [REQUIRED when the webhook is enabled]")
 }
 
 func (o *Options) Parse(fs *coreoptions.FlagSet, args ...string) error {

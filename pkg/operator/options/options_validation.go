@@ -28,7 +28,21 @@ func (o *Options) Validate() error {
 		o.validateVMMemoryOverheadPercent(),
 		o.validateRequiredFields(),
 		o.validateMode(),
+		o.validateWebhook(),
 	)
+}
+
+func (o *Options) validateWebhook() error {
+	if o.DisableWebhook {
+		return nil
+	}
+	if o.SystemNamespace == "" {
+		return fmt.Errorf("missing field, system-namespace (required when the webhook is enabled)")
+	}
+	if o.WebhookPort < 1 || o.WebhookPort > 65535 {
+		return fmt.Errorf("webhook-port %d is out of range", o.WebhookPort)
+	}
+	return nil
 }
 
 func (o *Options) validateEndpoint() error {

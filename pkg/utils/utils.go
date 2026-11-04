@@ -38,7 +38,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
 
-	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	instancefilter "github.com/linode/karpenter-provider-linode/pkg/providers/instance/filter"
@@ -52,12 +52,12 @@ var (
 const maxLinodeTagLength = 50
 
 var restrictedTagKeys = map[string]struct{}{
-	karpv1.NodePoolLabelKey:       {},
-	v1alpha1.LabelNodeClass:       {},
-	v1alpha1.LabelLKEManaged:      {},
-	v1alpha1.NodeClaimTagKey:      {},
-	v1alpha1.LKEClusterNameTagKey: {},
-	v1alpha1.NameTagKey:           {},
+	karpv1.NodePoolLabelKey:      {},
+	v1beta1.LabelNodeClass:       {},
+	v1beta1.LabelLKEManaged:      {},
+	v1beta1.NodeClaimTagKey:      {},
+	v1beta1.LKEClusterNameTagKey: {},
+	v1beta1.NameTagKey:           {},
 }
 
 // ParseInstanceID parses the provider ID stored on the node to get the instance ID
@@ -105,7 +105,7 @@ func WithDefaultFloat64(key string, def float64) float64 {
 	return f
 }
 
-func GetTags(nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, clusterName string) map[string]string {
+func GetTags(nodeClass *v1beta1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, clusterName string) map[string]string {
 	// TODO: Validate tags
 	// var invalidTags []string
 	// if len(invalidTags) != 0 {
@@ -117,31 +117,31 @@ func GetTags(nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, c
 	staticTags := map[string]string{
 		fmt.Sprintf("kubernetes.io/cluster/%s", clusterName): "owned",
 		karpv1.NodePoolLabelKey:                              nodeClaim.Labels[karpv1.NodePoolLabelKey],
-		v1alpha1.LKEClusterNameTagKey:                        clusterName,
-		v1alpha1.LabelNodeClass:                              nodeClass.Name,
+		v1beta1.LKEClusterNameTagKey:                         clusterName,
+		v1beta1.LabelNodeClass:                               nodeClass.Name,
 	}
 
 	return lo.Assign(TagListToMap(nodeClass.Spec.Tags), staticTags)
 }
 
-func GetTagsForLKE(nodeClass *v1alpha1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, clusterName string) map[string]string {
+func GetTagsForLKE(nodeClass *v1beta1.LinodeNodeClass, nodeClaim *karpv1.NodeClaim, clusterName string) map[string]string {
 	staticTags := map[string]string{
 		fmt.Sprintf("kubernetes.io/cluster/%s", clusterName): "owned",
 		karpv1.NodePoolLabelKey:                              nodeClaim.Labels[karpv1.NodePoolLabelKey],
-		v1alpha1.LKEClusterNameTagKey:                        clusterName,
-		v1alpha1.LabelNodeClass:                              nodeClass.Name,
-		v1alpha1.LabelLKEManaged:                             "true",
+		v1beta1.LKEClusterNameTagKey:                         clusterName,
+		v1beta1.LabelNodeClass:                               nodeClass.Name,
+		v1beta1.LabelLKEManaged:                              "true",
 	}
 
 	return staticTags
 }
 
 func NodeClaimTag(nodeClaimName string) string {
-	return fmt.Sprintf("%s=%s", v1alpha1.NodeClaimTagKey, NormalizeNodeClaimTagValue(nodeClaimName))
+	return fmt.Sprintf("%s=%s", v1beta1.NodeClaimTagKey, NormalizeNodeClaimTagValue(nodeClaimName))
 }
 
 func NormalizeNodeClaimTagValue(nodeClaimName string) string {
-	maxValueLength := maxLinodeTagLength - len(v1alpha1.NodeClaimTagKey) - 1 // account for '='
+	maxValueLength := maxLinodeTagLength - len(v1beta1.NodeClaimTagKey) - 1 // account for '='
 	if maxValueLength <= 0 {
 		return ""
 	}
@@ -161,7 +161,7 @@ func NormalizeNodeClaimTagValue(nodeClaimName string) string {
 	return fmt.Sprintf("%s-%s", nodeClaimName[:prefixLength], hash)
 }
 
-func GetNodeClassHash(nodeClass *v1alpha1.LinodeNodeClass) string {
+func GetNodeClassHash(nodeClass *v1beta1.LinodeNodeClass) string {
 	return fmt.Sprintf("%s-%d", nodeClass.UID, nodeClass.Generation)
 }
 

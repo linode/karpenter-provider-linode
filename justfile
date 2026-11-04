@@ -59,7 +59,7 @@ ci-non-test: verify vulncheck
 tools:
 	#!/usr/bin/env bash
 	set -euo pipefail
-	for tool in controller-gen govulncheck setup-envtest; do
+	for tool in controller-gen conversion-gen govulncheck setup-envtest; do
 		command -v "$tool" >/dev/null
 	done
 
@@ -75,6 +75,7 @@ verify: tools
 	karpenter_core_dir=$(go list -m -json sigs.k8s.io/karpenter | awk -F '"' '/"Dir"/ { print $4 }')
 	cp "$karpenter_core_dir"/pkg/apis/crds/* pkg/apis/crds
 	cp pkg/apis/crds/* charts/karpenter-crd/templates
+	bash hack/inject-conversion-webhook.sh
 	golangci-lint run
 	if ! git diff --quiet; then
 		echo "New file modification detected in the Git working tree. Please check in before commit."

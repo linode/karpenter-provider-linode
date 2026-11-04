@@ -153,6 +153,22 @@ var _ = Describe("Options", func() {
 			err := opts.Parse(fs, "--cluster-name", "test-cluster", "--vm-memory-overhead-percent", "-0.01")
 			Expect(err).To(HaveOccurred())
 		})
+		It("should not require a system namespace when the webhook is disabled", func() {
+			Expect(opts.Parse(fs, "--cluster-name", "test-cluster", "--disable-webhook=true")).To(Succeed())
+			Expect(opts.DisableWebhook).To(BeTrue())
+		})
+		It("should fail when the webhook is enabled without a system namespace", func() {
+			err := opts.Parse(fs, "--cluster-name", "test-cluster", "--disable-webhook=false")
+			Expect(err).To(HaveOccurred())
+		})
+		It("should fail when the webhook port is out of range", func() {
+			err := opts.Parse(fs, "--cluster-name", "test-cluster", "--disable-webhook=false", "--system-namespace", "kube-system", "--webhook-port", "70000")
+			Expect(err).To(HaveOccurred())
+		})
+		It("should accept an enabled webhook with a namespace and port", func() {
+			Expect(opts.Parse(fs, "--cluster-name", "test-cluster", "--disable-webhook=false", "--system-namespace", "kube-system", "--webhook-port", "9443")).To(Succeed())
+			Expect(opts.WebhookPort).To(Equal(9443))
+		})
 	})
 })
 

@@ -15,12 +15,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"fmt"
-
-	"github.com/awslabs/operatorpkg/status"
 	"github.com/linode/linodego/v2"
-	"github.com/mitchellh/hashstructure/v2"
-	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -489,53 +484,14 @@ type KubeletConfiguration struct {
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
 // +kubebuilder:printcolumn:name="Role",type="string",JSONPath=".spec.role",priority=1,description=""
 // +kubebuilder:resource:path=linodenodeclasses,scope=Cluster,categories=karpenter,shortName={lnc,lncs}
-// +kubebuilder:storageversion
 // +kubebuilder:subresource:status
+// +kubebuilder:deprecatedversion:warning="karpenter.k8s.linode/v1alpha1 LinodeNodeClass is deprecated; use karpenter.k8s.linode/v1beta1"
 type LinodeNodeClass struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec   LinodeNodeClassSpec   `json:"spec,omitempty"`
 	Status LinodeNodeClassStatus `json:"status,omitempty"`
-}
-
-// We need to bump the LinodeNodeClassHashVersion when we make an update to the LinodeNodeClassHashVersion CRD under these conditions:
-// 1. A field changes its default value for an existing field that is already hashed
-// 2. A field is added to the hash calculation with an already-set value
-// 3. A field is removed from the hash calculations
-const LinodeNodeClassHashVersion = "v1alpha1"
-
-// Hash generates a hash of the LinodeNodeClass spec and annotations, excluding fields that can we update in-place (e.g. tags).
-// This is used to determine if a NodeClaim needs to be replaced due to changes in the NodeClass.
-func (in *LinodeNodeClass) Hash() string {
-	hashableSpec := in.Spec
-	hashableSpec.Tags = nil // Tags are not part of the hash calculation since we do in-place updates for it
-	return fmt.Sprint(lo.Must(hashstructure.Hash([]interface{}{
-		hashableSpec,
-	}, hashstructure.FormatV2, &hashstructure.HashOptions{
-		SlicesAsSets:    true,
-		IgnoreZeroValue: true,
-		ZeroNil:         true,
-	})))
-}
-
-func (in *LinodeNodeClass) KubeletConfiguration() *KubeletConfiguration {
-	return in.Spec.Kubelet
-}
-
-func (in *LinodeNodeClass) GetConditions() []status.Condition {
-	return in.Status.Conditions
-}
-
-func (in *LinodeNodeClass) SetConditions(conditions []status.Condition) {
-	in.Status.Conditions = conditions
-}
-
-func (in *LinodeNodeClass) StatusConditions(...status.ForOption) status.ConditionSet {
-	conds := []string{
-		ConditionTypeValidationSucceeded,
-	}
-	return status.NewReadyConditions(conds...).For(in)
 }
 
 // +kubebuilder:object:root=true
