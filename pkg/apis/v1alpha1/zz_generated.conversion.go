@@ -164,16 +164,6 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
-	if err := s.AddGeneratedConversionFunc((*LinodeNodeClassSpec)(nil), (*v1beta1.LinodeNodeClassSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1alpha1_LinodeNodeClassSpec_To_v1beta1_LinodeNodeClassSpec(a.(*LinodeNodeClassSpec), b.(*v1beta1.LinodeNodeClassSpec), scope)
-	}); err != nil {
-		return err
-	}
-	if err := s.AddGeneratedConversionFunc((*v1beta1.LinodeNodeClassSpec)(nil), (*LinodeNodeClassSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1beta1_LinodeNodeClassSpec_To_v1alpha1_LinodeNodeClassSpec(a.(*v1beta1.LinodeNodeClassSpec), b.(*LinodeNodeClassSpec), scope)
-	}); err != nil {
-		return err
-	}
 	if err := s.AddGeneratedConversionFunc((*LinodeNodeClassStatus)(nil), (*v1beta1.LinodeNodeClassStatus)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1alpha1_LinodeNodeClassStatus_To_v1beta1_LinodeNodeClassStatus(a.(*LinodeNodeClassStatus), b.(*v1beta1.LinodeNodeClassStatus), scope)
 	}); err != nil {
@@ -321,6 +311,16 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}
 	if err := s.AddGeneratedConversionFunc((*v1beta1.VPCInterfaceIPv6SLAACCreateOptions)(nil), (*VPCInterfaceIPv6SLAACCreateOptions)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1beta1_VPCInterfaceIPv6SLAACCreateOptions_To_v1alpha1_VPCInterfaceIPv6SLAACCreateOptions(a.(*v1beta1.VPCInterfaceIPv6SLAACCreateOptions), b.(*VPCInterfaceIPv6SLAACCreateOptions), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddConversionFunc((*LinodeNodeClassSpec)(nil), (*v1beta1.LinodeNodeClassSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_LinodeNodeClassSpec_To_v1beta1_LinodeNodeClassSpec(a.(*LinodeNodeClassSpec), b.(*v1beta1.LinodeNodeClassSpec), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddConversionFunc((*v1beta1.LinodeNodeClassSpec)(nil), (*LinodeNodeClassSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_LinodeNodeClassSpec_To_v1alpha1_LinodeNodeClassSpec(a.(*v1beta1.LinodeNodeClassSpec), b.(*LinodeNodeClassSpec), scope)
 	}); err != nil {
 		return err
 	}
