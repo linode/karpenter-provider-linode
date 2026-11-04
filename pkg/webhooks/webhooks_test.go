@@ -61,20 +61,30 @@ func convert(t *testing.T, h http.Handler, desiredVersion string, in map[string]
 }
 
 func nodeClass(version string) map[string]any {
+	spec := map[string]any{
+		"tags": []any{"tag"},
+		"kubelet": map[string]any{
+			"maxPods":        float64(110),
+			"systemReserved": map[string]any{"cpu": "100m"},
+		},
+	}
+	instanceFields := map[string]any{
+		"image":          "linode/ubuntu24.04",
+		"backupsEnabled": true,
+		"firewallID":     float64(1234),
+	}
+	if version == "v1alpha1" {
+		for k, v := range instanceFields {
+			spec[k] = v
+		}
+	} else {
+		spec["instanceMode"] = instanceFields
+	}
 	return map[string]any{
 		"apiVersion": apis.Group + "/" + version,
 		"kind":       "LinodeNodeClass",
 		"metadata":   map[string]any{"name": "default", "labels": map[string]any{"a": "b"}},
-		"spec": map[string]any{
-			"image":          "linode/ubuntu24.04",
-			"backupsEnabled": true,
-			"firewallID":     float64(1234),
-			"tags":           []any{"tag"},
-			"kubelet": map[string]any{
-				"maxPods":        float64(110),
-				"systemReserved": map[string]any{"cpu": "100m"},
-			},
-		},
+		"spec":       spec,
 		"status": map[string]any{
 			"linodeImages": []any{map[string]any{"id": "linode/ubuntu24.04", "label": "Ubuntu 24.04"}},
 		},
