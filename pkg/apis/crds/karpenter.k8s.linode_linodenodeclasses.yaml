@@ -1018,7 +1018,7 @@ spec:
                     required:
                     - id
                     type: object
-                  swap_size:
+                  swapSize:
                     description: swapSize is the size of the swap disk in MiB.
                     type: integer
                   vpcID:
