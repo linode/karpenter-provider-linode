@@ -116,7 +116,7 @@ var _ = Describe("CloudProvider", func() {
 		nodeClass = test.LinodeNodeClassWithoutLKE(
 			v1.LinodeNodeClass{
 				Spec: v1.LinodeNodeClassSpec{
-					Image: "linode/ubuntu22.04",
+					InstanceMode: &v1.InstanceMode{Image: "linode/ubuntu22.04"},
 				},
 				Status: v1.LinodeNodeClassStatus{},
 			},
@@ -608,7 +608,7 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 		})
 
 		It("should return NodeClassNotReady when lkeK8sVersion validation marks the NodeClass not ready", func() {
-			lkeNodeClass.Spec.LKEK8sVersion = new("v1.32.8+lke13")
+			lkeNodeClass.Spec.LKEMode = &v1.LKEMode{LKEK8sVersion: new("v1.32.8+lke13")}
 			linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
 
 			nodeClassController := nodeclasscontroller.NewController(
