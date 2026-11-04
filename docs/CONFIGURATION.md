@@ -103,7 +103,7 @@ Fields marked **Instance** or **LKE** are only meaningful in that mode. Setting 
 | `instanceMode.authorizedUsers` | `[]string` | **Instance** | List of Linode usernames whose SSH keys will be added. Rejected in `lke` mode. |
 | `instanceMode.backupsEnabled` | `bool` | **Instance** | Enable backups service for the instance. Rejected in `lke` mode. |
 | `instanceMode.diskEncryption` | `enum` | **Instance** | `enabled` or `disabled`. Rejected in `lke` mode (not yet sent to LKE node pools). |
-| `instanceMode.swap_size` | `int` | **Instance** | Size of the swap disk in MiB. Rejected in `lke` mode. |
+| `instanceMode.swapSize` | `int` | **Instance** | Size of the swap disk in MiB. Rejected in `lke` mode. |
 | `instanceMode.placementGroup` | `object` | **Instance** | Place instance in a specific Placement Group (`id`, `compliant_only`). Rejected in `lke` mode. |
 | `instanceMode.osDisk` | `object` | **Instance** | Root disk configuration. Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
 | `instanceMode.dataDisks` | `object` | **Instance** | Additional disks (`sdb`–`sdh`). Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
@@ -150,7 +150,7 @@ spec:
     authorizedUsers:
       - "my-user"
     backupsEnabled: true
-    swap_size: 512
+    swapSize: 512
     diskEncryption: "enabled"
 ```
 

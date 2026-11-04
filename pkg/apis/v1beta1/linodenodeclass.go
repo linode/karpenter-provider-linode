@@ -109,7 +109,7 @@ type InstanceMode struct {
 
 	// swapSize is the size of the swap disk in MiB.
 	// +optional
-	SwapSize *int `json:"swap_size,omitempty"`
+	SwapSize *int `json:"swapSize,omitempty"`
 }
 
 // LKEMode contains configuration for LKE node pools.
