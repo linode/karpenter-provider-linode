@@ -4,6 +4,19 @@ kind: CustomResourceDefinition
 metadata:
   name: linodenodeclasses.karpenter.k8s.linode
 spec:
+  {{- if .Values.webhook.enabled }}
+  conversion:
+    strategy: Webhook
+    webhook:
+      conversionReviewVersions:
+        - v1
+      clientConfig:
+        service:
+          name: {{ .Values.webhook.serviceName }}
+          namespace: {{ .Values.webhook.serviceNamespace | default .Release.Namespace }}
+          path: /convert
+          port: {{ .Values.webhook.port }}
+  {{- end }}
   group: karpenter.k8s.linode
   names:
     categories:

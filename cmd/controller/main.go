@@ -40,7 +40,7 @@ func main() {
 		os.Exit(1)
 	}
 	if opts := options.FromContext(ctx); !opts.DisableWebhook {
-		if err := webhooks.Register(op.Manager, op.Clock, webhooks.Config{
+		if err := webhooks.Register(op.Manager, webhooks.Config{
 			Namespace:   opts.SystemNamespace,
 			ServiceName: coreoptions.FromContext(ctx).ServiceName,
 			Port:        opts.WebhookPort,

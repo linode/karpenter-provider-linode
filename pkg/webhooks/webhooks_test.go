@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -129,4 +130,64 @@ func TestConversionHandlerRejectsUnknownVersion(t *testing.T) {
 
 func metaV1ConversionReview() metav1.TypeMeta {
 	return metav1.TypeMeta{APIVersion: "apiextensions.k8s.io/v1", Kind: "ConversionReview"}
+}
+
+func TestConfigValidate(t *testing.T) {
+	t.Parallel()
+	valid := Config{Namespace: "kube-system", ServiceName: "karpenter", Port: 8443}
+	require.NoError(t, valid.validate())
+	require.Error(t, Config{ServiceName: "karpenter", Port: 8443}.validate())
+	require.Error(t, Config{Namespace: "kube-system", Port: 8443}.validate())
+	require.Error(t, Config{Namespace: "kube-system", ServiceName: "karpenter"}.validate())
+	require.Equal(t, "karpenter.kube-system.svc", valid.dnsName())
+	require.Equal(t, "karpenter-cert", valid.secretName())
+}
+
+func TestReadyGateWaitsForCertificate(t *testing.T) {
+	t.Parallel()
+	ready := make(chan struct{})
+	server := &fakeRunnable{started: make(chan struct{})}
+	gate := &readyGate{ready: ready, server: server}
+	require.False(t, gate.NeedLeaderElection())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- gate.Start(ctx) }()
+
+	select {
+	case <-server.started:
+		t.Fatal("server started before the certificate was ready")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(ready)
+	select {
+	case <-server.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not start once the certificate was ready")
+	}
+	cancel()
+	require.NoError(t, <-done)
+}
+
+func TestReadyGateStopsWithoutStartingServer(t *testing.T) {
+	t.Parallel()
+	server := &fakeRunnable{started: make(chan struct{})}
+	gate := &readyGate{ready: make(chan struct{}), server: server}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.NoError(t, gate.Start(ctx))
+	select {
+	case <-server.started:
+		t.Fatal("server must not start without a certificate")
+	default:
+	}
+}
+
+type fakeRunnable struct{ started chan struct{} }
+
+func (f *fakeRunnable) Start(ctx context.Context) error {
+	close(f.started)
+	<-ctx.Done()
+	return nil
 }
