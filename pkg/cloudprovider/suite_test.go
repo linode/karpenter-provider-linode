@@ -123,6 +123,8 @@ var _ = Describe("CloudProvider", func() {
 		)
 		nodeClass.StatusConditions().SetTrue(opstatus.ConditionReady)
 		nodePool = coretest.NodePool(karpv1.NodePool{
+			// Keep the name short: Linode limits tags to 50 characters and the nodepool tag is "karpenter.sh/nodepool=<name>".
+			Name: "test-nodepool",
 			Spec: karpv1.NodePoolSpec{
 				Template: karpv1.NodeClaimTemplate{
 					Spec: karpv1.NodeClaimTemplateSpec{
@@ -148,12 +150,10 @@ var _ = Describe("CloudProvider", func() {
 			},
 		})
 		nodeClaim = coretest.NodeClaim(karpv1.NodeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{
-					karpv1.NodePoolLabelKey:     nodePool.Name,
-					corev1.LabelTopologyZone:    fake.DefaultRegion,
-					karpv1.CapacityTypeLabelKey: karpv1.CapacityTypeOnDemand,
-				},
+			Labels: map[string]string{
+				karpv1.NodePoolLabelKey:     nodePool.Name,
+				corev1.LabelTopologyZone:    fake.DefaultRegion,
+				karpv1.CapacityTypeLabelKey: karpv1.CapacityTypeOnDemand,
 			},
 			Spec: karpv1.NodeClaimSpec{
 				Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
@@ -548,12 +548,10 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 		// Keep the generated NodePool tag within Linode's 50-character limit.
 		lkeNodePool.Name = "lke-pool"
 		lkeNodeClaim = coretest.NodeClaim(karpv1.NodeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{
-					karpv1.NodePoolLabelKey:     lkeNodePool.Name,
-					corev1.LabelTopologyZone:    fake.DefaultRegion,
-					karpv1.CapacityTypeLabelKey: karpv1.CapacityTypeOnDemand,
-				},
+			Labels: map[string]string{
+				karpv1.NodePoolLabelKey:     lkeNodePool.Name,
+				corev1.LabelTopologyZone:    fake.DefaultRegion,
+				karpv1.CapacityTypeLabelKey: karpv1.CapacityTypeOnDemand,
 			},
 			Spec: karpv1.NodeClaimSpec{
 				Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
