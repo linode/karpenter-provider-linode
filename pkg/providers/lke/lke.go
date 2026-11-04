@@ -415,8 +415,8 @@ func (p *DefaultProvider) findOrCreatePool(ctx context.Context, nodeClass *v1bet
 		Taints: convertToLkeTaints(nodeClaim.Spec.Taints),
 	}
 	// Leave FirewallID unset so LKE associates the cluster's default Firewall.
-	if nodeClass.Spec.LKEK8sVersion != nil {
-		createOpts.K8sVersion = nodeClass.Spec.LKEK8sVersion
+	if nodeClass.Spec.LKEMode != nil && nodeClass.Spec.LKEMode.LKEK8sVersion != nil {
+		createOpts.K8sVersion = nodeClass.Spec.LKEMode.LKEK8sVersion
 	}
 	if p.clusterTier == linodego.LKEVersionEnterprise {
 		createOpts.UpdateStrategy = &defaultPoolUpdateStrategy
@@ -480,14 +480,14 @@ func (p *DefaultProvider) matchesPoolKey(pool *linodego.LKENodePool, instanceTyp
 }
 
 func (p *DefaultProvider) reconcilePoolVersion(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass, pool *linodego.LKENodePool) error {
-	if nodeClass.Spec.LKEK8sVersion == nil {
+	if nodeClass.Spec.LKEMode == nil || nodeClass.Spec.LKEMode.LKEK8sVersion == nil {
 		return nil
 	}
-	if pool.K8sVersion != nil && *pool.K8sVersion == *nodeClass.Spec.LKEK8sVersion {
+	if pool.K8sVersion != nil && *pool.K8sVersion == *nodeClass.Spec.LKEMode.LKEK8sVersion {
 		return nil
 	}
 	_, err := p.client.UpdateLKENodePool(ctx, p.clusterID, pool.ID, linodego.LKENodePoolUpdateOptions{
-		K8sVersion:     nodeClass.Spec.LKEK8sVersion,
+		K8sVersion:     nodeClass.Spec.LKEMode.LKEK8sVersion,
 		UpdateStrategy: &defaultPoolUpdateStrategy,
 	})
 	if err != nil {

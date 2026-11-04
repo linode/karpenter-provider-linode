@@ -185,43 +185,47 @@ func (v *Validation) validateLKEUnsupportedFields(ctx context.Context, nodeClass
 
 func instanceOnlyFieldsSet(spec *v1beta1.LinodeNodeClassSpec) []string {
 	var setFields []string
-	if len(spec.AuthorizedKeys) > 0 {
+	if spec.InstanceMode == nil {
+		return setFields
+	}
+	instanceMode := spec.InstanceMode
+	if len(instanceMode.AuthorizedKeys) > 0 {
 		setFields = append(setFields, "authorizedKeys")
 	}
-	if len(spec.AuthorizedUsers) > 0 {
+	if len(instanceMode.AuthorizedUsers) > 0 {
 		setFields = append(setFields, "authorizedUsers")
 	}
-	if spec.Image != "" {
+	if instanceMode.Image != "" {
 		setFields = append(setFields, "image")
 	}
-	if spec.FirewallID != nil {
+	if instanceMode.FirewallID != nil {
 		setFields = append(setFields, "firewallID")
 	}
-	if spec.BackupsEnabled {
+	if instanceMode.BackupsEnabled {
 		setFields = append(setFields, "backupsEnabled")
 	}
-	if spec.OSDisk != nil {
+	if instanceMode.OSDisk != nil {
 		setFields = append(setFields, "osDisk")
 	}
-	if spec.DataDisks != nil {
+	if instanceMode.DataDisks != nil {
 		setFields = append(setFields, "dataDisks")
 	}
-	if spec.Configuration != nil {
+	if instanceMode.Configuration != nil {
 		setFields = append(setFields, "configuration")
 	}
-	if spec.PlacementGroup != nil {
+	if instanceMode.PlacementGroup != nil {
 		setFields = append(setFields, "placementGroup")
 	}
-	if spec.VPCID != nil {
+	if instanceMode.VPCID != nil {
 		setFields = append(setFields, "vpcID")
 	}
-	if spec.IPv6Options != nil {
+	if instanceMode.IPv6Options != nil {
 		setFields = append(setFields, "ipv6Options")
 	}
-	if spec.SwapSize != nil {
+	if instanceMode.SwapSize != nil {
 		setFields = append(setFields, "swapSize")
 	}
-	if spec.DiskEncryption != "" {
+	if instanceMode.DiskEncryption != "" {
 		setFields = append(setFields, "diskEncryption")
 	}
 
@@ -236,7 +240,7 @@ func (v *Validation) validateInstanceUnsupportedFields(ctx context.Context, node
 	}
 
 	var setFields []string
-	if nodeClass.Spec.LKEK8sVersion != nil {
+	if nodeClass.Spec.LKEMode != nil && nodeClass.Spec.LKEMode.LKEK8sVersion != nil {
 		setFields = append(setFields, "lkeK8sVersion")
 	}
 	if len(setFields) == 0 {
@@ -253,7 +257,7 @@ func (v *Validation) validateInstanceUnsupportedFields(ctx context.Context, node
 
 // validateLKEClusterTier validates lkeK8sVersion against the LKE cluster tier and control-plane version.
 func (v *Validation) validateLKEClusterTier(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass) (reconcile.Result, error) {
-	if options.FromContext(ctx).Mode != "lke" || nodeClass.Spec.LKEK8sVersion == nil {
+	if options.FromContext(ctx).Mode != "lke" || nodeClass.Spec.LKEMode == nil || nodeClass.Spec.LKEMode.LKEK8sVersion == nil {
 		return reconcile.Result{}, nil
 	}
 	if v.clusterID == 0 {
@@ -267,10 +271,7 @@ func (v *Validation) validateLKEClusterTier(ctx context.Context, nodeClass *v1be
 
 	switch linodego.LKEVersionTier(cluster.Tier) {
 	case linodego.LKEVersionEnterprise:
-		if nodeClass.Spec.LKEK8sVersion == nil {
-			return reconcile.Result{}, nil
-		}
-		desiredVersion := *nodeClass.Spec.LKEK8sVersion
+		desiredVersion := *nodeClass.Spec.LKEMode.LKEK8sVersion
 		if cluster.K8sVersion == desiredVersion {
 			return reconcile.Result{}, nil
 		}

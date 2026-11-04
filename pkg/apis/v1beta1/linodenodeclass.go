@@ -28,6 +28,30 @@ import (
 // LinodeNodeClassSpec is the top level specification for the Linode Karpenter Provider.
 // This will contain configuration necessary to launch instances in Linode.
 type LinodeNodeClassSpec struct {
+	// instanceMode contains configuration for directly created Linode instances.
+	// +optional
+	InstanceMode *InstanceMode `json:"instanceMode,omitempty"`
+
+	// lkeMode contains configuration for LKE node pools.
+	// +optional
+	LKEMode *LKEMode `json:"lkeMode,omitempty"`
+
+	// tags is a list of tags to apply to Linode instances or LKE node pools.
+	// +optional
+	// +listType=set
+	Tags []string `json:"tags,omitempty"`
+
+	// Kubelet defines args to be used when configuring kubelet on provisioned nodes.
+	// They are a subset of the upstream types, recognizing not all options may be supported.
+	// Wherever possible, the types and names should reflect the upstream kubelet types.
+	// +kubebuilder:validation:XValidation:message="evictionSoft OwnerKey does not have a matching evictionSoftGracePeriod",rule="has(self.evictionSoft) ? self.evictionSoft.all(e, (e in self.evictionSoftGracePeriod)):true"
+	// +kubebuilder:validation:XValidation:message="evictionSoftGracePeriod OwnerKey does not have a matching evictionSoft",rule="has(self.evictionSoftGracePeriod) ? self.evictionSoftGracePeriod.all(e, (e in self.evictionSoft)):true"
+	// +optional
+	Kubelet *KubeletConfiguration `json:"kubelet,omitempty"`
+}
+
+// InstanceMode contains configuration for directly created Linode instances.
+type InstanceMode struct {
 	// authorizedKeys is a list of SSH public keys to add to the instance.
 	// +optional
 	// +listType=set
@@ -46,13 +70,7 @@ type LinodeNodeClassSpec struct {
 	// +optional
 	BackupsEnabled bool `json:"backupsEnabled,omitempty"`
 
-	// tags is a list of tags to apply to the Linode instance.
-	// +optional
-	// +listType=set
-	Tags []string `json:"tags,omitempty"`
-
-	// firewallID is the ID of the Cloud Firewall to attach to directly created Linode
-	// instances. In LKE mode, node pools use the cluster's default Firewall instead.
+	// firewallID is the ID of the Cloud Firewall to attach to directly created Linode instances.
 	// +optional
 	FirewallID *int `json:"firewallID,omitempty"`
 
@@ -90,16 +108,12 @@ type LinodeNodeClassSpec struct {
 	IPv6Options *IPv6CreateOptions `json:"ipv6Options,omitempty"`
 
 	// swapSize is the size of the swap disk in MiB.
-	SwapSize *int `json:"swap_size,omitempty"`
-
-	// Kubelet defines args to be used when configuring kubelet on provisioned nodes.
-	// They are a subset of the upstream types, recognizing not all options may be supported.
-	// Wherever possible, the types and names should reflect the upstream kubelet types.
-	// +kubebuilder:validation:XValidation:message="evictionSoft OwnerKey does not have a matching evictionSoftGracePeriod",rule="has(self.evictionSoft) ? self.evictionSoft.all(e, (e in self.evictionSoftGracePeriod)):true"
-	// +kubebuilder:validation:XValidation:message="evictionSoftGracePeriod OwnerKey does not have a matching evictionSoft",rule="has(self.evictionSoftGracePeriod) ? self.evictionSoftGracePeriod.all(e, (e in self.evictionSoft)):true"
 	// +optional
-	Kubelet *KubeletConfiguration `json:"kubelet,omitempty"`
+	SwapSize *int `json:"swap_size,omitempty"`
+}
 
+// LKEMode contains configuration for LKE node pools.
+type LKEMode struct {
 	// lkeK8sVersion is the Kubernetes version for LKE node pools.
 	// Only used in LKE mode. Only available for Enterprise LKE clusters.
 	// The LKE cluster control plane version must already be upgraded to this version
@@ -499,11 +513,12 @@ type LinodeNodeClass struct {
 	Status LinodeNodeClassStatus `json:"status,omitempty"`
 }
 
-// We need to bump the LinodeNodeClassHashVersion when we make an update to the LinodeNodeClassHashVersion CRD under these conditions:
+// Bump LinodeNodeClassHashVersion when the hash calculation changes so that existing NodeClaims are updated safely:
 // 1. A field changes its default value for an existing field that is already hashed
 // 2. A field is added to the hash calculation with an already-set value
 // 3. A field is removed from the hash calculations
-const LinodeNodeClassHashVersion = "v1alpha1"
+// 4. A hashed field moves to a different position in the spec structure.
+const LinodeNodeClassHashVersion = "v1alpha2"
 
 // Hash generates a hash of the LinodeNodeClass spec and annotations, excluding fields that can we update in-place (e.g. tags).
 // This is used to determine if a NodeClaim needs to be replaced due to changes in the NodeClass.

@@ -62,7 +62,7 @@ The provider can operate in two distinct modes, controlled by the `KARPENTER_MOD
 
 ## API versions and conversion
 
-`LinodeNodeClass` is served as `karpenter.k8s.linode/v1beta1` (storage version) and the deprecated `karpenter.k8s.linode/v1alpha1`. The two versions have identical schemas, so existing `v1alpha1` objects keep working and are converted to `v1beta1` on read. Update your manifests to `apiVersion: karpenter.k8s.linode/v1beta1`.
+`LinodeNodeClass` is served as `karpenter.k8s.linode/v1beta1` (storage version) and the deprecated `karpenter.k8s.linode/v1alpha1`. The `v1alpha1` schema keeps its legacy flat mode-specific fields; conversion maps them to and from the `instanceMode` and `lkeMode` objects in `v1beta1`, while shared fields such as `tags` and `kubelet` remain at the spec root. Update your manifests to `apiVersion: karpenter.k8s.linode/v1beta1`.
 
 Conversion is performed by a webhook served by the Karpenter controller (enabled by default in the chart via `webhook.enabled`). On startup the controller generates a self-signed CA and serving certificate into the `<karpenter-service-name>-cert` Secret and publishes the CA in the `linodenodeclasses.karpenter.k8s.linode` CRD's `spec.conversion`. No cert-manager is required. The controller needs permission to `get`/`update` that Secret and `get`/`update` the CRD, which the chart grants.
 
@@ -95,21 +95,21 @@ Fields marked **Instance** or **LKE** are only meaningful in that mode. Setting 
 | Field | Type | Supported Modes | Description |
 | ------- | ------ | ----------------- | ------------- |
 | `tags` | `[]string` | **All** | Tags to apply to Linode instances. Each complete tag is limited to 50 characters. In LKE mode, user tags are reconciled directly on instances; generated Karpenter-managed pool tags also must fit the limit and are rejected rather than shortened. |
-| `firewallID` | `int` | **Instance** | The ID of the Cloud Firewall to attach to a directly created Linode instance. Rejected in `lke` mode; LKE node pools use the cluster's default Firewall. |
+| `instanceMode.firewallID` | `int` | **Instance** | The ID of the Cloud Firewall to attach to a directly created Linode instance. Rejected in `lke` mode; LKE node pools use the cluster's default Firewall. |
 | `kubelet` | `object` | **All** | Kubelet settings (e.g. `kubeReserved`, `systemReserved`, eviction thresholds). Currently used only for Karpenter's allocatable capacity and ephemeral storage estimates; the provider does not push them to nodes. |
-| `lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for LKE Enterprise worker nodes. Upgrade the cluster control plane to this version first; otherwise reconciliation fails and replacement NodeClaims will not come up on the requested version. For Enterprise clusters, the update strategy automatically defaults to `on_recycle`. Rejected in `instance` mode. |
-| `image` | `string` | **Instance** | The Image ID to deploy (default: `linode/ubuntu22.04`). Rejected in `lke` mode. |
-| `authorizedKeys` | `[]string` | **Instance** | SSH Public Keys to add to the `root` user. Rejected in `lke` mode. |
-| `authorizedUsers` | `[]string` | **Instance** | List of Linode usernames whose SSH keys will be added. Rejected in `lke` mode. |
-| `backupsEnabled` | `bool` | **Instance** | Enable backups service for the instance. Rejected in `lke` mode. |
-| `diskEncryption` | `enum` | **Instance** | `enabled` or `disabled`. Rejected in `lke` mode (not yet sent to LKE node pools). |
-| `swapSize` | `int` | **Instance** | Size of the swap disk in MiB. Rejected in `lke` mode. |
-| `placementGroup` | `object` | **Instance** | Place instance in a specific Placement Group (`id`, `compliant_only`). Rejected in `lke` mode. |
-| `osDisk` | `object` | **Instance** | Root disk configuration. Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
-| `dataDisks` | `object` | **Instance** | Additional disks (`sdb`–`sdh`). Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
-| `configuration` | `object` | **Instance** | Instance configuration profile (e.g. `kernel`). Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
-| `vpcID` | `int` | **Instance** | ID of an existing VPC. Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
-| `ipv6Options` | `object` | **Instance** | IPv6 options (`enableSLAAC`, `enableRanges`, `isPublicIPv6`). Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
+| `lkeMode.lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for LKE Enterprise worker nodes. Upgrade the cluster control plane to this version first; otherwise reconciliation fails and replacement NodeClaims will not come up on the requested version. For Enterprise clusters, the update strategy automatically defaults to `on_recycle`. Rejected in `instance` mode. |
+| `instanceMode.image` | `string` | **Instance** | The Image ID to deploy (default: `linode/ubuntu22.04`). Rejected in `lke` mode. |
+| `instanceMode.authorizedKeys` | `[]string` | **Instance** | SSH Public Keys to add to the `root` user. Rejected in `lke` mode. |
+| `instanceMode.authorizedUsers` | `[]string` | **Instance** | List of Linode usernames whose SSH keys will be added. Rejected in `lke` mode. |
+| `instanceMode.backupsEnabled` | `bool` | **Instance** | Enable backups service for the instance. Rejected in `lke` mode. |
+| `instanceMode.diskEncryption` | `enum` | **Instance** | `enabled` or `disabled`. Rejected in `lke` mode (not yet sent to LKE node pools). |
+| `instanceMode.swap_size` | `int` | **Instance** | Size of the swap disk in MiB. Rejected in `lke` mode. |
+| `instanceMode.placementGroup` | `object` | **Instance** | Place instance in a specific Placement Group (`id`, `compliant_only`). Rejected in `lke` mode. |
+| `instanceMode.osDisk` | `object` | **Instance** | Root disk configuration. Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
+| `instanceMode.dataDisks` | `object` | **Instance** | Additional disks (`sdb`–`sdh`). Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
+| `instanceMode.configuration` | `object` | **Instance** | Instance configuration profile (e.g. `kernel`). Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
+| `instanceMode.vpcID` | `int` | **Instance** | ID of an existing VPC. Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
+| `instanceMode.ipv6Options` | `object` | **Instance** | IPv6 options (`enableSLAAC`, `enableRanges`, `isPublicIPv6`). Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
 
 ### Taints and Standard Labels
 
@@ -144,13 +144,14 @@ metadata:
 spec:
   tags:
     - "custom-workload"
-  firewallID: 12345
-  image: "linode/ubuntu22.04"
-  authorizedUsers:
-    - "my-user"
-  backupsEnabled: true
-  swapSize: 512
-  diskEncryption: "enabled"
+  instanceMode:
+    firewallID: 12345
+    image: "linode/ubuntu22.04"
+    authorizedUsers:
+      - "my-user"
+    backupsEnabled: true
+    swap_size: 512
+    diskEncryption: "enabled"
 ```
 
 ## Selecting nodes
