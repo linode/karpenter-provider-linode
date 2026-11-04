@@ -16,14 +16,14 @@ limitations under the License.
 package webhooks
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
 
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"github.com/open-policy-agent/cert-controller/pkg/rotator"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/clock"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/conversion"
@@ -55,32 +55,63 @@ func NewConversionHandler() (http.Handler, error) {
 	return conversion.NewWebhookHandler(s, conversion.NewRegistry()), nil
 }
 
-// Register adds the conversion webhook server and its certificate manager to the manager.
-func Register(mgr manager.Manager, clk clock.Clock, config Config) error {
+// Register adds the conversion webhook server and the certificate rotator to the manager. The rotator keeps a
+// self-signed serving certificate in the Config's Secret and publishes its CA to the CRD, which must already
+// declare the conversion webhook (the Helm chart does this).
+func Register(mgr manager.Manager, config Config) error {
 	if err := config.validate(); err != nil {
 		return fmt.Errorf("invalid webhook config, %w", err)
-	}
-	if err := apiextensionsv1.AddToScheme(scheme.Scheme); err != nil {
-		return fmt.Errorf("registering apiextensions types, %w", err)
 	}
 	handler, err := NewConversionHandler()
 	if err != nil {
 		return err
 	}
-	certs := NewCertManager(mgr.GetAPIReader(), mgr.GetClient(), clk, config)
+	ready := make(chan struct{})
+	// Every replica serves the webhook, so every replica rotates and injects certificates.
+	if err := rotator.AddRotator(mgr, &rotator.CertRotator{
+		SecretKey:            types.NamespacedName{Namespace: config.Namespace, Name: config.secretName()},
+		CertDir:              CertDir,
+		CAName:               "karpenter-linode-webhook-ca",
+		CAOrganization:       "karpenter-linode",
+		DNSName:              config.dnsName(),
+		ExtraDNSNames:        config.extraDNSNames(),
+		IsReady:              ready,
+		EnableReadinessCheck: true,
+		Webhooks:             []rotator.WebhookInfo{{Name: LinodeNodeClassCRDName, Type: rotator.CRDConversion}},
+	}); err != nil {
+		return fmt.Errorf("adding webhook certificate rotator, %w", err)
+	}
 	server := webhook.NewServer(webhook.Options{
-		Port: config.Port,
-		TLSOpts: []func(*tls.Config){func(c *tls.Config) {
-			c.MinVersion = tls.VersionTLS12
-			c.GetCertificate = certs.GetCertificate
-		}},
+		Port:    config.Port,
+		CertDir: CertDir,
+		TLSOpts: []func(*tls.Config){func(c *tls.Config) { c.MinVersion = tls.VersionTLS12 }},
 	})
 	server.Register(ConversionPath, handler)
-	if err := mgr.Add(certs); err != nil {
-		return fmt.Errorf("adding webhook certificate manager, %w", err)
-	}
-	if err := mgr.Add(server); err != nil {
+	if err := mgr.Add(&readyGate{ready: ready, server: server}); err != nil {
 		return fmt.Errorf("adding webhook server, %w", err)
 	}
 	return nil
+}
+
+// readyGate starts the webhook server once its serving certificate is available, since the server
+// fails to start without one.
+type readyGate struct {
+	ready  <-chan struct{}
+	server manager.Runnable
+}
+
+var _ manager.LeaderElectionRunnable = (*readyGate)(nil)
+
+func (g *readyGate) Start(ctx context.Context) error {
+	select {
+	case <-g.ready:
+		return g.server.Start(ctx)
+	case <-ctx.Done():
+		return nil
+	}
+}
+
+// NeedLeaderElection returns false: the webhook is served by every replica.
+func (g *readyGate) NeedLeaderElection() bool {
+	return false
 }
