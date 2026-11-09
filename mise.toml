@@ -33,6 +33,10 @@ run = "just ci-test"
 description = "Run verification and vulnerability checks"
 run = "just ci-non-test"
 
+[tasks.chainsaw-lint]
+description = "Validate the Chainsaw configuration and every E2E test manifest."
+run = "just chainsaw-lint"
+
 [tasks.lint-chart]
 description = "Run Helm chart linting"
 run = "just lint-chart"
