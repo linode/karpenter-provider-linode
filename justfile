@@ -53,7 +53,12 @@ presubmit: verify test
 ci-test: test coverage
 
 # Run checks other than tests
-ci-non-test: verify vulncheck
+ci-non-test: verify vulncheck chainsaw-lint
+
+# Validate the Chainsaw configuration and all E2E test manifests.
+chainsaw-lint:
+	chainsaw lint configuration --file .chainsaw.yaml
+	find e2e -type f -name 'chainsaw-test.yaml' -print0 | xargs -0 -n 1 chainsaw lint test --file
 
 # Verify Mise-managed development tools are available
 tools:
