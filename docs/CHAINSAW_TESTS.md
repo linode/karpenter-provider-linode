@@ -95,3 +95,11 @@ When adding/updating an E2E test:
    - add/update row in **Selector matrix** if a new selector is introduced
    - add/update row in **Test inventory and justification**
 7. Ensure workflow selectors (`pr`/`all`) still match intended scope.
+
+## Linting
+
+Validate the Chainsaw configuration and every test manifest without a cluster:
+
+```bash
+mise run chainsaw-lint
+```
