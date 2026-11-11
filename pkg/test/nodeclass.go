@@ -21,7 +21,7 @@ import (
 	"github.com/imdario/mergo"
 	"sigs.k8s.io/karpenter/pkg/test"
 
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 )
 
 func LinodeNodeClass(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {
@@ -50,9 +50,12 @@ func LinodeNodeClass(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {
 // This helper sets up appropriate defaults for instance mode testing (e.g., Image field).
 func LinodeNodeClassWithoutLKE(overrides ...v1.LinodeNodeClass) *v1.LinodeNodeClass {
 	nc := LinodeNodeClass(overrides...)
+	if nc.Spec.InstanceMode == nil {
+		nc.Spec.InstanceMode = &v1.InstanceMode{}
+	}
 	// Set default image for instance mode if not provided
-	if nc.Spec.Image == "" {
-		nc.Spec.Image = "linode/ubuntu22.04"
+	if nc.Spec.InstanceMode.Image == "" {
+		nc.Spec.InstanceMode.Image = "linode/ubuntu22.04"
 	}
 	return nc
 }

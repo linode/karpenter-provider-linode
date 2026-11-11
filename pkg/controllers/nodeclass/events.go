@@ -20,11 +20,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/karpenter/pkg/events"
 
-	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
 )
 
-func WaitingOnNodeClaimTerminationEvent(nodeClass *v1alpha1.LinodeNodeClass, names []string) events.Event {
+func WaitingOnNodeClaimTerminationEvent(nodeClass *v1beta1.LinodeNodeClass, names []string) events.Event {
 	return events.Event{
 		InvolvedObject: nodeClass,
 		Type:           corev1.EventTypeNormal,
@@ -34,7 +34,7 @@ func WaitingOnNodeClaimTerminationEvent(nodeClass *v1alpha1.LinodeNodeClass, nam
 	}
 }
 
-func LKEValidationFailedEvent(nodeClass *v1alpha1.LinodeNodeClass, reason, message string) events.Event {
+func LKEValidationFailedEvent(nodeClass *v1beta1.LinodeNodeClass, reason, message string) events.Event {
 	return events.Event{
 		InvolvedObject: nodeClass,
 		Type:           corev1.EventTypeWarning,

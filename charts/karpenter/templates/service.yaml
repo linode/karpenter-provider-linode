@@ -11,6 +11,10 @@ metadata:
   {{- end }}
 spec:
   type: ClusterIP
+  {{- if .Values.webhook.enabled }}
+  # The conversion webhook is needed for the controller's own caches to sync (and hence for it to become ready).
+  publishNotReadyAddresses: true
+  {{- end }}
   ports:
     - name: http-metrics
       port: {{ .Values.controller.metrics.port }}

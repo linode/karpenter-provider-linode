@@ -27,7 +27,7 @@ import (
 	karpv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	v1alpha1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 	"github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclass/hash"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/test"
@@ -41,7 +41,7 @@ import (
 var ctx context.Context
 var env *coretest.Environment
 var controller *hash.Controller
-var nodeClass *v1alpha1.LinodeNodeClass
+var nodeClass *v1beta1.LinodeNodeClass
 
 const oldHash = "old-hash"
 
@@ -81,8 +81,8 @@ var _ = Describe("Hash Controller", func() {
 		ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
 
 		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
-		Expect(nodeClass.Annotations[v1alpha1.AnnotationLinodeNodeClassHash]).To(Equal(nodeClass.Hash()))
-		Expect(nodeClass.Annotations[v1alpha1.AnnotationLinodeNodeClassHashVersion]).To(Equal(v1alpha1.LinodeNodeClassHashVersion))
+		Expect(nodeClass.Annotations[v1beta1.AnnotationLinodeNodeClassHash]).To(Equal(nodeClass.Hash()))
+		Expect(nodeClass.Annotations[v1beta1.AnnotationLinodeNodeClassHashVersion]).To(Equal(v1beta1.LinodeNodeClassHashVersion))
 	})
 
 	It("should backfill referenced NodeClaims when the NodeClass hash version annotation is missing", func() {
@@ -96,7 +96,7 @@ var _ = Describe("Hash Controller", func() {
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations: map[string]string{
-					v1alpha1.AnnotationLinodeNodeClassHash: oldHash,
+					v1beta1.AnnotationLinodeNodeClassHash: oldHash,
 				},
 			},
 		})
@@ -105,14 +105,14 @@ var _ = Describe("Hash Controller", func() {
 		ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
 
 		nodeClaim = ExpectExists(ctx, env.Client, nodeClaim)
-		Expect(nodeClaim.Annotations[v1alpha1.AnnotationLinodeNodeClassHashVersion]).To(Equal(v1alpha1.LinodeNodeClassHashVersion))
-		Expect(nodeClaim.Annotations[v1alpha1.AnnotationLinodeNodeClassHash]).To(Equal(nodeClass.Hash()))
+		Expect(nodeClaim.Annotations[v1beta1.AnnotationLinodeNodeClassHashVersion]).To(Equal(v1beta1.LinodeNodeClassHashVersion))
+		Expect(nodeClaim.Annotations[v1beta1.AnnotationLinodeNodeClassHash]).To(Equal(nodeClass.Hash()))
 	})
 
 	It("should update referenced NodeClaims on a hash version bump", func() {
 		nodeClass.Annotations = map[string]string{
-			v1alpha1.AnnotationLinodeNodeClassHash:        oldHash,
-			v1alpha1.AnnotationLinodeNodeClassHashVersion: "old-version",
+			v1beta1.AnnotationLinodeNodeClassHash:        oldHash,
+			v1beta1.AnnotationLinodeNodeClassHashVersion: "old-version",
 		}
 		nodeClaim := coretest.NodeClaim(karpv1.NodeClaim{
 			Spec: karpv1.NodeClaimSpec{
@@ -124,8 +124,8 @@ var _ = Describe("Hash Controller", func() {
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations: map[string]string{
-					v1alpha1.AnnotationLinodeNodeClassHash:        oldHash,
-					v1alpha1.AnnotationLinodeNodeClassHashVersion: "old-version",
+					v1beta1.AnnotationLinodeNodeClassHash:        oldHash,
+					v1beta1.AnnotationLinodeNodeClassHashVersion: "old-version",
 				},
 			},
 		})
@@ -134,14 +134,14 @@ var _ = Describe("Hash Controller", func() {
 		ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
 
 		nodeClaim = ExpectExists(ctx, env.Client, nodeClaim)
-		Expect(nodeClaim.Annotations[v1alpha1.AnnotationLinodeNodeClassHashVersion]).To(Equal(v1alpha1.LinodeNodeClassHashVersion))
-		Expect(nodeClaim.Annotations[v1alpha1.AnnotationLinodeNodeClassHash]).To(Equal(nodeClass.Hash()))
+		Expect(nodeClaim.Annotations[v1beta1.AnnotationLinodeNodeClassHashVersion]).To(Equal(v1beta1.LinodeNodeClassHashVersion))
+		Expect(nodeClaim.Annotations[v1beta1.AnnotationLinodeNodeClassHash]).To(Equal(nodeClass.Hash()))
 	})
 
 	It("should not rewrite the hash for already drifted NodeClaims on version bump", func() {
 		nodeClass.Annotations = map[string]string{
-			v1alpha1.AnnotationLinodeNodeClassHash:        "old-hash",
-			v1alpha1.AnnotationLinodeNodeClassHashVersion: "old-version",
+			v1beta1.AnnotationLinodeNodeClassHash:        "old-hash",
+			v1beta1.AnnotationLinodeNodeClassHashVersion: "old-version",
 		}
 		nodeClaim := coretest.NodeClaim(karpv1.NodeClaim{
 			Spec: karpv1.NodeClaimSpec{
@@ -160,8 +160,8 @@ var _ = Describe("Hash Controller", func() {
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations: map[string]string{
-					v1alpha1.AnnotationLinodeNodeClassHash:        "old-hash",
-					v1alpha1.AnnotationLinodeNodeClassHashVersion: "old-version",
+					v1beta1.AnnotationLinodeNodeClassHash:        "old-hash",
+					v1beta1.AnnotationLinodeNodeClassHashVersion: "old-version",
 				},
 			},
 		})
@@ -170,7 +170,7 @@ var _ = Describe("Hash Controller", func() {
 		ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
 
 		nodeClaim = ExpectExists(ctx, env.Client, nodeClaim)
-		Expect(nodeClaim.Annotations[v1alpha1.AnnotationLinodeNodeClassHashVersion]).To(Equal(v1alpha1.LinodeNodeClassHashVersion))
-		Expect(nodeClaim.Annotations[v1alpha1.AnnotationLinodeNodeClassHash]).To(Equal("old-hash"))
+		Expect(nodeClaim.Annotations[v1beta1.AnnotationLinodeNodeClassHashVersion]).To(Equal(v1beta1.LinodeNodeClassHashVersion))
+		Expect(nodeClaim.Annotations[v1beta1.AnnotationLinodeNodeClassHash]).To(Equal("old-hash"))
 	})
 })

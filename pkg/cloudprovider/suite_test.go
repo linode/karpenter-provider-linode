@@ -40,7 +40,7 @@ import (
 	testv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
 	nodeclasscontroller "github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclass"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
@@ -116,13 +116,15 @@ var _ = Describe("CloudProvider", func() {
 		nodeClass = test.LinodeNodeClassWithoutLKE(
 			v1.LinodeNodeClass{
 				Spec: v1.LinodeNodeClassSpec{
-					Image: "linode/ubuntu22.04",
+					InstanceMode: &v1.InstanceMode{Image: "linode/ubuntu22.04"},
 				},
 				Status: v1.LinodeNodeClassStatus{},
 			},
 		)
 		nodeClass.StatusConditions().SetTrue(opstatus.ConditionReady)
 		nodePool = coretest.NodePool(karpv1.NodePool{
+			// Keep the name short: Linode limits tags to 50 characters and the nodepool tag is "karpenter.sh/nodepool=<name>".
+			Name: "test-nodepool",
 			Spec: karpv1.NodePoolSpec{
 				Template: karpv1.NodeClaimTemplate{
 					Spec: karpv1.NodeClaimTemplateSpec{
@@ -148,12 +150,10 @@ var _ = Describe("CloudProvider", func() {
 			},
 		})
 		nodeClaim = coretest.NodeClaim(karpv1.NodeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{
-					karpv1.NodePoolLabelKey:     nodePool.Name,
-					corev1.LabelTopologyZone:    fake.DefaultRegion,
-					karpv1.CapacityTypeLabelKey: karpv1.CapacityTypeOnDemand,
-				},
+			Labels: map[string]string{
+				karpv1.NodePoolLabelKey:     nodePool.Name,
+				corev1.LabelTopologyZone:    fake.DefaultRegion,
+				karpv1.CapacityTypeLabelKey: karpv1.CapacityTypeOnDemand,
 			},
 			Spec: karpv1.NodeClaimSpec{
 				Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
@@ -548,12 +548,10 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 		// Keep the generated NodePool tag within Linode's 50-character limit.
 		lkeNodePool.Name = "lke-pool"
 		lkeNodeClaim = coretest.NodeClaim(karpv1.NodeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{
-					karpv1.NodePoolLabelKey:     lkeNodePool.Name,
-					corev1.LabelTopologyZone:    fake.DefaultRegion,
-					karpv1.CapacityTypeLabelKey: karpv1.CapacityTypeOnDemand,
-				},
+			Labels: map[string]string{
+				karpv1.NodePoolLabelKey:     lkeNodePool.Name,
+				corev1.LabelTopologyZone:    fake.DefaultRegion,
+				karpv1.CapacityTypeLabelKey: karpv1.CapacityTypeOnDemand,
 			},
 			Spec: karpv1.NodeClaimSpec{
 				Requirements: []karpv1.NodeSelectorRequirementWithMinValues{
@@ -608,7 +606,7 @@ var _ = Describe("CloudProvider LKE Mode", func() {
 		})
 
 		It("should return NodeClassNotReady when lkeK8sVersion validation marks the NodeClass not ready", func() {
-			lkeNodeClass.Spec.LKEK8sVersion = new("v1.32.8+lke13")
+			lkeNodeClass.Spec.LKEMode = &v1.LKEMode{LKEK8sVersion: new("v1.32.8+lke13")}
 			linodeEnv.LinodeAPI.ClusterTier = linodego.LKEVersionStandard
 
 			nodeClassController := nodeclasscontroller.NewController(

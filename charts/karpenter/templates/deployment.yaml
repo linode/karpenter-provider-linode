@@ -76,6 +76,10 @@ spec:
               value: "1.19.0-0"
             - name: KARPENTER_SERVICE
               value: {{ include "karpenter.fullname" . }}
+            - name: SYSTEM_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           {{- if .Values.webhook.enabled }}
             - name: WEBHOOK_PORT
               value: "{{ .Values.webhook.port }}"
@@ -188,8 +192,14 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-        {{- if .Values.controller.extraVolumeMounts }}
+        {{- if or .Values.webhook.enabled .Values.controller.extraVolumeMounts }}
           volumeMounts:
+          {{- if .Values.webhook.enabled }}
+            # Must match webhooks.CertDir in the controller.
+            - name: webhook-certs
+              mountPath: /etc/karpenter/webhook-certs
+              readOnly: true
+          {{- end }}
           {{- with .Values.controller.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -226,8 +236,13 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-    {{- if .Values.extraVolumes }}
+    {{- if or .Values.webhook.enabled .Values.extraVolumes }}
       volumes:
+      {{- if .Values.webhook.enabled }}
+        - name: webhook-certs
+          secret:
+            secretName: {{ include "karpenter.fullname" . }}-cert
+      {{- end }}
       {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

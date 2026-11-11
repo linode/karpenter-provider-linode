@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/events"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 	linodecache "github.com/linode/karpenter-provider-linode/pkg/cache"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/utils"
@@ -95,8 +95,12 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		tagList = append(tagList, fmt.Sprintf("%s=%s", k, v))
 	}
 
-	if nodeClass.Spec.Image == "" {
-		nodeClass.Spec.Image = defaultImage
+	if nodeClass.Spec.InstanceMode == nil {
+		nodeClass.Spec.InstanceMode = &v1.InstanceMode{}
+	}
+	instanceMode := nodeClass.Spec.InstanceMode
+	if instanceMode.Image == "" {
+		instanceMode.Image = defaultImage
 	}
 
 	createOpts := linodego.InstanceCreateOptions{
@@ -104,25 +108,25 @@ func (p *DefaultProvider) Create(ctx context.Context, nodeClass *v1.LinodeNodeCl
 		Region:          p.region,
 		Type:            cheapestType.Name,
 		RootPass:        uuid.NewString(),
-		AuthorizedKeys:  nodeClass.Spec.AuthorizedKeys,
-		AuthorizedUsers: nodeClass.Spec.AuthorizedUsers,
-		Image:           nodeClass.Spec.Image,
-		BackupsEnabled:  nodeClass.Spec.BackupsEnabled,
+		AuthorizedKeys:  instanceMode.AuthorizedKeys,
+		AuthorizedUsers: instanceMode.AuthorizedUsers,
+		Image:           instanceMode.Image,
+		BackupsEnabled:  instanceMode.BackupsEnabled,
 		Tags:            utils.DedupeTags(tagList),
 		// NOTE: Disk encryption may not currently be available to all users.
-		DiskEncryption: nodeClass.Spec.DiskEncryption,
-		SwapSize:       nodeClass.Spec.SwapSize,
+		DiskEncryption: instanceMode.DiskEncryption,
+		SwapSize:       instanceMode.SwapSize,
 		// TODO: maybe add LinodeInterface options here in the future for custom networking setups
 	}
 
-	if nodeClass.Spec.FirewallID != nil {
-		createOpts.FirewallID = *nodeClass.Spec.FirewallID
+	if instanceMode.FirewallID != nil {
+		createOpts.FirewallID = *instanceMode.FirewallID
 	}
 
-	if nodeClass.Spec.PlacementGroup != nil {
+	if instanceMode.PlacementGroup != nil {
 		createOpts.PlacementGroup = &linodego.InstanceCreatePlacementGroupOptions{
-			ID:            nodeClass.Spec.PlacementGroup.ID,
-			CompliantOnly: nodeClass.Spec.PlacementGroup.CompliantOnly,
+			ID:            instanceMode.PlacementGroup.ID,
+			CompliantOnly: instanceMode.PlacementGroup.CompliantOnly,
 		}
 	}
 

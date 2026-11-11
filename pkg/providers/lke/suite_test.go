@@ -41,7 +41,7 @@ import (
 	testv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
@@ -1188,7 +1188,7 @@ var _ = Describe("LKENodeProvider", func() {
 			Context("Create options", func() {
 				It("should omit the NodeClass firewall ID from the pool request", func() {
 					firewallID := 123
-					nodeClass.Spec.FirewallID = new(firewallID)
+					nodeClass.Spec.InstanceMode = &v1.InstanceMode{FirewallID: new(firewallID)}
 
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
@@ -1889,8 +1889,8 @@ var _ = Describe("LKENodeProvider", func() {
 				It("should omit the NodeClass firewall ID while propagating the Kubernetes version", func() {
 					firewallID := 123
 					version := fake.DefaultClusterVersion
-					nodeClass.Spec.FirewallID = new(firewallID)
-					nodeClass.Spec.LKEK8sVersion = new(version)
+					nodeClass.Spec.InstanceMode = &v1.InstanceMode{FirewallID: new(firewallID)}
+					nodeClass.Spec.LKEMode = &v1.LKEMode{LKEK8sVersion: new(version)}
 
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
@@ -1918,7 +1918,7 @@ var _ = Describe("LKENodeProvider", func() {
 
 				It("should update an existing pool to the desired kubernetes version before reuse", func() {
 					version := fake.DefaultClusterVersion
-					nodeClass.Spec.LKEK8sVersion = new(version)
+					nodeClass.Spec.LKEMode = &v1.LKEMode{LKEK8sVersion: new(version)}
 
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
@@ -1959,7 +1959,7 @@ var _ = Describe("LKENodeProvider", func() {
 
 				It("should not classify pool-version reconciliation errors as capacity", func() {
 					version := fake.DefaultClusterVersion
-					nodeClass.Spec.LKEK8sVersion = new(version)
+					nodeClass.Spec.LKEMode = &v1.LKEMode{LKEK8sVersion: new(version)}
 					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
 					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
 					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
