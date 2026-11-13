@@ -67,7 +67,7 @@ func TestDRAInventory(t *testing.T) {
 			t.Parallel()
 			info := draType(tc.plan, tc.gpus)
 			info.AcceleratedDevices = tc.accelerated
-			it := instancetype.NewDefaultResolver(fake.DefaultRegion, fake.DefaultClusterTier).Resolve(draContext(t), &info, draNodeClass())
+			it := instancetype.NewDefaultResolver(fake.DefaultRegion).Resolve(draContext(t), &info, draNodeClass())
 			assertGPUCount(t, it, tc.want)
 		})
 	}
@@ -81,7 +81,7 @@ func TestDRAListAndGet(t *testing.T) {
 	api := fake.NewLinodeClient()
 	api.ListTypesOutput.Set(&types)
 	api.GetRegionAvailabilityOutput.Set(&offerings)
-	provider := instancetype.NewDefaultProvider(api, instancetype.NewDefaultResolver(fake.DefaultRegion, fake.DefaultClusterTier),
+	provider := instancetype.NewDefaultProvider(api, instancetype.NewDefaultResolver(fake.DefaultRegion),
 		cache.New(cache.NoExpiration, 0), cache.New(cache.NoExpiration, 0), cache.New(cache.NoExpiration, 0), linodecache.NewUnavailableOfferings())
 	if err := provider.UpdateInstanceTypes(ctx); err != nil {
 		t.Fatal(err)
@@ -189,7 +189,7 @@ func TestDRAWholeGPUAllocation(t *testing.T) {
 			t.Parallel()
 			ctx := draContext(t)
 			info := draType(tc.plan, 2)
-			it := instancetype.NewDefaultResolver(fake.DefaultRegion, fake.DefaultClusterTier).Resolve(ctx, &info, draNodeClass())
+			it := instancetype.NewDefaultResolver(fake.DefaultRegion).Resolve(ctx, &info, draNodeClass())
 			allocator := draAllocator(tc.selector)
 			nodeA := &draNodeClaimMock{name: "node-a", instanceTypes: []*cloudprovider.InstanceType{it}}
 			nodeB := &draNodeClaimMock{name: "node-b", instanceTypes: []*cloudprovider.InstanceType{it}}
@@ -235,7 +235,7 @@ func TestDRAPlanFamilies(t *testing.T) {
 		t.Run(tc.plan, func(t *testing.T) {
 			t.Parallel()
 			ctx := draContext(t)
-			it := instancetype.NewDefaultResolver(fake.DefaultRegion, fake.DefaultClusterTier).Resolve(ctx, ptrToType(tc.plan, 2), draNodeClass())
+			it := instancetype.NewDefaultResolver(fake.DefaultRegion).Resolve(ctx, ptrToType(tc.plan, 2), draNodeClass())
 			assertGPUCount(t, it, 2)
 			assertAllocatorPlans(t, ctx, []*cloudprovider.InstanceType{it}, nvidiaWholeGPUSelector, []string{tc.plan})
 			var want []string
@@ -309,7 +309,7 @@ func ptrToType(name string, gpus int) *linodego.LinodeType {
 func TestDRASelectors(t *testing.T) {
 	t.Parallel()
 	ctx := draContext(t)
-	resolver := instancetype.NewDefaultResolver(fake.DefaultRegion, fake.DefaultClusterTier)
+	resolver := instancetype.NewDefaultResolver(fake.DefaultRegion)
 	candidates := []*cloudprovider.InstanceType{
 		resolver.Resolve(ctx, ptrToType(adaGPUInstanceType, 1), draNodeClass()),
 		resolver.Resolve(ctx, ptrToType(adaTwoGPUInstanceType, 2), draNodeClass()),

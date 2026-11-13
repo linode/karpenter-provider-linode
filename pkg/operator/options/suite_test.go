@@ -20,7 +20,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/linode/linodego/v2"
 	"k8s.io/apimachinery/pkg/api/resource"
 	coreoperator "sigs.k8s.io/karpenter/pkg/operator"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
@@ -120,10 +119,9 @@ var _ = Describe("Options", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(op.NodeProvider).To(BeAssignableToTypeOf(&instance.DefaultProvider{}))
 	})
-	DescribeTable("advertises reservation defaults for the selected operating mode and cluster tier",
-		func(mode string, tier linodego.LKEVersionTier, cpu, memory string) {
+	DescribeTable("advertises reservation defaults for the selected operating mode",
+		func(mode, cpu, memory string) {
 			linodeEnv.SetDefaults()
-			linodeEnv.LinodeAPI.ClusterTier = tier
 			ctx := options.ToContext(context.Background(), test.Options(test.OptionsFields{
 				Mode:          &mode,
 				ClusterName:   new("env-cluster"),
@@ -136,10 +134,8 @@ var _ = Describe("Options", func() {
 			Expect(it.Overhead.KubeReserved.Cpu().Cmp(resource.MustParse(cpu))).To(Equal(0))
 			Expect(it.Overhead.KubeReserved.Memory().Cmp(resource.MustParse(memory))).To(Equal(0))
 		},
-		Entry("Standard", "lke", linodego.LKEVersionStandard, "80m", "1844Mi"),
-		Entry("Enterprise", "lke", linodego.LKEVersionEnterprise, "79m", "1843Mi"),
-		Entry("omitted tier retains Standard defaults", "lke", linodego.LKEVersionTier(""), "80m", "1844Mi"),
-		Entry("direct instances retain their defaults", "instance", linodego.LKEVersionEnterprise, "80m", "1465Mi"),
+		Entry("LKE uses the shared estimate", "lke", "79m", "1843Mi"),
+		Entry("direct instances retain their defaults", "instance", "80m", "1465Mi"),
 	)
 	It("should correctly fallback to env vars when CLI flags aren't set", func() {
 		Expect(os.Setenv("CLUSTER_NAME", "env-cluster"))
