@@ -49,7 +49,8 @@ type Resolver interface {
 }
 
 type DefaultResolver struct {
-	region string
+	region      string
+	clusterTier linodego.LKEVersionTier
 }
 
 func (d DefaultResolver) CacheKey(nodeClass NodeClass) string {
@@ -66,28 +67,16 @@ func (d DefaultResolver) Resolve(ctx context.Context, info *linodego.LinodeType,
 	// Any changes to the values passed into the NewInstanceType method will require making updates to the cache key
 	// so that Karpenter is able to cache the set of InstanceTypes based on values that alter the set of instance types
 	// !!! Important !!!
-	kc := &v1.KubeletConfiguration{}
-	if resolved := nodeClass.KubeletConfiguration(); resolved != nil {
-		kc = resolved
-	}
-	it := NewInstanceType(
-		ctx,
-		info,
-		d.region,
-		kc.MaxPods,
-		kc.PodsPerCore,
-		kc.KubeReserved,
-		kc.SystemReserved,
-		kc.EvictionHard,
-		kc.EvictionSoft,
-	)
+	it := NewInstanceType(ctx, info, d.region, d.clusterTier, nodeClass.KubeletConfiguration())
 	it.DynamicResources = nvidiaGPUResources(info)
 	return it
 }
 
-func NewDefaultResolver(region string) *DefaultResolver {
+// An empty cluster tier selects the existing direct-instance reservation defaults.
+func NewDefaultResolver(region string, clusterTier linodego.LKEVersionTier) *DefaultResolver {
 	return &DefaultResolver{
-		region: region,
+		region:      region,
+		clusterTier: clusterTier,
 	}
 }
 
@@ -95,21 +84,20 @@ func NewInstanceType(
 	ctx context.Context,
 	info *linodego.LinodeType,
 	region string,
-	maxPods *int32,
-	podsPerCore *int32,
-	kubeReserved map[string]string,
-	systemReserved map[string]string,
-	evictionHard map[string]string,
-	evictionSoft map[string]string,
+	clusterTier linodego.LKEVersionTier,
+	kubelet *v1.KubeletConfiguration,
 ) *cloudprovider.InstanceType {
+	if kubelet == nil {
+		kubelet = &v1.KubeletConfiguration{}
+	}
 	it := &cloudprovider.InstanceType{
 		Name:         info.ID,
 		Requirements: computeRequirements(info, region),
-		Capacity:     computeCapacity(ctx, info, maxPods, podsPerCore),
+		Capacity:     computeCapacity(ctx, info, kubelet.MaxPods, kubelet.PodsPerCore),
 		Overhead: &cloudprovider.InstanceTypeOverhead{
-			KubeReserved:      kubeReservedResources(cpu(info), pods(info, maxPods, podsPerCore), kubeReserved),
-			SystemReserved:    systemReservedResources(systemReserved),
-			EvictionThreshold: evictionThreshold(memory(ctx, info), ephemeralStorage(info), evictionHard, evictionSoft),
+			KubeReserved:      kubeReservedResources(info, pods(info, kubelet.MaxPods, kubelet.PodsPerCore), kubelet.KubeReserved, clusterTier),
+			SystemReserved:    systemReservedResources(kubelet.SystemReserved),
+			EvictionThreshold: evictionThreshold(memory(ctx, info), ephemeralStorage(info), kubelet.EvictionHard, kubelet.EvictionSoft),
 		},
 	}
 	return it
@@ -121,38 +109,61 @@ func systemReservedResources(systemReserved map[string]string) corev1.ResourceLi
 	})
 }
 
-func kubeReservedResources(cpus, pods *resource.Quantity, kubeReserved map[string]string) corev1.ResourceList {
-	resourceList := corev1.ResourceList{
-		corev1.ResourceMemory:           resource.MustParse(fmt.Sprintf("%dMi", (11*pods.Value())+255)),
-		corev1.ResourceEphemeralStorage: resource.MustParse("1Gi"), // default kube-reserved ephemeral-storage
+func kubeReservedResources(info *linodego.LinodeType, pods *resource.Quantity, kubeReserved map[string]string, clusterTier linodego.LKEVersionTier) corev1.ResourceList {
+	var cpuMilli int64
+	memoryMi := (11 * pods.Value()) + 255
+	switch clusterTier {
+	case linodego.LKEVersionStandard:
+		cpuMilli, memoryMi = standardReservations(info.VCPUs, info.Memory)
+	case linodego.LKEVersionEnterprise:
+		cpuMilli, memoryMi = enterpriseReservations(info.VCPUs, info.Memory)
+	default:
+		// Preserve the direct-instance defaults, including truncation per CPU band.
+		for _, cpuRange := range []struct {
+			start      int64
+			end        int64
+			percentage float64
+		}{
+			{start: 0, end: 1000, percentage: 0.06},
+			{start: 1000, end: 2000, percentage: 0.01},
+			{start: 2000, end: 4000, percentage: 0.005},
+			{start: 4000, end: 1 << 31, percentage: 0.0025},
+		} {
+			cpuMilli += int64(float64(max(min(int64(info.VCPUs)*1000, cpuRange.end)-cpuRange.start, 0)) * cpuRange.percentage)
+		}
 	}
-	// kube-reserved Computed from
-	// https://github.com/bottlerocket-os/bottlerocket/pull/1388/files#diff-bba9e4e3e46203be2b12f22e0d654ebd270f0b478dd34f40c31d7aa695620f2fR611
-	for _, cpuRange := range []struct {
-		start      int64
-		end        int64
-		percentage float64
-	}{
-		{start: 0, end: 1000, percentage: 0.06},
-		{start: 1000, end: 2000, percentage: 0.01},
-		{start: 2000, end: 4000, percentage: 0.005},
-		{start: 4000, end: 1 << 31, percentage: 0.0025},
-	} {
-		cpuMilli := cpus.MilliValue()
-		if cpuMilli < cpuRange.start {
-			continue
-		}
-		r := float64(cpuRange.end - cpuRange.start)
-		if cpuMilli < cpuRange.end {
-			r = float64(cpuMilli - cpuRange.start)
-		}
-		cpuOverhead := resourceList.Cpu()
-		cpuOverhead.Add(*resource.NewMilliQuantity(int64(r*cpuRange.percentage), resource.DecimalSI))
-		resourceList[corev1.ResourceCPU] = *cpuOverhead
+	resourceList := corev1.ResourceList{
+		corev1.ResourceCPU:              *resource.NewMilliQuantity(cpuMilli, resource.DecimalSI),
+		corev1.ResourceMemory:           *resource.NewQuantity(memoryMi*1024*1024, resource.BinarySI),
+		corev1.ResourceEphemeralStorage: resource.MustParse("1Gi"),
 	}
 	return lo.Assign(resourceList, lo.MapEntries(kubeReserved, func(k string, v string) (corev1.ResourceName, resource.Quantity) {
 		return corev1.ResourceName(k), resource.MustParse(v)
 	}))
+}
+
+// Standard reserves integer amounts per CPU and per whole GiB of plan memory.
+func standardReservations(cpus, memoryMi int) (reservedCPUMilli, reservedMemoryMi int64) {
+	cpuMilli := 60*min(cpus, 1) + 10*min(max(cpus-1, 0), 1) +
+		5*min(max(cpus-2, 0), 2) + 3*max(cpus-4, 0)
+	memoryGi := (memoryMi + 1023) / 1024
+	reservedMi := 256*min(memoryGi, 4) + 205*min(max(memoryGi-4, 0), 4) +
+		105*min(max(memoryGi-8, 0), 8) + 61*min(max(memoryGi-16, 0), 112) +
+		20*max(memoryGi-128, 0)
+	return int64(cpuMilli), int64(reservedMi)
+}
+
+func enterpriseReservations(cpus, memoryMi int) (reservedCPUMilli, reservedMemoryMi int64) {
+	cpu := float64(cpus)
+	reservedCPU := 0.06*min(cpu, 1) + 0.01*min(max(cpu-1, 0), 1) +
+		0.005*min(max(cpu-2, 0), 2) + 0.0025*max(cpu-4, 0)
+	memory := float64(memoryMi)
+	reservedMi := 0.25*min(memory, 4096) + 0.20*min(max(memory-4096, 0), 4096) +
+		0.10*min(max(memory-8192, 0), 8192) + 0.06*min(max(memory-16384, 0), 114688) +
+		0.02*max(memory-131072, 0)
+	// Enterprise truncates only after summing floating-point bands. Keep that
+	// arithmetic: e.g. four vCPUs reserve 79m, not 80m.
+	return int64(reservedCPU * 1000), int64(reservedMi)
 }
 
 func evictionThreshold(memory, ephemeralStorage *resource.Quantity, evictionHard, evictionSoft map[string]string) corev1.ResourceList {

@@ -20,10 +20,13 @@ import (
 	"os"
 	"testing"
 
+	"github.com/linode/linodego/v2"
+	"k8s.io/apimachinery/pkg/api/resource"
 	coreoperator "sigs.k8s.io/karpenter/pkg/operator"
 	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
 	"github.com/linode/karpenter-provider-linode/pkg/operator"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instance"
@@ -117,6 +120,27 @@ var _ = Describe("Options", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(op.NodeProvider).To(BeAssignableToTypeOf(&instance.DefaultProvider{}))
 	})
+	DescribeTable("advertises reservation defaults for the selected operating mode and cluster tier",
+		func(mode string, tier linodego.LKEVersionTier, cpu, memory string) {
+			linodeEnv.SetDefaults()
+			linodeEnv.LinodeAPI.ClusterTier = tier
+			ctx := options.ToContext(context.Background(), test.Options(test.OptionsFields{
+				Mode:          &mode,
+				ClusterName:   new("env-cluster"),
+				ClusterRegion: new("us-west"),
+			}))
+			op, err := operator.NewOperator(ctx, &coreoperator.Operator{}, linodeEnv.LinodeAPI)
+			Expect(err).NotTo(HaveOccurred())
+			it, err := op.InstanceTypesProvider.Get(ctx, &v1.LinodeNodeClass{}, "g6-standard-4")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(it.Overhead.KubeReserved.Cpu().Cmp(resource.MustParse(cpu))).To(Equal(0))
+			Expect(it.Overhead.KubeReserved.Memory().Cmp(resource.MustParse(memory))).To(Equal(0))
+		},
+		Entry("Standard", "lke", linodego.LKEVersionStandard, "80m", "1844Mi"),
+		Entry("Enterprise", "lke", linodego.LKEVersionEnterprise, "79m", "1843Mi"),
+		Entry("omitted tier retains Standard defaults", "lke", linodego.LKEVersionTier(""), "80m", "1844Mi"),
+		Entry("direct instances retain their defaults", "instance", linodego.LKEVersionEnterprise, "80m", "1465Mi"),
+	)
 	It("should correctly fallback to env vars when CLI flags aren't set", func() {
 		Expect(os.Setenv("CLUSTER_NAME", "env-cluster"))
 		Expect(os.Setenv("CLUSTER_ID", "12345"))
