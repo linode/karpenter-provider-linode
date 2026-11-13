@@ -70,7 +70,6 @@ func NewOperator(ctx context.Context, op *operator.Operator, linodeClient sdk.Li
 	opts := options.FromContext(ctx)
 	var nodeProvider instance.Provider
 	clusterID := 0
-	var clusterTier linodego.LKEVersionTier
 
 	// Initialize only the provider needed for the configured mode
 	switch opts.Mode {
@@ -93,11 +92,7 @@ func NewOperator(ctx context.Context, op *operator.Operator, linodeClient sdk.Li
 			return nil, fmt.Errorf("could not determine LKE cluster with name: %s", opts.ClusterName)
 		}
 		clusterID = clusterList[0].ID
-		clusterTier = linodego.LKEVersionTier(clusterList[0].Tier)
-		// An omitted tier retains the legacy Standard behavior.
-		if clusterTier == "" {
-			clusterTier = linodego.LKEVersionStandard
-		}
+		clusterTier := linodego.LKEVersionTier(clusterList[0].Tier)
 		lke.RegisterKnownEphemeralTaints(clusterTier)
 
 		if opts.ClusterRegion == "" {
@@ -133,7 +128,7 @@ func NewOperator(ctx context.Context, op *operator.Operator, linodeClient sdk.Li
 
 	instanceTypeProvider := instancetype.NewDefaultProvider(
 		linodeClient,
-		instancetype.NewDefaultResolver(opts.ClusterRegion, clusterTier),
+		instancetype.NewDefaultResolver(opts.ClusterRegion),
 		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
 		cache.New(linodecache.InstanceTypesZonesAndOfferingsTTL, linodecache.DefaultCleanupInterval),
 		cache.New(linodecache.DiscoveredCapacityCacheTTL, linodecache.DefaultCleanupInterval),

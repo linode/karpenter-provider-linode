@@ -49,8 +49,7 @@ type Resolver interface {
 }
 
 type DefaultResolver struct {
-	region      string
-	clusterTier linodego.LKEVersionTier
+	region string
 }
 
 func (d DefaultResolver) CacheKey(nodeClass NodeClass) string {
@@ -67,16 +66,14 @@ func (d DefaultResolver) Resolve(ctx context.Context, info *linodego.LinodeType,
 	// Any changes to the values passed into the NewInstanceType method will require making updates to the cache key
 	// so that Karpenter is able to cache the set of InstanceTypes based on values that alter the set of instance types
 	// !!! Important !!!
-	it := NewInstanceType(ctx, info, d.region, d.clusterTier, nodeClass.KubeletConfiguration())
+	it := NewInstanceType(ctx, info, d.region, nodeClass.KubeletConfiguration())
 	it.DynamicResources = nvidiaGPUResources(info)
 	return it
 }
 
-// An empty cluster tier selects the existing direct-instance reservation defaults.
-func NewDefaultResolver(region string, clusterTier linodego.LKEVersionTier) *DefaultResolver {
+func NewDefaultResolver(region string) *DefaultResolver {
 	return &DefaultResolver{
-		region:      region,
-		clusterTier: clusterTier,
+		region: region,
 	}
 }
 
@@ -84,7 +81,6 @@ func NewInstanceType(
 	ctx context.Context,
 	info *linodego.LinodeType,
 	region string,
-	clusterTier linodego.LKEVersionTier,
 	kubelet *v1.KubeletConfiguration,
 ) *cloudprovider.InstanceType {
 	if kubelet == nil {
@@ -95,7 +91,7 @@ func NewInstanceType(
 		Requirements: computeRequirements(info, region),
 		Capacity:     computeCapacity(ctx, info, kubelet.MaxPods, kubelet.PodsPerCore),
 		Overhead: &cloudprovider.InstanceTypeOverhead{
-			KubeReserved:      kubeReservedResources(info, pods(info, kubelet.MaxPods, kubelet.PodsPerCore), kubelet.KubeReserved, clusterTier),
+			KubeReserved:      kubeReservedResources(ctx, info, pods(info, kubelet.MaxPods, kubelet.PodsPerCore), kubelet.KubeReserved),
 			SystemReserved:    systemReservedResources(kubelet.SystemReserved),
 			EvictionThreshold: evictionThreshold(memory(ctx, info), ephemeralStorage(info), kubelet.EvictionHard, kubelet.EvictionSoft),
 		},
@@ -109,15 +105,12 @@ func systemReservedResources(systemReserved map[string]string) corev1.ResourceLi
 	})
 }
 
-func kubeReservedResources(info *linodego.LinodeType, pods *resource.Quantity, kubeReserved map[string]string, clusterTier linodego.LKEVersionTier) corev1.ResourceList {
+func kubeReservedResources(ctx context.Context, info *linodego.LinodeType, pods *resource.Quantity, kubeReserved map[string]string) corev1.ResourceList {
 	var cpuMilli int64
 	memoryMi := (11 * pods.Value()) + 255
-	switch clusterTier {
-	case linodego.LKEVersionStandard:
-		cpuMilli, memoryMi = standardReservations(info.VCPUs, info.Memory)
-	case linodego.LKEVersionEnterprise:
-		cpuMilli, memoryMi = enterpriseReservations(info.VCPUs, info.Memory)
-	default:
+	if options.FromContext(ctx).Mode == "lke" {
+		cpuMilli, memoryMi = lkeReservations(info.VCPUs, info.Memory)
+	} else {
 		// Preserve the direct-instance defaults, including truncation per CPU band.
 		for _, cpuRange := range []struct {
 			start      int64
@@ -142,18 +135,11 @@ func kubeReservedResources(info *linodego.LinodeType, pods *resource.Quantity, k
 	}))
 }
 
-// Standard reserves integer amounts per CPU and per whole GiB of plan memory.
-func standardReservations(cpus, memoryMi int) (reservedCPUMilli, reservedMemoryMi int64) {
-	cpuMilli := 60*min(cpus, 1) + 10*min(max(cpus-1, 0), 1) +
-		5*min(max(cpus-2, 0), 2) + 3*max(cpus-4, 0)
-	memoryGi := (memoryMi + 1023) / 1024
-	reservedMi := 256*min(memoryGi, 4) + 205*min(max(memoryGi-4, 0), 4) +
-		105*min(max(memoryGi-8, 0), 8) + 61*min(max(memoryGi-16, 0), 112) +
-		20*max(memoryGi-128, 0)
-	return int64(cpuMilli), int64(reservedMi)
-}
-
-func enterpriseReservations(cpus, memoryMi int) (reservedCPUMilli, reservedMemoryMi int64) {
+// Both LKE tiers share this plan-based estimate. Standard uses slightly different
+// increments and rounding. The deviation is small relative to plan capacity and
+// is not expected to materially affect normal scheduling, though exact fit
+// boundaries can differ.
+func lkeReservations(cpus, memoryMi int) (reservedCPUMilli, reservedMemoryMi int64) {
 	cpu := float64(cpus)
 	reservedCPU := 0.06*min(cpu, 1) + 0.01*min(max(cpu-1, 0), 1) +
 		0.005*min(max(cpu-2, 0), 2) + 0.0025*max(cpu-4, 0)
@@ -161,8 +147,7 @@ func enterpriseReservations(cpus, memoryMi int) (reservedCPUMilli, reservedMemor
 	reservedMi := 0.25*min(memory, 4096) + 0.20*min(max(memory-4096, 0), 4096) +
 		0.10*min(max(memory-8192, 0), 8192) + 0.06*min(max(memory-16384, 0), 114688) +
 		0.02*max(memory-131072, 0)
-	// Enterprise truncates only after summing floating-point bands. Keep that
-	// arithmetic: e.g. four vCPUs reserve 79m, not 80m.
+	// Truncate after summing the bands; four vCPUs reserve 79m, not 80m.
 	return int64(reservedCPU * 1000), int64(reservedMi)
 }
 

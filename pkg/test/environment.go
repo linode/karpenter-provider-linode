@@ -88,13 +88,9 @@ func NewEnvironment(ctx context.Context) *Environment {
 	eventRecorder := coretest.NewEventRecorder()
 
 	// Providers
-	clusterTier := fake.DefaultClusterTier
-	if options.FromContext(ctx).Mode == "instance" {
-		clusterTier = ""
-	}
 	instanceTypesProvider := instancetype.NewDefaultProvider(
 		linodeClient,
-		instancetype.NewDefaultResolver(fake.DefaultRegion, clusterTier),
+		instancetype.NewDefaultResolver(fake.DefaultRegion),
 		instanceTypeCache,
 		offeringCache,
 		discoveredCapacityCache,
