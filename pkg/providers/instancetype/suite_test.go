@@ -131,6 +131,8 @@ var _ = Describe("InstanceTypeProvider", func() {
 				},
 			},
 		})
+		// Keep the NodePool tag within Linode's 50-character limit.
+		nodePool.Name = "test"
 		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypes(ctx)).To(Succeed())
 		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeOfferings(ctx)).To(Succeed())
 	})
@@ -151,6 +153,41 @@ var _ = Describe("InstanceTypeProvider", func() {
 		Expect(ok).To(BeTrue())
 		Expect(price).To(BeNumerically(">", 0))
 	})
+
+	DescribeTable("only advertises plans supported by the operating mode", func(mode string, expectNanode bool) {
+		ctx := options.ToContext(ctx, test.Options(test.OptionsFields{Mode: &mode}))
+		types := linodeEnv.LinodeAPI.ListTypesOutput.Clone()
+		*types = append(*types, linodego.LinodeType{
+			ID: "g6-nanode-1", Class: linodego.ClassNanode, VCPUs: 1, Memory: 1024, Disk: 25600,
+			Price: &linodego.LinodePrice{Hourly: 0.0075, Monthly: 5},
+		})
+		availability := linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Clone()
+		*availability = append(*availability, linodego.RegionAvailability{
+			Region: fake.DefaultRegion, Plan: "g6-nanode-1", Available: true,
+		})
+		linodeEnv.LinodeAPI.ListTypesOutput.Set(types)
+		linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Set(availability)
+		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypes(ctx)).To(Succeed())
+		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeOfferings(ctx)).To(Succeed())
+
+		instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+		Expect(err).NotTo(HaveOccurred())
+		names := lo.Map(instanceTypes, func(it *karpcloudprovider.InstanceType, _ int) string { return it.Name })
+		Expect(names).To(ContainElement("g6-standard-2"))
+		Expect(lo.Contains(names, "g6-nanode-1")).To(Equal(expectNanode))
+
+		nanode, err := linodeEnv.InstanceTypesProvider.Get(ctx, nodeClass, "g6-nanode-1")
+		if expectNanode {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(nanode.Name).To(Equal("g6-nanode-1"))
+		} else {
+			Expect(err).To(HaveOccurred())
+			Expect(nanode).To(BeNil())
+		}
+	},
+		Entry("LKE excludes Nanodes", "lke", false),
+		Entry("direct instances retain Nanodes", "instance", true),
+	)
 	It("should refresh cached offering availability when region availability changes", func() {
 		const targetPlan = "g6-standard-2"
 		availability := linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Clone()
@@ -242,19 +279,81 @@ var _ = Describe("InstanceTypeProvider", func() {
 			})
 			Expect(ok).To(BeTrue())
 		})
+		Context("Kube Reserved Resources", func() {
+			DescribeTable("uses shared plan-based CPU and memory bands for LKE",
+				func(cpus, memoryMi, cpuMilli, reservedMemoryMi int) {
+					plan := linodego.LinodeType{ID: "test-plan", VCPUs: cpus, Memory: memoryMi}
+					it := instancetype.NewDefaultResolver(fake.DefaultRegion).Resolve(ctx, &plan, nodeClass)
+					Expect(it.Overhead.KubeReserved.Cpu().MilliValue()).To(Equal(int64(cpuMilli)))
+					Expect(it.Overhead.KubeReserved.Memory().Value()).To(Equal(int64(reservedMemoryMi) * 1024 * 1024))
+				},
+				Entry("first CPU and memory bands", 1, 1024, 60, 256),
+				Entry("second CPU and first memory boundary", 2, 4096, 69, 1024),
+				Entry("third CPU and fractional GiB", 3, 4608, 75, 1126),
+				Entry("fourth CPU and second memory boundary", 4, 8192, 79, 1843),
+				Entry("above four CPUs and above first memory boundary", 5, 5120, 82, 1228),
+				Entry("eight CPUs and above second memory boundary", 8, 9216, 89, 1945),
+				Entry("sixteen CPUs and third memory boundary", 16, 16384, 109, 2662),
+				Entry("above third memory boundary", 4, 17408, 79, 2723),
+				Entry("fourth memory boundary", 4, 131072, 79, 9543),
+				Entry("above fourth memory boundary", 4, 132096, 79, 9564),
+			)
+
+			DescribeTable("fits workload and DaemonSet requests without tying LKE reservations to pod capacity",
+				func(maxPods int, cpu, memory string) {
+					plan := linodego.LinodeType{ID: "g6-standard-2", VCPUs: 2, Memory: 4096, Disk: 81920}
+					nodeClass.Spec.Kubelet = &v1.KubeletConfiguration{MaxPods: new(int32(maxPods))}
+					it := instancetype.NewDefaultResolver(fake.DefaultRegion).Resolve(ctx, &plan, nodeClass)
+					requests := corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse(cpu),
+						corev1.ResourceMemory: resource.MustParse(memory),
+						corev1.ResourcePods:   resource.MustParse("4"),
+					}
+					Expect(resources.Fits(requests, it.Allocatable())).To(BeTrue())
+					requests[corev1.ResourceMemory] = resource.MustParse("2664Mi")
+					Expect(resources.Fits(requests, it.Allocatable())).To(BeTrue())
+					requests[corev1.ResourceMemory] = resource.MustParse("2665Mi")
+					Expect(resources.Fits(requests, it.Allocatable())).To(BeFalse())
+				},
+				Entry("Standard overhead at 110 pods", 110, "1250m", "2500Mi"),
+				Entry("Enterprise overhead at 250 pods", 250, "1100m", "2510Mi"),
+			)
+
+			It("applies explicit reservations without changing defaults for other resources", func() {
+				plan := linodego.LinodeType{ID: "g6-standard-2", VCPUs: 2, Memory: 4096, Disk: 81920}
+				resolver := instancetype.NewDefaultResolver(fake.DefaultRegion)
+				defaults := resolver.Resolve(ctx, &plan, nodeClass)
+				requests := corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("1250m"),
+					corev1.ResourceMemory: resource.MustParse("2500Mi"),
+				}
+				nodeClass.Spec.Kubelet = &v1.KubeletConfiguration{KubeReserved: map[string]string{"memory": "2Gi"}}
+				overridden := resolver.Resolve(ctx, &plan, nodeClass)
+				Expect(resources.Fits(requests, overridden.Allocatable())).To(BeFalse())
+				Expect(overridden.Overhead.KubeReserved.Cpu().Cmp(*defaults.Overhead.KubeReserved.Cpu())).To(Equal(0))
+				nodeClass.Spec.Kubelet.KubeReserved = map[string]string{"cpu": "500m"}
+				overridden = resolver.Resolve(ctx, &plan, nodeClass)
+				Expect(resources.Fits(requests, overridden.Allocatable())).To(BeTrue())
+				requests[corev1.ResourceCPU] = resource.MustParse("1501m")
+				Expect(resources.Fits(requests, overridden.Allocatable())).To(BeFalse())
+			})
+
+			DescribeTable("preserves pod-based memory reservations for direct instances",
+				func(maxPods, memoryMi int) {
+					nodeClass.Spec.Kubelet = &v1.KubeletConfiguration{MaxPods: new(int32(maxPods))}
+					directCtx := options.ToContext(ctx, test.Options(test.OptionsFields{Mode: new("instance")}))
+					it := instancetype.NewDefaultResolver(fake.DefaultRegion).Resolve(directCtx, &info, nodeClass)
+					Expect(it.Overhead.KubeReserved.Cpu().MilliValue()).To(Equal(int64(80)))
+					Expect(it.Overhead.KubeReserved.Memory().Value()).To(Equal(int64(memoryMi) * 1024 * 1024))
+				},
+				Entry("110 pods", 110, 1465),
+				Entry("40 pods", 40, 695),
+			)
+		})
 		Context("System Reserved Resources", func() {
 			It("should use defaults when no kubelet is specified", func() {
 				nodeClass.Spec.Kubelet = &v1.KubeletConfiguration{}
-				it := instancetype.NewInstanceType(ctx,
-					&info,
-					fake.DefaultRegion,
-					nodeClass.Spec.Kubelet.MaxPods,
-					nodeClass.Spec.Kubelet.PodsPerCore,
-					nodeClass.Spec.Kubelet.KubeReserved,
-					nodeClass.Spec.Kubelet.SystemReserved,
-					nodeClass.Spec.Kubelet.EvictionHard,
-					nodeClass.Spec.Kubelet.EvictionSoft,
-				)
+				it := instancetype.NewInstanceType(ctx, &info, fake.DefaultRegion, nodeClass.Spec.Kubelet)
 				Expect(it.Overhead.SystemReserved.Cpu().String()).To(Equal("0"))
 				Expect(it.Overhead.SystemReserved.Memory().String()).To(Equal("0"))
 				Expect(it.Overhead.SystemReserved.StorageEphemeral().String()).To(Equal("0"))
@@ -267,16 +366,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 						string(corev1.ResourceEphemeralStorage): "10Gi",
 					},
 				}
-				it := instancetype.NewInstanceType(ctx,
-					&info,
-					fake.DefaultRegion,
-					nodeClass.Spec.Kubelet.MaxPods,
-					nodeClass.Spec.Kubelet.PodsPerCore,
-					nodeClass.Spec.Kubelet.KubeReserved,
-					nodeClass.Spec.Kubelet.SystemReserved,
-					nodeClass.Spec.Kubelet.EvictionHard,
-					nodeClass.Spec.Kubelet.EvictionSoft,
-				)
+				it := instancetype.NewInstanceType(ctx, &info, fake.DefaultRegion, nodeClass.Spec.Kubelet)
 				Expect(it.Overhead.SystemReserved.Cpu().String()).To(Equal("2"))
 				Expect(it.Overhead.SystemReserved.Memory().String()).To(Equal("20Gi"))
 				Expect(it.Overhead.SystemReserved.StorageEphemeral().String()).To(Equal("10Gi"))
@@ -284,7 +374,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 		})
 		Context("Ephemeral Storage", func() {
 			It("should predict the plan disk and reserve the default filesystem eviction threshold once", func() {
-				it := instancetype.NewInstanceType(ctx, &info, fake.DefaultRegion, nil, nil, nil, nil, nil, nil)
+				it := instancetype.NewInstanceType(ctx, &info, fake.DefaultRegion, nil)
 				allocatable := it.Allocatable()
 
 				Expect(it.Capacity.StorageEphemeral().String()).To(Equal("160Gi"))
@@ -294,20 +384,15 @@ var _ = Describe("InstanceTypeProvider", func() {
 			})
 
 			It("should subtract kubelet reservations and use the strictest shared-filesystem eviction signal", func() {
-				it := instancetype.NewInstanceType(
-					ctx,
-					&info,
-					fake.DefaultRegion,
-					nil,
-					nil,
-					map[string]string{string(corev1.ResourceEphemeralStorage): "3Gi"},
-					map[string]string{string(corev1.ResourceEphemeralStorage): "2Gi"},
-					map[string]string{
+				it := instancetype.NewInstanceType(ctx, &info, fake.DefaultRegion, &v1.KubeletConfiguration{
+					KubeReserved:   map[string]string{string(corev1.ResourceEphemeralStorage): "3Gi"},
+					SystemReserved: map[string]string{string(corev1.ResourceEphemeralStorage): "2Gi"},
+					EvictionHard: map[string]string{
 						"nodefs.available":  "10%",
 						"imagefs.available": "15%",
 					},
-					map[string]string{"nodefs.available": "20%"},
-				)
+					EvictionSoft: map[string]string{"nodefs.available": "20%"},
+				})
 				allocatable := it.Allocatable()
 
 				Expect(it.Overhead.KubeReserved.StorageEphemeral().String()).To(Equal("3Gi"))
@@ -317,7 +402,7 @@ var _ = Describe("InstanceTypeProvider", func() {
 			})
 
 			It("should fit combined pod and DaemonSet requests up to usable storage only", func() {
-				it := instancetype.NewInstanceType(ctx, &info, fake.DefaultRegion, nil, nil, nil, nil, nil, nil)
+				it := instancetype.NewInstanceType(ctx, &info, fake.DefaultRegion, nil)
 				podRequest := resource.MustParse("120Gi")
 				daemonSetRequest := resource.MustParse("15Gi")
 				podRequest.Add(daemonSetRequest)
