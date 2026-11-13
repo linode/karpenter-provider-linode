@@ -153,6 +153,41 @@ var _ = Describe("InstanceTypeProvider", func() {
 		Expect(ok).To(BeTrue())
 		Expect(price).To(BeNumerically(">", 0))
 	})
+
+	DescribeTable("only advertises plans supported by the operating mode", func(mode string, expectNanode bool) {
+		ctx := options.ToContext(ctx, test.Options(test.OptionsFields{Mode: &mode}))
+		types := linodeEnv.LinodeAPI.ListTypesOutput.Clone()
+		*types = append(*types, linodego.LinodeType{
+			ID: "g6-nanode-1", Class: linodego.ClassNanode, VCPUs: 1, Memory: 1024, Disk: 25600,
+			Price: &linodego.LinodePrice{Hourly: 0.0075, Monthly: 5},
+		})
+		availability := linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Clone()
+		*availability = append(*availability, linodego.RegionAvailability{
+			Region: fake.DefaultRegion, Plan: "g6-nanode-1", Available: true,
+		})
+		linodeEnv.LinodeAPI.ListTypesOutput.Set(types)
+		linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Set(availability)
+		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypes(ctx)).To(Succeed())
+		Expect(linodeEnv.InstanceTypesProvider.UpdateInstanceTypeOfferings(ctx)).To(Succeed())
+
+		instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+		Expect(err).NotTo(HaveOccurred())
+		names := lo.Map(instanceTypes, func(it *karpcloudprovider.InstanceType, _ int) string { return it.Name })
+		Expect(names).To(ContainElement("g6-standard-2"))
+		Expect(lo.Contains(names, "g6-nanode-1")).To(Equal(expectNanode))
+
+		nanode, err := linodeEnv.InstanceTypesProvider.Get(ctx, nodeClass, "g6-nanode-1")
+		if expectNanode {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(nanode.Name).To(Equal("g6-nanode-1"))
+		} else {
+			Expect(err).To(HaveOccurred())
+			Expect(nanode).To(BeNil())
+		}
+	},
+		Entry("LKE excludes Nanodes", "lke", false),
+		Entry("direct instances retain Nanodes", "instance", true),
+	)
 	It("should refresh cached offering availability when region availability changes", func() {
 		const targetPlan = "g6-standard-2"
 		availability := linodeEnv.LinodeAPI.GetRegionAvailabilityOutput.Clone()

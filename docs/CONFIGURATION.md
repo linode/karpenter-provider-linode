@@ -45,6 +45,7 @@ The provider can operate in two distinct modes, controlled by the `KARPENTER_MOD
 * **Default Mode.**
 * Provisions nodes by creating **LKE Node Pools** with a count of 1.
 * The nodes are automatically joined to your LKE cluster.
+* Excludes Nanode plans, which [LKE does not support](https://techdocs.akamai.com/cloud-computing/docs/manage-nodes-and-node-pools#add-a-node-pool), from the instance-type catalog.
 * **Pros**: Simplest setup, managed by LKE.
 * **Cons**: Limited customization (cannot use custom images or advanced networking/storage options usually available to raw Linodes). Instance-only `LinodeNodeClass` fields are rejected in this mode.
 
