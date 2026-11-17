@@ -20,15 +20,18 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/awslabs/operatorpkg/serrors"
 	"github.com/linode/linodego/v2"
+	"github.com/patrickmn/go-cache"
 	"github.com/samber/lo"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -284,6 +287,12 @@ func LookupInstanceByTag(ctx context.Context, client sdk.LinodeAPI, tag string) 
 }
 
 func IsRetryableError(err error) bool {
+	// net.Error covers *url.Error and other network-level timeouts. These are not
+	// wrapped as *linodego.Error by linodego v2, so ErrHasStatus misses them.
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
 	return linodego.ErrHasStatus(
 		err,
 		http.StatusTooManyRequests,
@@ -291,7 +300,8 @@ func IsRetryableError(err error) bool {
 		http.StatusBadGateway,
 		http.StatusGatewayTimeout,
 		http.StatusServiceUnavailable,
-		linodego.ErrorFromError) || errors.Is(err, http.ErrHandlerTimeout) || errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, io.ErrUnexpectedEOF)
+		http.StatusRequestTimeout,
+		linodego.ErrorFromError) || errors.Is(err, http.ErrHandlerTimeout) || errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.ErrUnexpectedEOF)
 }
 
 // FilterInstanceTypes applies common filters to available instance types.
@@ -350,4 +360,56 @@ func UpdateUnavailableOfferingsCache(
 	case err != nil:
 		log.FromContext(ctx).Error(err, "unexpected error during instance creation")
 	}
+}
+
+type backoffEntry struct {
+	failures int
+	delay    time.Duration
+	retryAt  time.Time
+	err      error
+}
+
+// BackoffTracker tracks consecutive failures per key and rejects further attempts until an
+// exponentially growing delay has elapsed, so a persistently failing API call isn't hammered.
+type BackoffTracker struct {
+	entries  *cache.Cache
+	base     time.Duration
+	maxDelay time.Duration
+}
+
+// NewBackoffTracker creates a new BackoffTracker with a cache with a default expiration of an hour
+func NewBackoffTracker(base, maxDelay time.Duration) *BackoffTracker {
+	return &BackoffTracker{cache.New(time.Hour, 10*time.Minute), base, maxDelay}
+}
+
+// Check returns an error wrapping the last failure while key is backing off, or nil when an attempt is allowed.
+func (b *BackoffTracker) Check(key, what string) error {
+	v, ok := b.entries.Get(key)
+	if !ok {
+		return nil
+	}
+	entry := v.(backoffEntry)
+	remaining := time.Until(entry.retryAt)
+	if remaining <= 0 {
+		return nil
+	}
+	return fmt.Errorf("%s is backing off for %s after %d failed attempts: %w", what, remaining.Round(time.Second), entry.failures, entry.err)
+}
+
+// RecordFailure records a failure for the given key, updating the error message, setting/incrementing the failure count,
+// and updating the info for when the entry can be retried (exponential backoff)
+func (b *BackoffTracker) RecordFailure(key string, err error) {
+	entry := backoffEntry{failures: 1, delay: b.base, err: err}
+	if v, ok := b.entries.Get(key); ok {
+		prev := v.(backoffEntry)
+		entry.failures = prev.failures + 1
+		entry.delay = min(prev.delay*2, b.maxDelay)
+	}
+	entry.retryAt = time.Now().Add(entry.delay)
+	b.entries.SetDefault(key, entry)
+}
+
+// Clear clears the BackoffTracker entry for the given key
+func (b *BackoffTracker) Clear(key string) {
+	b.entries.Delete(key)
 }

@@ -55,8 +55,6 @@ spec:
       try:
       - script:
           shell: bash
-          shellArgs:
-            - -c
           timeout: 15m
           content: |
             set -euo pipefail
@@ -82,8 +80,6 @@ spec:
       try:
       - script:
           shell: bash
-          shellArgs:
-            - -c
           timeout: 20m
           content: |
             set -euo pipefail

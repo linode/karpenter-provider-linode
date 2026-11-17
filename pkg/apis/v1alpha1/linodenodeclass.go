@@ -51,7 +51,8 @@ type LinodeNodeClassSpec struct {
 	// +listType=set
 	Tags []string `json:"tags,omitempty"`
 
-	// firewallID is the id of the cloud firewall to apply to the Linode Instance.
+	// firewallID is the ID of the Cloud Firewall to attach to directly created Linode
+	// instances. In LKE mode, node pools use the cluster's default Firewall instead.
 	// +optional
 	FirewallID *int `json:"firewallID,omitempty"`
 

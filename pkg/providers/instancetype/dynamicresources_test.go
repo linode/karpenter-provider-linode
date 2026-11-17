@@ -16,16 +16,16 @@ package instancetype_test
 
 import (
 	"context"
-	"fmt"
 	"reflect"
+	"sort"
 	"testing"
 	"unique"
 
 	"github.com/linode/linodego/v2"
 	"github.com/patrickmn/go-cache"
-	"github.com/samber/lo"
 	resourcev1 "k8s.io/api/resource/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	dracel "k8s.io/dynamic-resource-allocation/cel"
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
@@ -40,27 +40,35 @@ import (
 	"github.com/linode/karpenter-provider-linode/pkg/test"
 )
 
-const draGPUInstanceType = "test-gpu-plan"
+const (
+	draGPUInstanceType       = "test-gpu-plan"
+	adaGPUInstanceType       = "g2-gpu-rtx4000a1-s"
+	adaTwoGPUInstanceType    = "g2-gpu-rtx4000a2-s"
+	blackwellGPUInstanceType = "g3-gpu-rtxpro6000-blackwell-1"
+)
 
 // These tests use an in-memory catalog fake only (no envtest). Run with -run '^TestDRA'.
 func TestDRAInventory(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name                    string
+		plan                    string
 		gpus, accelerated, want int
 	}{
-		{name: "GPU plan", gpus: 8, want: 8},
-		{name: "separate accelerator count", gpus: 2, accelerated: 4, want: 2},
-		{name: "accelerators only", accelerated: 4},
-		{name: "CPU only"},
-		{name: "invalid negative GPU count", gpus: -1},
+		{name: "unknown GPU plan keeps API count", plan: draGPUInstanceType, gpus: 8, want: 8},
+		{name: "known plan keeps API count instead of plan suffix", plan: adaGPUInstanceType, gpus: 3, want: 3},
+		{name: "known plan with no GPUs", plan: adaTwoGPUInstanceType},
+		{name: "separate accelerator count", plan: draGPUInstanceType, gpus: 2, accelerated: 4, want: 2},
+		{name: "accelerators only", plan: draGPUInstanceType, accelerated: 4},
+		{name: "CPU only", plan: "test-cpu-plan"},
+		{name: "invalid negative GPU count", plan: draGPUInstanceType, gpus: -1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			info := draType(draGPUInstanceType, tc.gpus)
+			info := draType(tc.plan, tc.gpus)
 			info.AcceleratedDevices = tc.accelerated
 			it := instancetype.NewDefaultResolver(fake.DefaultRegion).Resolve(draContext(t), &info, draNodeClass())
-			assertGPUs(t, it, tc.want)
+			assertGPUCount(t, it, tc.want)
 		})
 	}
 }
@@ -68,7 +76,7 @@ func TestDRAInventory(t *testing.T) {
 func TestDRAListAndGet(t *testing.T) {
 	t.Parallel()
 	ctx := draContext(t)
-	types := []linodego.LinodeType{draType(draGPUInstanceType, 2), draType("test-cpu-plan", 0)}
+	types := []linodego.LinodeType{draType(adaTwoGPUInstanceType, 2), draType("test-cpu-plan", 0)}
 	offerings := fake.MakeInstanceOfferings(types)
 	api := fake.NewLinodeClient()
 	api.ListTypesOutput.Set(&types)
@@ -91,43 +99,50 @@ func TestDRAListAndGet(t *testing.T) {
 		t.Fatalf("expected two types, got %d", len(listed))
 	}
 	for _, it := range listed {
-		assertGPUs(t, it, lo.Ternary(it.Name == draGPUInstanceType, 2, 0))
+		if it.Name == adaTwoGPUInstanceType {
+			assertGPUCount(t, it, 2)
+			assertAdaMetadataSelectors(t, ctx, it)
+		} else {
+			assertGPUCount(t, it, 0)
+		}
 	}
-	// A refreshed API count invalidates the cached prediction.
+	// List populates the cache; this Get must run before the refresh flushes it.
+	cachedAda, err := provider.Get(ctx, nodeClass, adaTwoGPUInstanceType)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertGPUCount(t, cachedAda, 2)
+	assertAdaMetadataSelectors(t, ctx, cachedAda)
+
+	// The catalog must not override a refreshed API-reported GPU count.
 	types[0].GPUs = 1
 	api.ListTypesOutput.Set(&types)
 	if err := provider.UpdateInstanceTypes(ctx); err != nil {
 		t.Fatal(err)
 	}
-	refreshed, err := provider.Get(ctx, nodeClass, draGPUInstanceType)
+	refreshed, err := provider.Get(ctx, nodeClass, adaTwoGPUInstanceType)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertGPUs(t, refreshed, 1)
+	assertGPUCount(t, refreshed, 1)
 }
 
-// assertGPUs expects exactly n exclusive whole GPUs in one pool, with no
-// capacity, sharing, or topology.
-func assertGPUs(t *testing.T, it *cloudprovider.InstanceType, n int) {
+// assertGPUCount checks only the predicted whole-device count, not incidental
+// template details.
+func assertGPUCount(t *testing.T, it *cloudprovider.InstanceType, n int) {
 	t.Helper()
-	want := cloudprovider.DynamicResources{}
-	if n > 0 {
-		devices := make([]cloudprovider.Device, n)
-		for i := range devices {
-			devices[i] = cloudprovider.Device{
-				Name:       unique.Make(fmt.Sprintf("gpu-%d", i)),
-				Attributes: map[resourcev1.QualifiedName]resourcev1.DeviceAttribute{"type": {StringValue: new("gpu")}},
-			}
-		}
-		want.ResourceSliceTemplates = []*cloudprovider.ResourceSliceTemplate{{
-			Driver:  unique.Make("gpu.nvidia.com"),
-			Pool:    cloudprovider.ResourcePool{Name: unique.Make("gpus")},
-			Devices: devices,
-		}}
+	got := 0
+	for _, template := range it.DynamicResources.ResourceSliceTemplates {
+		got += len(template.Devices)
 	}
-	if !reflect.DeepEqual(it.DynamicResources, want) {
-		t.Fatalf("unexpected DRA inventory for %s: %+v", it.Name, it.DynamicResources)
+	if got != n {
+		t.Fatalf("expected %d GPUs for %s, got %d", n, it.Name, got)
 	}
+}
+
+func assertAdaMetadataSelectors(t *testing.T, ctx context.Context, it *cloudprovider.InstanceType) {
+	t.Helper()
+	assertAllocatorPlans(t, ctx, []*cloudprovider.InstanceType{it}, adaMetadataSelector, []string{it.Name})
 }
 
 func draContext(t *testing.T) context.Context {
@@ -143,51 +158,276 @@ func draType(name string, gpus int) linodego.LinodeType {
 	return linodego.LinodeType{ID: name, GPUs: gpus, Memory: 32768, VCPUs: 8}
 }
 
-const nvidiaWholeGPUSelector = "device.driver == 'gpu.nvidia.com' && device.attributes['gpu.nvidia.com'].type == 'gpu'"
+const (
+	nvidiaWholeGPUSelector = "device.driver == 'gpu.nvidia.com' && device.attributes['gpu.nvidia.com'].type == 'gpu'"
+	adaMetadataSelector    = nvidiaWholeGPUSelector +
+		" && device.attributes['gpu.nvidia.com'].productName == 'NVIDIA RTX 4000 Ada Generation'" +
+		" && device.attributes['gpu.nvidia.com'].brand == 'NvidiaRTX'" +
+		" && device.attributes['gpu.nvidia.com'].architecture == 'Ada Lovelace'" +
+		" && device.attributes['gpu.nvidia.com'].cudaComputeCapability.compareTo(semver('8.9.0')) == 0" +
+		" && device.capacity['gpu.nvidia.com'].memory.compareTo(quantity('20475Mi')) == 0"
+)
+
+// CEL evaluation errors on absent map keys; these builders guard optional metadata.
+func nvidiaAttributeSelector(attribute, predicate string) string {
+	return nvidiaWholeGPUSelector + " && '" + attribute + "' in device.attributes['gpu.nvidia.com'] && " + predicate
+}
+
+func nvidiaCapacitySelector(capacity, predicate string) string {
+	return nvidiaWholeGPUSelector + " && '" + capacity + "' in device.capacity['gpu.nvidia.com'] && " + predicate
+}
 
 // Exercise the pinned core's actual allocation/CEL contract using a fake
 // DeviceClass client and in-memory NodeClaims. No API server is started.
 func TestDRAWholeGPUAllocation(t *testing.T) {
 	t.Parallel()
-	ctx := draContext(t)
-	info := draType(draGPUInstanceType, 2)
-	it := instancetype.NewDefaultResolver(fake.DefaultRegion).Resolve(ctx, &info, draNodeClass())
-	allocator := draAllocator(nvidiaWholeGPUSelector)
-	nodeA := &draNodeClaimMock{name: "node-a", instanceType: it}
-	nodeB := &draNodeClaimMock{name: "node-b", instanceType: it}
-	for _, name := range []string{"claim-a", "claim-b"} {
-		result, err := allocator.Allocate(ctx, nodeA, []*resourcev1.ResourceClaim{draClaim(name)})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(result.InstanceTypes, nodeA.InstanceTypes()) || result.Allocation == nil {
-			t.Fatalf("expected a GPU allocation on the selected instance type, got %+v", result)
-		}
-		result.Allocation.Commit(ctx)
-	}
-	if _, err := allocator.Allocate(ctx, nodeA, []*resourcev1.ResourceClaim{draClaim("claim-c")}); err == nil {
-		t.Fatal("a third exclusive claim must not fit on two GPUs")
-	}
-	if result, err := allocator.Allocate(ctx, nodeB, []*resourcev1.ResourceClaim{draClaim("claim-c")}); err != nil || result.Allocation == nil {
-		t.Fatalf("identical templates on a different node must have independent capacity: %v", err)
-	}
-}
-
-func TestDRASelectorRejection(t *testing.T) {
-	t.Parallel()
-	ctx := draContext(t)
-	info := draType(draGPUInstanceType, 2)
-	it := instancetype.NewDefaultResolver(fake.DefaultRegion).Resolve(ctx, &info, draNodeClass())
-	for _, tc := range []struct{ name, selector string }{
-		{name: "wrong driver", selector: "device.driver == 'other.example.com'"},
-		{name: "MIG", selector: "device.attributes['gpu.nvidia.com'].type == 'mig'"},
-		{name: "unmodeled product", selector: nvidiaWholeGPUSelector + " && device.attributes['gpu.nvidia.com'].productName == 'NVIDIA H100'"},
+	for _, tc := range []struct{ name, plan, selector string }{
+		{name: "unknown plan count-only fallback", plan: draGPUInstanceType, selector: nvidiaWholeGPUSelector},
+		{name: "metadata on every known-plan GPU", plan: adaTwoGPUInstanceType, selector: adaMetadataSelector},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			node := &draNodeClaimMock{name: "node", instanceType: it}
-			if _, err := draAllocator(tc.selector).Allocate(ctx, node, []*resourcev1.ResourceClaim{draClaim("claim")}); err == nil {
-				t.Fatal("unsupported request unexpectedly matched the predicted inventory")
+			ctx := draContext(t)
+			info := draType(tc.plan, 2)
+			it := instancetype.NewDefaultResolver(fake.DefaultRegion).Resolve(ctx, &info, draNodeClass())
+			allocator := draAllocator(tc.selector)
+			nodeA := &draNodeClaimMock{name: "node-a", instanceTypes: []*cloudprovider.InstanceType{it}}
+			nodeB := &draNodeClaimMock{name: "node-b", instanceTypes: []*cloudprovider.InstanceType{it}}
+			for _, name := range []string{"claim-a", "claim-b"} {
+				result, err := allocator.Allocate(ctx, nodeA, []*resourcev1.ResourceClaim{draClaim(name)})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !reflect.DeepEqual(result.InstanceTypes, nodeA.InstanceTypes()) || result.Allocation == nil {
+					t.Fatalf("expected a GPU allocation on the selected instance type, got %+v", result)
+				}
+				result.Allocation.Commit(ctx)
+			}
+			if _, err := allocator.Allocate(ctx, nodeA, []*resourcev1.ResourceClaim{draClaim("claim-c")}); err == nil {
+				t.Fatal("a third exclusive claim must not fit on two GPUs")
+			}
+			if result, err := allocator.Allocate(ctx, nodeB, []*resourcev1.ResourceClaim{draClaim("claim-c")}); err != nil || result.Allocation == nil {
+				t.Fatalf("identical templates on a different node must have independent capacity: %v", err)
+			}
+		})
+	}
+}
+
+func TestDRAPlanFamilies(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		plan, architecture string
+	}{
+		{plan: adaGPUInstanceType, architecture: "Ada Lovelace"},
+		{plan: "g2-gpu-rtx4000a4-m", architecture: "Ada Lovelace"},
+		{plan: "g2-gpu-rtx4000a16-future", architecture: "Ada Lovelace"},
+		{plan: blackwellGPUInstanceType, architecture: "Blackwell"},
+		{plan: "g3-gpu-rtxpro6000-blackwell-16", architecture: "Blackwell"},
+		{plan: "g2-gpu-rtx5000a1-s"},
+		{plan: "g4-gpu-rtxpro6000-blackwell-1"},
+		{plan: "prefix-g2-gpu-rtx4000a1-s"},
+		{plan: "g2-gpu-rtx4000a1-s-extra"},
+		{plan: "g2-gpu-rtx4000a0-s"},
+		{plan: "g2-gpu-rtx4000a1-"},
+		{plan: "g3-gpu-rtxpro6000-blackwell-0"},
+		{plan: "g3-gpu-rtxpro6000-blackwell-1-extra"},
+	} {
+		t.Run(tc.plan, func(t *testing.T) {
+			t.Parallel()
+			ctx := draContext(t)
+			it := instancetype.NewDefaultResolver(fake.DefaultRegion).Resolve(ctx, ptrToType(tc.plan, 2), draNodeClass())
+			assertGPUCount(t, it, 2)
+			assertAllocatorPlans(t, ctx, []*cloudprovider.InstanceType{it}, nvidiaWholeGPUSelector, []string{tc.plan})
+			var want []string
+			if tc.architecture != "" {
+				want = []string{tc.plan}
+			}
+			selector := nvidiaAttributeSelector("architecture", "device.attributes['gpu.nvidia.com'].architecture in ['Ada Lovelace', 'Blackwell']")
+			if tc.architecture != "" {
+				selector = nvidiaAttributeSelector("architecture", "device.attributes['gpu.nvidia.com'].architecture == '"+tc.architecture+"'")
+			}
+			assertAllocatorPlans(t, ctx, []*cloudprovider.InstanceType{it}, selector, want)
+		})
+	}
+}
+
+func assertAllocatorPlans(t *testing.T, ctx context.Context, candidates []*cloudprovider.InstanceType, selector string, want []string) {
+	t.Helper()
+	// Core's allocator converts selector errors into non-matches. Check clean
+	// evaluation directly so a broken expression cannot pass a rejection case.
+	if len(want) == 0 {
+		celCache := dracel.NewCache(0, dracel.Features{EnableConsumableCapacity: true})
+		for _, candidate := range candidates {
+			for _, template := range candidate.DynamicResources.ResourceSliceTemplates {
+				for _, device := range template.Devices {
+					id := dynamicresources.DeviceID{
+						DeviceID: cloudprovider.DeviceID{Driver: template.Driver, Pool: template.Pool.Name, Device: device.Name},
+						Template: true,
+					}
+					matched, err := dynamicresources.DeviceMatchesSelectors(ctx, device, id, []resourcev1.DeviceSelector{{CEL: &resourcev1.CELDeviceSelector{Expression: selector}}}, celCache)
+					if err != nil {
+						t.Fatalf("evaluating rejection selector %q: %v", selector, err)
+					}
+					if matched {
+						t.Fatalf("rejection selector %q matched a device on %s", selector, candidate.Name)
+					}
+				}
+			}
+		}
+	}
+	node := &draNodeClaimMock{name: "metadata-selector", instanceTypes: candidates}
+	result, err := draAllocator(selector).Allocate(ctx, node, []*resourcev1.ResourceClaim{draClaim("metadata-claim")})
+	if len(want) == 0 {
+		if err == nil {
+			t.Fatalf("selector unexpectedly matched instance types %v", result.InstanceTypes)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("allocating for selector %q: %v", selector, err)
+	}
+	if result.Allocation == nil {
+		t.Fatal("expected an allocation")
+	}
+	got := make([]string, len(result.InstanceTypes))
+	for i, id := range result.InstanceTypes {
+		got[i] = id.Value()
+	}
+	sort.Strings(got)
+	expected := append([]string(nil), want...)
+	sort.Strings(expected)
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("selector %q matched %v, want %v", selector, got, expected)
+	}
+}
+
+func ptrToType(name string, gpus int) *linodego.LinodeType {
+	info := draType(name, gpus)
+	return &info
+}
+
+func TestDRASelectors(t *testing.T) {
+	t.Parallel()
+	ctx := draContext(t)
+	resolver := instancetype.NewDefaultResolver(fake.DefaultRegion)
+	candidates := []*cloudprovider.InstanceType{
+		resolver.Resolve(ctx, ptrToType(adaGPUInstanceType, 1), draNodeClass()),
+		resolver.Resolve(ctx, ptrToType(adaTwoGPUInstanceType, 2), draNodeClass()),
+		resolver.Resolve(ctx, ptrToType(blackwellGPUInstanceType, 1), draNodeClass()),
+		resolver.Resolve(ctx, ptrToType("g2-gpu-rtx5000a1-s", 1), draNodeClass()),
+		resolver.Resolve(ctx, ptrToType("test-cpu-plan", 0), draNodeClass()),
+	}
+	type selectorCase struct {
+		name, selector string
+		want           []string
+	}
+	tests := []selectorCase{
+		{
+			name:     "product name selects Ada",
+			selector: nvidiaAttributeSelector("productName", "device.attributes['gpu.nvidia.com'].productName == 'NVIDIA RTX 4000 Ada Generation'"),
+			want:     []string{adaGPUInstanceType, adaTwoGPUInstanceType},
+		},
+		{
+			name:     "Blackwell product name selects Blackwell",
+			selector: nvidiaAttributeSelector("productName", "device.attributes['gpu.nvidia.com'].productName == 'NVIDIA RTX PRO 6000 Blackwell Server Edition'"),
+			want:     []string{blackwellGPUInstanceType},
+		},
+		{
+			name:     "wrong product name selects nothing",
+			selector: nvidiaAttributeSelector("productName", "device.attributes['gpu.nvidia.com'].productName == 'NVIDIA H100'"),
+		},
+		{
+			name:     "brand selects Ada",
+			selector: nvidiaAttributeSelector("brand", "device.attributes['gpu.nvidia.com'].brand == 'NvidiaRTX'"),
+			want:     []string{adaGPUInstanceType, adaTwoGPUInstanceType},
+		},
+		{
+			name:     "brand selects Blackwell",
+			selector: nvidiaAttributeSelector("brand", "device.attributes['gpu.nvidia.com'].brand == 'Nvidia'"),
+			want:     []string{blackwellGPUInstanceType},
+		},
+		{
+			name:     "wrong brand selects nothing",
+			selector: nvidiaAttributeSelector("brand", "device.attributes['gpu.nvidia.com'].brand == 'NVIDIA'"),
+		},
+		{
+			name:     "architecture selects Ada",
+			selector: nvidiaAttributeSelector("architecture", "device.attributes['gpu.nvidia.com'].architecture == 'Ada Lovelace'"),
+			want:     []string{adaGPUInstanceType, adaTwoGPUInstanceType},
+		},
+		{
+			name:     "architecture selects Blackwell",
+			selector: nvidiaAttributeSelector("architecture", "device.attributes['gpu.nvidia.com'].architecture == 'Blackwell'"),
+			want:     []string{blackwellGPUInstanceType},
+		},
+		{
+			name:     "wrong architecture selects nothing",
+			selector: nvidiaAttributeSelector("architecture", "device.attributes['gpu.nvidia.com'].architecture == 'Hopper'"),
+		},
+		{
+			name:     "compute capability exact semver selects Ada",
+			selector: nvidiaAttributeSelector("cudaComputeCapability", "device.attributes['gpu.nvidia.com'].cudaComputeCapability.compareTo(semver('8.9.0')) == 0"),
+			want:     []string{adaGPUInstanceType, adaTwoGPUInstanceType},
+		},
+		{
+			name:     "compute capability threshold selects Blackwell",
+			selector: nvidiaAttributeSelector("cudaComputeCapability", "device.attributes['gpu.nvidia.com'].cudaComputeCapability.compareTo(semver('12.0.0')) >= 0"),
+			want:     []string{blackwellGPUInstanceType},
+		},
+		{
+			name:     "compute capability above maximum selects nothing",
+			selector: nvidiaAttributeSelector("cudaComputeCapability", "device.attributes['gpu.nvidia.com'].cudaComputeCapability.compareTo(semver('12.0.1')) >= 0"),
+		},
+		{
+			name:     "minimum per-GPU memory includes equality",
+			selector: nvidiaCapacitySelector("memory", "device.capacity['gpu.nvidia.com'].memory.compareTo(quantity('20475Mi')) >= 0"),
+			want:     []string{adaGPUInstanceType, adaTwoGPUInstanceType, blackwellGPUInstanceType},
+		},
+		{
+			name:     "per-GPU memory exact Blackwell quantity",
+			selector: nvidiaCapacitySelector("memory", "device.capacity['gpu.nvidia.com'].memory.compareTo(quantity('97887Mi')) == 0"),
+			want:     []string{blackwellGPUInstanceType},
+		},
+		{
+			name:     "per-GPU memory one byte above Ada selects Blackwell",
+			selector: nvidiaCapacitySelector("memory", "device.capacity['gpu.nvidia.com'].memory.compareTo(quantity('21469593601')) >= 0"),
+			want:     []string{blackwellGPUInstanceType},
+		},
+	}
+	knownPlans := []string{adaGPUInstanceType, adaTwoGPUInstanceType, blackwellGPUInstanceType}
+	for _, attribute := range []string{"productName", "brand", "architecture", "cudaComputeCapability"} {
+		tests = append(tests, selectorCase{
+			name:     "unknown plan omits " + attribute,
+			selector: nvidiaWholeGPUSelector + " && '" + attribute + "' in device.attributes['gpu.nvidia.com']",
+			want:     knownPlans,
+		})
+	}
+	tests = append(tests,
+		selectorCase{
+			name:     "unknown plan omits memory capacity",
+			selector: nvidiaWholeGPUSelector + " && 'memory' in device.capacity['gpu.nvidia.com']",
+			want:     knownPlans,
+		},
+		selectorCase{name: "wrong driver", selector: "device.driver == 'other.example.com'"},
+		selectorCase{name: "MIG", selector: "device.attributes['gpu.nvidia.com'].type == 'mig'"},
+		selectorCase{name: "runtime UUID is not predicted", selector: nvidiaWholeGPUSelector + " && 'uuid' in device.attributes['gpu.nvidia.com']"},
+	)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, reverse := range []bool{false, true} {
+				ordered := make([]*cloudprovider.InstanceType, len(candidates))
+				copy(ordered, candidates)
+				orderName := "catalog order"
+				if reverse {
+					orderName = "reverse order"
+					for left, right := 0, len(ordered)-1; left < right; left, right = left+1, right-1 {
+						ordered[left], ordered[right] = ordered[right], ordered[left]
+					}
+				}
+				t.Run(orderName, func(t *testing.T) {
+					assertAllocatorPlans(t, ctx, ordered, tc.selector, tc.want)
+				})
 			}
 		})
 	}
@@ -213,8 +453,8 @@ func draClaim(name string) *resourcev1.ResourceClaim {
 var _ dynamicresources.NodeClaim = (*draNodeClaimMock)(nil)
 
 type draNodeClaimMock struct {
-	name         string
-	instanceType *cloudprovider.InstanceType
+	name          string
+	instanceTypes []*cloudprovider.InstanceType
 }
 
 func (n *draNodeClaimMock) ID() dynamicresources.NodeClaimID {
@@ -234,15 +474,21 @@ func (n *draNodeClaimMock) Requirements() scheduling.Requirements {
 }
 
 func (n *draNodeClaimMock) InstanceTypes() []dynamicresources.InstanceTypeID {
-	return []dynamicresources.InstanceTypeID{unique.Make(n.instanceType.Name)}
+	result := make([]dynamicresources.InstanceTypeID, len(n.instanceTypes))
+	for i, it := range n.instanceTypes {
+		result[i] = unique.Make(it.Name)
+	}
+	return result
 }
 
 func (n *draNodeClaimMock) ResourceSlices() map[dynamicresources.InstanceTypeID][]dynamicresources.ResourceSlice {
-	slices := make([]dynamicresources.ResourceSlice, len(n.instanceType.DynamicResources.ResourceSliceTemplates))
-	for i, template := range n.instanceType.DynamicResources.ResourceSliceTemplates {
-		slices[i] = dynamicresources.NewTemplateSlice(template)
+	result := make(map[dynamicresources.InstanceTypeID][]dynamicresources.ResourceSlice)
+	for _, it := range n.instanceTypes {
+		slices := make([]dynamicresources.ResourceSlice, len(it.DynamicResources.ResourceSliceTemplates))
+		for i, template := range it.DynamicResources.ResourceSliceTemplates {
+			slices[i] = dynamicresources.NewTemplateSlice(template)
+		}
+		result[unique.Make(it.Name)] = slices
 	}
-	return map[dynamicresources.InstanceTypeID][]dynamicresources.ResourceSlice{
-		unique.Make(n.instanceType.Name): slices,
-	}
+	return result
 }

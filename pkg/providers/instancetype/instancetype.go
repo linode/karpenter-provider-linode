@@ -24,7 +24,6 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -177,7 +176,13 @@ func (p *DefaultProvider) get(ctx context.Context, nodeClass NodeClass, name str
 		return nil, fmt.Errorf("failed to generate instance type %s", name)
 	}
 	if cached, ok := p.discoveredCapacityCache.Get(discoveredCapacityCacheKey(it.Name, nodeClass)); ok {
-		it.Capacity[corev1.ResourceMemory] = cached.(resource.Quantity)
+		discoveredCapacity, ok := cached.(corev1.ResourceList)
+		if !ok {
+			return nil, fmt.Errorf("invalid discovered capacity cache value %T for instance type %s", cached, it.Name)
+		}
+		for resourceName, quantity := range discoveredCapacity {
+			it.Capacity[resourceName] = quantity.DeepCopy()
+		}
 	}
 	InstanceTypeVCPU.Set(float64(info.VCPUs), map[string]string{
 		instanceTypeLabel: info.ID,
@@ -273,18 +278,56 @@ func (p *DefaultProvider) UpdateInstanceTypeOfferings(ctx context.Context) error
 
 func (p *DefaultProvider) UpdateInstanceTypeCapacityFromNode(ctx context.Context, node *corev1.Node, nodeClass NodeClass) error {
 	instanceTypeName := node.Labels[corev1.LabelInstanceTypeStable]
+	actualCapacity := corev1.ResourceList{}
+	for _, resourceName := range []corev1.ResourceName{corev1.ResourceMemory, corev1.ResourceEphemeralStorage} {
+		if quantity, ok := node.Status.Capacity[resourceName]; ok {
+			actualCapacity[resourceName] = quantity.DeepCopy()
+		}
+	}
+	if len(actualCapacity) == 0 {
+		return nil
+	}
 
 	key := discoveredCapacityCacheKey(instanceTypeName, nodeClass)
-	actualCapacity := node.Status.Capacity.Memory()
-	if cachedCapacity, ok := p.discoveredCapacityCache.Get(key); !ok || actualCapacity.Cmp(cachedCapacity.(resource.Quantity)) < 1 {
-		// Update the capacity in the cache if it is less than or equal to the current cached capacity. We update when it's equal to refresh the TTL.
-		p.discoveredCapacityCache.SetDefault(key, *actualCapacity)
-		// Only log if we haven't discovered the capacity for the instance type yet or the discovered capacity is **less** than the cached capacity
-		if !ok || actualCapacity.Cmp(cachedCapacity.(resource.Quantity)) < 0 {
-			log.FromContext(ctx).WithValues("memory-capacity", actualCapacity, "instance-type", instanceTypeName).V(1).Info("updating discovered capacity cache")
+	discoveredCapacity, found := p.discoveredCapacityCache.Get(key)
+	cachedCapacity := corev1.ResourceList{}
+	if found {
+		var ok bool
+		cachedCapacity, ok = discoveredCapacity.(corev1.ResourceList)
+		if !ok {
+			return fmt.Errorf("invalid discovered capacity cache value %T for instance type %s", discoveredCapacity, instanceTypeName)
+		}
+		cachedCapacity = copyResourceList(cachedCapacity)
+	}
+
+	refreshCache, capacityChanged := false, false
+	for resourceName, quantity := range actualCapacity {
+		cachedQuantity, ok := cachedCapacity[resourceName]
+		if !ok || quantity.Cmp(cachedQuantity) <= 0 {
+			if !ok || quantity.Cmp(cachedQuantity) < 0 {
+				capacityChanged = true
+			}
+			cachedCapacity[resourceName] = quantity.DeepCopy()
+			refreshCache = true
+		}
+	}
+	if refreshCache {
+		// The first registered worker replaces the prediction; later observations only lower cached capacity.
+		p.discoveredCapacityCache.SetDefault(key, cachedCapacity)
+		if capacityChanged {
+			p.instanceTypesCache.Delete(p.cacheKey(nodeClass))
+			log.FromContext(ctx).WithValues("capacity", actualCapacity, "instance-type", instanceTypeName).V(1).Info("updating discovered capacity cache")
 		}
 	}
 	return nil
+}
+
+func copyResourceList(resourceList corev1.ResourceList) corev1.ResourceList {
+	copied := corev1.ResourceList{}
+	for resourceName, quantity := range resourceList {
+		copied[resourceName] = quantity.DeepCopy()
+	}
+	return copied
 }
 
 func (p *DefaultProvider) Reset() {

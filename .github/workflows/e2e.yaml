@@ -41,6 +41,8 @@ on:
 
 env:
   E2E_STANDARD_CLEANUP_ALLOWED_ENDPOINTS: >-
+    *.linodelke.net:443
+    ipv4.icanhazip.com:443
     api.github.com:443
     api.linode.com:443
     api.segment.io:443
@@ -61,6 +63,8 @@ env:
     *.blob.core.windows.net:443
     *.githubusercontent.com:443
   E2E_ENTERPRISE_CLEANUP_ALLOWED_ENDPOINTS: >-
+    *.enterprise.linodelke.net:6443
+    ipv4.icanhazip.com:443
     api.github.com:443
     api.linode.com:443
     api.segment.io:443

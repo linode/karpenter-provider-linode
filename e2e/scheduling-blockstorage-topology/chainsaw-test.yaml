@@ -23,8 +23,6 @@ spec:
       try:
       - script:
           shell: bash
-          shellArgs:
-            - -c
           timeout: 30s
           content: |
             set -euo pipefail
@@ -121,8 +119,6 @@ spec:
           - name: TEST_NAMESPACE
             value: "($namespace)"
           shell: bash
-          shellArgs:
-            - -c
           timeout: 30s
           content: bash ./verify-topology.sh "$TEST_NAMESPACE" blockstorage-consumer blockstorage-topology
       catch:
@@ -188,8 +184,6 @@ spec:
           - name: TEST_NAMESPACE
             value: "($namespace)"
           shell: bash
-          shellArgs:
-            - -c
           timeout: 30s
           content: bash ./verify-topology.sh "$TEST_NAMESPACE" blockstorage-consumer blockstorage-topology
       catch:
@@ -262,8 +256,6 @@ spec:
                 reason: Unschedulable
       - script:
           shell: bash
-          shellArgs:
-            - -c
           timeout: 90s
           content: |
             set -euo pipefail

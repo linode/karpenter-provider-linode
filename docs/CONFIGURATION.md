@@ -19,7 +19,7 @@ This guide details the configuration options for the Karpenter Provider for Lino
 | `KARPENTER_MODE` | Operating mode: `lke` or `instance`. See [Modes](#modes) below. | No | `lke` |
 | `LINODE_CLIENT_TIMEOUT` | Timeout in seconds for Linode API client requests. | No | - |
 | `VM_MEMORY_OVERHEAD_PERCENT` | Additional memory overhead to simplify calculation (0.075 = 7.5%). | No | `0.075` |
-| `IGNORE_DRA_REQUESTS` | Karpenter core setting. Set to `false` to enable experimental whole-GPU DRA scheduling. See [DRA](DRA.md). | No | `true` |
+| `IGNORE_DRA_REQUESTS` | Karpenter core setting. Set to `false` to enable alpha whole-GPU DRA scheduling. See [DRA](DRA.md). | No | `true` |
 | `DISABLE_DRY_RUN` | Set to `true` to disable dry-run validation for LinodeNodeClasses. | No | `false` |
 
 These environment variables are injected into the controller pod via a Kubernetes Secret. By default, the Helm chart creates a secret called `karpl-credentials` from the `apiToken`, `apiURL`, `apiVersion`, and `region` values.
@@ -46,7 +46,7 @@ The provider can operate in two distinct modes, controlled by the `KARPENTER_MOD
 * Provisions nodes by creating **LKE Node Pools** with a count of 1.
 * The nodes are automatically joined to your LKE cluster.
 * **Pros**: Simplest setup, managed by LKE.
-* **Cons**: Limited customization (cannot use custom images or advanced networking/storage options usually available to raw Linodes).
+* **Cons**: Limited customization (cannot use custom images or advanced networking/storage options usually available to raw Linodes). Instance-only `LinodeNodeClass` fields are rejected in this mode.
 
 ### Instance Mode (`instance`)
 
@@ -61,20 +61,42 @@ The provider can operate in two distinct modes, controlled by the `KARPENTER_MOD
 
 The `LinodeNodeClass` allows you to configure specific settings for the nodes managed by Karpenter. Support for specific fields depends on the [Mode](#modes) you are running.
 
+### Predicted ephemeral storage
+
+The pre-registration estimate uses the Linode plan's advertised disk size as local storage capacity ([plan details](https://techdocs.akamai.com/cloud-computing/docs/compute-instance-plan-types)).
+
+The scheduler's usable ephemeral storage is capacity minus `kubeReserved`, `systemReserved`, and the effective filesystem
+eviction threshold. The default hard thresholds (`nodefs.available`: 10%, `imagefs.available`: 15%) reserve the stricter
+15% once, rather than being added together. A non-empty `evictionHard` map replaces the default hard filesystem thresholds,
+while configured soft thresholds are combined conservatively using the stricter value. These percentages come from the [documented default kubelet hard eviction thresholds](https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/#hard-eviction-thresholds).
+
+Once a worker registers, its reported `Node.Status.Capacity` replaces the prediction for each reported memory and
+ephemeral-storage resource. Later observations for the same instance type and image can lower that cached capacity, but
+do not raise it; the first registered worker therefore overrides the prediction, and subsequent workers retain the
+lowest observed capacity per resource.
+
 ### Field Reference
+
+Fields marked **Instance** or **LKE** are only meaningful in that mode. Setting an **Instance**-only field while running in `lke` mode (or an **LKE**-only field while running in `instance` mode) is rejected: the `LinodeNodeClass` reports `ValidationSucceeded=False` with reason `UnsupportedInstanceFields` or `UnsupportedLKEFields` (listing the offending fields) and does not become `Ready`.
 
 | Field | Type | Supported Modes | Description |
 | ------- | ------ | ----------------- | ------------- |
 | `tags` | `[]string` | **All** | Tags to apply to Linode instances. Each complete tag is limited to 50 characters. In LKE mode, user tags are reconciled directly on instances; generated Karpenter-managed pool tags also must fit the limit and are rejected rather than shortened. |
-| `firewallID` | `int` | **All** | The ID of the Cloud Firewall to attach. |
-| `lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for LKE Enterprise worker nodes. Upgrade the cluster control plane to this version first; otherwise reconciliation fails and replacement NodeClaims will not come up on the requested version. For Enterprise clusters, the update strategy automatically defaults to `on_recycle`. |
-| `image` | `string` | **Instance** | The Image ID to deploy (default: `linode/ubuntu22.04`). |
-| `authorizedKeys` | `[]string` | **Instance** | SSH Public Keys to add to the `root` user. |
-| `authorizedUsers` | `[]string` | **Instance** | List of Linode usernames whose SSH keys will be added. |
-| `backupsEnabled` | `bool` | **Instance** | Enable backups service for the instance. |
-| `diskEncryption` | `enum` | **Instance** | `enabled` or `disabled`. |
-| `swapSize` | `int` | **Instance** | Size of the swap disk in MiB. |
-| `placementGroup` | `object` | **Instance** | Place instance in a specific Placement Group (see below). |
+| `firewallID` | `int` | **Instance** | The ID of the Cloud Firewall to attach to a directly created Linode instance. Rejected in `lke` mode; LKE node pools use the cluster's default Firewall. |
+| `kubelet` | `object` | **All** | Kubelet settings (e.g. `kubeReserved`, `systemReserved`, eviction thresholds). Currently used only for Karpenter's allocatable capacity and ephemeral storage estimates; the provider does not push them to nodes. |
+| `lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for LKE Enterprise worker nodes. Upgrade the cluster control plane to this version first; otherwise reconciliation fails and replacement NodeClaims will not come up on the requested version. For Enterprise clusters, the update strategy automatically defaults to `on_recycle`. Rejected in `instance` mode. |
+| `image` | `string` | **Instance** | The Image ID to deploy (default: `linode/ubuntu22.04`). Rejected in `lke` mode. |
+| `authorizedKeys` | `[]string` | **Instance** | SSH Public Keys to add to the `root` user. Rejected in `lke` mode. |
+| `authorizedUsers` | `[]string` | **Instance** | List of Linode usernames whose SSH keys will be added. Rejected in `lke` mode. |
+| `backupsEnabled` | `bool` | **Instance** | Enable backups service for the instance. Rejected in `lke` mode. |
+| `diskEncryption` | `enum` | **Instance** | `enabled` or `disabled`. Rejected in `lke` mode (not yet sent to LKE node pools). |
+| `swapSize` | `int` | **Instance** | Size of the swap disk in MiB. Rejected in `lke` mode. |
+| `placementGroup` | `object` | **Instance** | Place instance in a specific Placement Group (`id`, `compliant_only`). Rejected in `lke` mode. |
+| `osDisk` | `object` | **Instance** | Root disk configuration. Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
+| `dataDisks` | `object` | **Instance** | Additional disks (`sdb`–`sdh`). Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
+| `configuration` | `object` | **Instance** | Instance configuration profile (e.g. `kernel`). Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
+| `vpcID` | `int` | **Instance** | ID of an existing VPC. Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
+| `ipv6Options` | `object` | **Instance** | IPv6 options (`enableSLAAC`, `enableRanges`, `isPublicIPv6`). Defined in the API but not yet implemented in the provider. Rejected in `lke` mode. |
 
 ### Taints and Standard Labels
 
@@ -97,7 +119,6 @@ spec:
   tags:
     - "karpenter-node"
     - "env:production"
-  firewallID: 12345
 ```
 
 ### Example: Instance Mode
@@ -110,6 +131,7 @@ metadata:
 spec:
   tags:
     - "custom-workload"
+  firewallID: 12345
   image: "linode/ubuntu22.04"
   authorizedUsers:
     - "my-user"

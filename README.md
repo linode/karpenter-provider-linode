@@ -185,8 +185,7 @@ apiVersion: karpenter.k8s.linode/v1alpha1
 kind: LinodeNodeClass
 metadata:
   name: default
-spec:
-  image: "linode/ubuntu22.04"
+spec: {}
 ---
 apiVersion: karpenter.sh/v1
 kind: NodePool

@@ -23,7 +23,7 @@ Key references:
 | Selector | Command | Runs | Typical use |
 |---|---|---|---|
 | `all` | `CHAINSAW_SELECTOR=all just run-e2e` | All Chainsaw suites | Full local run / nightly parity |
-| `pr` | `CHAINSAW_SELECTOR=pr just run-e2e` | PR smoke tests (currently only `minimal-lke-standard`) | Matches PR workflow selector |
+| `pr` | `CHAINSAW_SELECTOR=pr just run-e2e` | PR smoke tests | Matches PR workflow selector |
 | `category.baseline` | `CHAINSAW_SELECTOR=category.baseline just run-e2e` | Baseline lifecycle behavior | Verify core provider health quickly |
 | `category.scheduling` | `CHAINSAW_SELECTOR=category.scheduling just run-e2e` | Scheduling behavior suites | Debug pod placement / constraints |
 | `category.consolidation` | `CHAINSAW_SELECTOR=category.consolidation just run-e2e` | Consolidation behavior suites | Debug scale-down/replacement behavior |
@@ -37,6 +37,7 @@ Key references:
 | scheduling-nodepool-label-selector | `e2e/scheduling-nodepool-label-selector/chainsaw-test.yaml` | `all`, `pr`, `category.scheduling` | NodePool label targeting via pod `nodeSelector`, and confirms pods land on expected node/nodepool | Ensures constraint-based scheduling works and avoids silent misplacement of workloads |
 | scheduling-blockstorage-topology | `e2e/scheduling-blockstorage-topology/chainsaw-test.yaml` | `all`, `pr`, `category.scheduling` | WaitForFirstConsumer claims with and without allowed topologies, scale-from-zero and replacement for matching bound PVCs, and rejection of incompatible PVC regions | Verifies predicted CSI region labels match CSI registration and prevent provisioning into an incompatible volume region |
 | scheduling-taints-tolerations | `e2e/scheduling-taints-tolerations/chainsaw-test.yaml` | `all`, `pr`, `category.scheduling` | Taint/toleration behavior with one tolerated and one non-tolerated workload | Prevents regressions where taints are ignored or non-tolerated pods are scheduled incorrectly |
+| scheduling-ephemeral-storage | `e2e/scheduling-ephemeral-storage/chainsaw-test.yaml` | `all`, `pr`, `category.scheduling` | Confirms Pod and DaemonSet ephemeral-storage requests schedule, worker and NodeClaim report storage, and a request above usable storage remains unschedulable without another NodeClaim | Guards predicted ephemeral-storage capacity, scheduling fit, and over-capacity rejection on Standard and Enterprise LKE |
 | consolidation-empty-node-scale-down | `e2e/consolidation-empty-node-scale-down/chainsaw-test.yaml` | `all`, `pr`, `category.consolidation` | NodeClaim count reduction on a dedicated consolidation NodePool after scale-down | Validates empty/underutilized consolidation behavior with deterministic pool constraints |
 | consolidation-non-empty-step-scale | `e2e/consolidation-non-empty-step-scale/chainsaw-test.yaml` | `all`, `pr`, `category.consolidation` | Non-empty replacement signal on a dedicated consolidation NodePool after stepped scale changes | Covers disruptive consolidation edge cases while avoiding default-pool sizing bias |
 | drift-nodepool-labels-taints | `e2e/drift-nodepool-labels-taints/chainsaw-test.yaml` | `all`, `pr`, `category.drift` | Drift-triggered replacement when a drift-specific NodePool template labels/taints change | Ensures NodePool template mutations propagate through replacement in an isolated test-owned pool |
@@ -64,6 +65,18 @@ Use direct Chainsaw invocation when you want exactly one test file without intro
 chainsaw test e2e/minimal-lke-standard --config .chainsaw.yaml
 ```
 
+## Cluster cleanup access
+
+`just destroy-lke-cluster <cluster_id>` refreshes the cluster API ACL using
+`CLUSTER_ACL_FLAGS` (by default, the current runner's public IPv4 address), then
+waits for Kubernetes API access before deleting test resources and the cluster.
+Cleanup jobs run on a separate runner from setup, so they cannot reuse setup's
+IP allowlist.
+
+Cleanup runner egress policies must allow `ipv4.icanhazip.com:443` for IP
+discovery and the cluster API endpoint: `*.linodelke.net:443` for standard LKE
+or `*.enterprise.linodelke.net:6443` for LKE Enterprise.
+
 ## Authoring and maintenance rules
 
 When adding/updating an E2E test:
@@ -82,3 +95,11 @@ When adding/updating an E2E test:
    - add/update row in **Selector matrix** if a new selector is introduced
    - add/update row in **Test inventory and justification**
 7. Ensure workflow selectors (`pr`/`all`) still match intended scope.
+
+## Linting
+
+Validate the Chainsaw configuration and every test manifest without a cluster:
+
+```bash
+mise run chainsaw-lint
+```

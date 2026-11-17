@@ -1,0 +1,188 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: scheduling-ephemeral-storage
+  labels:
+    all:
+    pr:
+    category.scheduling:
+spec:
+  steps:
+    - name: Make sure there are no lingering NodeClaims
+      try:
+      - error:
+          resource:
+            apiVersion: karpenter.sh/v1
+            kind: NodeClaim
+            metadata:
+              labels:
+                karpenter.sh/nodepool: storage-test
+
+    - name: Create an isolated ephemeral-storage NodePool
+      try:
+      - apply:
+          file: nodepool-ephemeral-storage.yaml
+
+    - name: Create a small Pod and DaemonSet ephemeral-storage request
+      try:
+      - apply:
+          file: storage-workloads.yaml
+      catch:
+      - script:
+          content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+
+    - name: Wait for the Pod and DaemonSet to run
+      try:
+      - assert:
+          timeout: 20m
+          resource:
+            apiVersion: v1
+            kind: Pod
+            metadata:
+              name: ephemeral-storage-fit
+            status:
+              phase: Running
+      - assert:
+          timeout: 5m
+          resource:
+            apiVersion: apps/v1
+            kind: DaemonSet
+            metadata:
+              name: ephemeral-storage-daemon
+            status:
+              desiredNumberScheduled: 1
+              numberReady: 1
+      catch:
+      - describe:
+          apiVersion: apps/v1
+          kind: DaemonSet
+          name: ephemeral-storage-daemon
+      - script:
+          content: |
+            kubectl -n "$NAMESPACE" get pods -o wide
+            kubectl -n "$NAMESPACE" describe pods
+            kubectl get nodeclaims -o wide
+            kubectl get nodes -o wide
+            kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
+
+    - name: Confirm the Node and NodeClaim report ephemeral storage
+      try:
+      - assert:
+          timeout: 2m
+          resource:
+            apiVersion: karpenter.sh/v1
+            kind: NodeClaim
+            metadata:
+              labels:
+                karpenter.sh/nodepool: storage-test
+            status:
+              (capacity."ephemeral-storage" != null): true
+              (allocatable."ephemeral-storage" != null): true
+      - assert:
+          timeout: 2m
+          resource:
+            apiVersion: v1
+            kind: Node
+            metadata:
+              labels:
+                karpenter.sh/nodepool: storage-test
+            status:
+              (capacity."ephemeral-storage" != null): true
+              (allocatable."ephemeral-storage" != null): true
+      catch:
+      - script:
+          content: |
+            kubectl -n "$NAMESPACE" get pods -o wide
+            kubectl -n "$NAMESPACE" get daemonset ephemeral-storage-daemon -o yaml
+            kubectl get nodeclaims -o yaml
+            kubectl get nodes -o yaml
+            kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+
+    - name: Create a Pod request above the pinned plan's usable storage
+      try:
+      - apply:
+          file: storage-over-capacity.yaml
+
+    - name: Verify the oversized Pod remains unschedulable without another NodeClaim
+      try:
+      - assert:
+          timeout: 3m
+          resource:
+            apiVersion: v1
+            kind: Pod
+            metadata:
+              name: ephemeral-storage-over-capacity
+            status:
+              phase: Pending
+              (conditions[?type == 'PodScheduled'] | [0].reason): Unschedulable
+      - sleep:
+          duration: 20s
+      - script:
+          timeout: 30s
+          content: kubectl get nodeclaim -l karpenter.sh/nodepool=storage-test -o json
+          check:
+            ($error): ~
+            (json_parse($stdout).items | length(@)): 1
+      catch:
+      - script:
+          content: |
+            kubectl -n "$NAMESPACE" describe pod ephemeral-storage-over-capacity
+            kubectl get nodeclaims -o wide
+            kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+      - podLogs:
+          namespace: kube-system
+          selector: app.kubernetes.io/name=karpenter
+          tail: 100
+
+    - name: Delete the workloads and NodePool
+      try:
+      - delete:
+          ref:
+            apiVersion: v1
+            kind: Pod
+            name: ephemeral-storage-fit
+      - delete:
+          ref:
+            apiVersion: v1
+            kind: Pod
+            name: ephemeral-storage-over-capacity
+      - delete:
+          ref:
+            apiVersion: apps/v1
+            kind: DaemonSet
+            name: ephemeral-storage-daemon
+      - delete:
+          ref:
+            apiVersion: karpenter.sh/v1
+            kind: NodePool
+            name: storage-test
+
+    - name: Wait for the test NodeClaims to be deleted
+      try:
+      - error:
+          timeout: 5m
+          resource:
+            apiVersion: karpenter.sh/v1
+            kind: NodeClaim
+            metadata:
+              labels:
+                karpenter.sh/nodepool: storage-test
+      catch:
+      - describe:
+          apiVersion: karpenter.sh/v1
+          kind: NodeClaim
+      - script:
+          content: kubectl get events -A --sort-by=.lastTimestamp | tail -n 50
+
+    - name: Delete the test LinodeNodeClass
+      try:
+      - delete:
+          ref:
+            apiVersion: karpenter.k8s.linode/v1alpha1
+            kind: LinodeNodeClass
+            name: storage-test

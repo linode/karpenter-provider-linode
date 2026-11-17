@@ -40,21 +40,25 @@ import (
 
 const (
 	requeueAfterTime = 10 * time.Minute
-	// Requeue invalid lkeK8sVersion checks quickly so readiness flips soon after an
-	// external LKE control plane upgrade becomes visible in the Linode API.
-	lkeVersionRequeueAfterTime = time.Minute
+	// Requeue invalid LKE cluster tier checks (lkeK8sVersion) quickly so readiness flips
+	// soon after an external LKE cluster change becomes visible in the Linode API.
+	lkeTierRequeueAfterTime = time.Minute
 )
 
 const (
 	ConditionReasonTagValidationFailed               = "TagValidationFailed"
 	ConditionReasonLKEK8sVersionUnsupported          = "LKEK8sVersionUnsupported"
 	ConditionReasonLKEK8sVersionControlPlaneMismatch = "LKEK8sVersionControlPlaneMismatch"
+	ConditionReasonUnsupportedInstanceFields         = "UnsupportedInstanceFields"
+	ConditionReasonUnsupportedLKEFields              = "UnsupportedLKEFields"
 )
 
 var ValidationConditionMessages = map[string]string{
 	ConditionReasonTagValidationFailed:               "LinodeNodeClass tags violate provider-managed key or 50-character length requirements",
 	ConditionReasonLKEK8sVersionUnsupported:          "lkeK8sVersion is only supported for LKE Enterprise clusters",
 	ConditionReasonLKEK8sVersionControlPlaneMismatch: "lkeK8sVersion requires the LKE cluster control plane to already be on the same version",
+	ConditionReasonUnsupportedInstanceFields:         "LinodeNodeClass sets instance-only fields that are not supported in LKE mode",
+	ConditionReasonUnsupportedLKEFields:              "LinodeNodeClass sets LKE-only fields that are not supported in instance mode",
 }
 
 type Validation struct {
@@ -110,7 +114,13 @@ func (v *Validation) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 	if err := v.validateTags(nodeClass, tags); err != nil {
 		return reconcile.Result{}, err
 	}
-	if res, err := v.validateLKEK8sVersion(ctx, nodeClass); err != nil || !lo.IsEmpty(res) {
+	if err := v.validateLKEUnsupportedFields(ctx, nodeClass); err != nil {
+		return reconcile.Result{}, err
+	}
+	if err := v.validateInstanceUnsupportedFields(ctx, nodeClass); err != nil {
+		return reconcile.Result{}, err
+	}
+	if res, err := v.validateLKEClusterTier(ctx, nodeClass); err != nil || !lo.IsEmpty(res) {
 		return res, err
 	}
 
@@ -152,12 +162,102 @@ func (v *Validation) validateTags(nodeClass *v1alpha1.LinodeNodeClass, generated
 	return nil
 }
 
-func (v *Validation) validateLKEK8sVersion(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) (reconcile.Result, error) {
+// validateLKEUnsupportedFields rejects LinodeNodeClasses that set instance-only fields while
+// running in LKE mode. LKE node pools use the cluster's default Firewall instead of a NodeClass
+// firewallID; rejecting these fields avoids silently ignoring user configuration.
+func (v *Validation) validateLKEUnsupportedFields(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) error {
+	if options.FromContext(ctx).Mode != "lke" {
+		return nil
+	}
+
+	setFields := instanceOnlyFieldsSet(&nodeClass.Spec)
+	if len(setFields) == 0 {
+		return nil
+	}
+
+	nodeClass.StatusConditions().SetFalse(
+		v1.ConditionTypeValidationSucceeded,
+		ConditionReasonUnsupportedInstanceFields,
+		fmt.Sprintf("%s: %s", ValidationConditionMessages[ConditionReasonUnsupportedInstanceFields], strings.Join(setFields, ", ")),
+	)
+	return reconcile.TerminalError(fmt.Errorf("validating nodeclass: instance-only fields are not supported in LKE mode: %s", strings.Join(setFields, ", ")))
+}
+
+func instanceOnlyFieldsSet(spec *v1alpha1.LinodeNodeClassSpec) []string {
+	var setFields []string
+	if len(spec.AuthorizedKeys) > 0 {
+		setFields = append(setFields, "authorizedKeys")
+	}
+	if len(spec.AuthorizedUsers) > 0 {
+		setFields = append(setFields, "authorizedUsers")
+	}
+	if spec.Image != "" {
+		setFields = append(setFields, "image")
+	}
+	if spec.FirewallID != nil {
+		setFields = append(setFields, "firewallID")
+	}
+	if spec.BackupsEnabled {
+		setFields = append(setFields, "backupsEnabled")
+	}
+	if spec.OSDisk != nil {
+		setFields = append(setFields, "osDisk")
+	}
+	if spec.DataDisks != nil {
+		setFields = append(setFields, "dataDisks")
+	}
+	if spec.Configuration != nil {
+		setFields = append(setFields, "configuration")
+	}
+	if spec.PlacementGroup != nil {
+		setFields = append(setFields, "placementGroup")
+	}
+	if spec.VPCID != nil {
+		setFields = append(setFields, "vpcID")
+	}
+	if spec.IPv6Options != nil {
+		setFields = append(setFields, "ipv6Options")
+	}
+	if spec.SwapSize != nil {
+		setFields = append(setFields, "swapSize")
+	}
+	if spec.DiskEncryption != "" {
+		setFields = append(setFields, "diskEncryption")
+	}
+
+	return setFields
+}
+
+// validateInstanceUnsupportedFields rejects LinodeNodeClasses that set LKE-only fields while
+// running in instance mode, where they would otherwise be silently ignored.
+func (v *Validation) validateInstanceUnsupportedFields(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) error {
+	if options.FromContext(ctx).Mode != "instance" {
+		return nil
+	}
+
+	var setFields []string
+	if nodeClass.Spec.LKEK8sVersion != nil {
+		setFields = append(setFields, "lkeK8sVersion")
+	}
+	if len(setFields) == 0 {
+		return nil
+	}
+
+	nodeClass.StatusConditions().SetFalse(
+		v1alpha1.ConditionTypeValidationSucceeded,
+		ConditionReasonUnsupportedLKEFields,
+		fmt.Sprintf("%s: %s", ValidationConditionMessages[ConditionReasonUnsupportedLKEFields], strings.Join(setFields, ", ")),
+	)
+	return reconcile.TerminalError(fmt.Errorf("validating nodeclass: LKE-only fields are not supported in instance mode: %s", strings.Join(setFields, ", ")))
+}
+
+// validateLKEClusterTier validates lkeK8sVersion against the LKE cluster tier and control-plane version.
+func (v *Validation) validateLKEClusterTier(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) (reconcile.Result, error) {
 	if options.FromContext(ctx).Mode != "lke" || nodeClass.Spec.LKEK8sVersion == nil {
 		return reconcile.Result{}, nil
 	}
 	if v.clusterID == 0 {
-		return reconcile.Result{}, fmt.Errorf("validating lkeK8sVersion, LKE cluster ID is not configured")
+		return reconcile.Result{}, fmt.Errorf("validating LKE cluster tier fields, LKE cluster ID is not configured")
 	}
 
 	cluster, err := v.linodeClient.GetLKECluster(ctx, v.clusterID)
@@ -165,23 +265,31 @@ func (v *Validation) validateLKEK8sVersion(ctx context.Context, nodeClass *v1alp
 		return reconcile.Result{}, fmt.Errorf("getting LKE cluster %d: %w", v.clusterID, err)
 	}
 
-	desiredVersion := *nodeClass.Spec.LKEK8sVersion
 	switch linodego.LKEVersionTier(cluster.Tier) {
 	case linodego.LKEVersionEnterprise:
+		if nodeClass.Spec.LKEK8sVersion == nil {
+			return reconcile.Result{}, nil
+		}
+		desiredVersion := *nodeClass.Spec.LKEK8sVersion
 		if cluster.K8sVersion == desiredVersion {
 			return reconcile.Result{}, nil
 		}
 		message := fmt.Sprintf("lkeK8sVersion %q requires the LKE cluster control plane to already be on %q, current cluster version is %q", desiredVersion, desiredVersion, cluster.K8sVersion)
-		nodeClass.StatusConditions().SetFalse(v1alpha1.ConditionTypeValidationSucceeded, ConditionReasonLKEK8sVersionControlPlaneMismatch, message)
-		v.recorder.Publish(LKEK8sVersionValidationFailedEvent(nodeClass, ConditionReasonLKEK8sVersionControlPlaneMismatch, message))
-		return reconcile.Result{RequeueAfter: lkeVersionRequeueAfterTime}, nil
+		return v.failLKEClusterTierValidation(nodeClass, ConditionReasonLKEK8sVersionControlPlaneMismatch, message), nil
 	case linodego.LKEVersionStandard:
-		message := "lkeK8sVersion is only supported for LKE Enterprise clusters"
-		nodeClass.StatusConditions().SetFalse(v1alpha1.ConditionTypeValidationSucceeded, ConditionReasonLKEK8sVersionUnsupported, message)
-		v.recorder.Publish(LKEK8sVersionValidationFailedEvent(nodeClass, ConditionReasonLKEK8sVersionUnsupported, message))
-		return reconcile.Result{RequeueAfter: lkeVersionRequeueAfterTime}, nil
+		return v.failLKEClusterTierValidation(
+			nodeClass,
+			ConditionReasonLKEK8sVersionUnsupported,
+			ValidationConditionMessages[ConditionReasonLKEK8sVersionUnsupported],
+		), nil
 	}
-	return reconcile.Result{}, fmt.Errorf("validating lkeK8sVersion, unsupported LKE version tier %q", cluster.Tier)
+	return reconcile.Result{}, fmt.Errorf("validating LKE cluster tier fields, unsupported LKE version tier %q", cluster.Tier)
+}
+
+func (v *Validation) failLKEClusterTierValidation(nodeClass *v1alpha1.LinodeNodeClass, reason, message string) reconcile.Result {
+	nodeClass.StatusConditions().SetFalse(v1alpha1.ConditionTypeValidationSucceeded, reason, message)
+	v.recorder.Publish(LKEValidationFailedEvent(nodeClass, reason, message))
+	return reconcile.Result{RequeueAfter: lkeTierRequeueAfterTime}
 }
 
 func (*Validation) cacheKey(nodeClass *v1alpha1.LinodeNodeClass, tags map[string]string) string {

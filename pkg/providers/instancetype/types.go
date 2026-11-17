@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/linode/linodego/v2"
+	"github.com/mitchellh/hashstructure/v2"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -35,7 +36,9 @@ import (
 )
 
 const (
-	MemoryAvailable = "memory.available"
+	MemoryAvailable  = "memory.available"
+	nodeFSAvailable  = "nodefs.available"
+	imageFSAvailable = "imagefs.available"
 )
 
 type Resolver interface {
@@ -50,7 +53,12 @@ type DefaultResolver struct {
 }
 
 func (d DefaultResolver) CacheKey(nodeClass NodeClass) string {
-	return nodeClass.GetName()
+	kubeletConfiguration := nodeClass.KubeletConfiguration()
+	if kubeletConfiguration == nil {
+		kubeletConfiguration = &v1.KubeletConfiguration{}
+	}
+	kubeletHash, _ := hashstructure.Hash(kubeletConfiguration, hashstructure.FormatV2, &hashstructure.HashOptions{SlicesAsSets: true})
+	return fmt.Sprintf("%s-%016x", nodeClass.GetName(), kubeletHash)
 }
 
 func (d DefaultResolver) Resolve(ctx context.Context, info *linodego.LinodeType, nodeClass NodeClass) *cloudprovider.InstanceType {
@@ -101,7 +109,7 @@ func NewInstanceType(
 		Overhead: &cloudprovider.InstanceTypeOverhead{
 			KubeReserved:      kubeReservedResources(cpu(info), pods(info, maxPods, podsPerCore), kubeReserved),
 			SystemReserved:    systemReservedResources(systemReserved),
-			EvictionThreshold: evictionThreshold(memory(ctx, info), evictionHard, evictionSoft),
+			EvictionThreshold: evictionThreshold(memory(ctx, info), ephemeralStorage(info), evictionHard, evictionSoft),
 		},
 	}
 	return it
@@ -147,7 +155,7 @@ func kubeReservedResources(cpus, pods *resource.Quantity, kubeReserved map[strin
 	}))
 }
 
-func evictionThreshold(memory *resource.Quantity, evictionHard, evictionSoft map[string]string) corev1.ResourceList {
+func evictionThreshold(memory, ephemeralStorage *resource.Quantity, evictionHard, evictionSoft map[string]string) corev1.ResourceList {
 	overhead := corev1.ResourceList{
 		corev1.ResourceMemory: resource.MustParse("100Mi"),
 	}
@@ -166,10 +174,42 @@ func evictionThreshold(memory *resource.Quantity, evictionHard, evictionSoft map
 		if v, ok := m[MemoryAvailable]; ok {
 			temp[corev1.ResourceMemory] = computeEvictionSignal(*memory, v)
 		}
+		if threshold, ok := storageEvictionSignal(*ephemeralStorage, m); ok {
+			temp[corev1.ResourceEphemeralStorage] = threshold
+		}
 		override = resources.MaxResources(override, temp)
+	}
+	// This prediction assumes nodefs and imagefs share the worker filesystem, so
+	// only the stricter threshold reserves storage.
+	if len(evictionHard) == 0 {
+		nodeFSThreshold := computeEvictionSignal(*ephemeralStorage, "10%")
+		imageFSThreshold := computeEvictionSignal(*ephemeralStorage, "15%")
+		if imageFSThreshold.Cmp(nodeFSThreshold) > 0 {
+			nodeFSThreshold = imageFSThreshold
+		}
+		override = resources.MaxResources(override, corev1.ResourceList{
+			corev1.ResourceEphemeralStorage: nodeFSThreshold,
+		})
 	}
 	// Assign merges maps from left to right so overrides will always be taken last
 	return lo.Assign(overhead, override)
+}
+
+func storageEvictionSignal(capacity resource.Quantity, signals map[string]string) (resource.Quantity, bool) {
+	var threshold resource.Quantity
+	found := false
+	for _, signal := range []string{nodeFSAvailable, imageFSAvailable} {
+		value, ok := signals[signal]
+		if !ok {
+			continue
+		}
+		candidate := computeEvictionSignal(capacity, value)
+		if !found || candidate.Cmp(threshold) > 0 {
+			threshold = candidate
+			found = true
+		}
+	}
+	return threshold, found
 }
 
 // computeEvictionSignal computes the resource quantity value for an eviction signal value, computed off the
@@ -245,9 +285,10 @@ func computeRequirements(
 
 func computeCapacity(ctx context.Context, info *linodego.LinodeType, maxPods, podsPerCore *int32) corev1.ResourceList {
 	resourceList := corev1.ResourceList{
-		corev1.ResourceCPU:    *cpu(info),
-		corev1.ResourceMemory: *memory(ctx, info),
-		corev1.ResourcePods:   *pods(info, maxPods, podsPerCore),
+		corev1.ResourceCPU:              *cpu(info),
+		corev1.ResourceMemory:           *memory(ctx, info),
+		corev1.ResourceEphemeralStorage: *ephemeralStorage(info),
+		corev1.ResourcePods:             *pods(info, maxPods, podsPerCore),
 	}
 	return resourceList
 }
@@ -263,6 +304,11 @@ func memory(ctx context.Context, info *linodego.LinodeType) *resource.Quantity {
 	overheadInMiB := int64(math.Ceil(float64(mem.Value()) * options.FromContext(ctx).VMMemoryOverheadPercent / 1024 / 1024))
 	mem.Sub(resource.MustParse(fmt.Sprintf("%dMi", overheadInMiB)))
 	return mem
+}
+
+func ephemeralStorage(info *linodego.LinodeType) *resource.Quantity {
+	// Use the advertised plan disk for the initial estimate; registered kubelet capacity replaces it.
+	return resources.Quantity(fmt.Sprintf("%dMi", info.Disk))
 }
 
 func pods(info *linodego.LinodeType, maxPods, podsPerCore *int32) *resource.Quantity {
