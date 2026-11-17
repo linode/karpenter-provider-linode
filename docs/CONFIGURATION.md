@@ -60,17 +60,7 @@ The provider can operate in two distinct modes, controlled by the `KARPENTER_MOD
 * **Pros**: Full control over the instance configuration (SSH keys, placement groups, etc.).
 * **Note**: `VPCID` and custom disk configurations are defined in the API but not yet fully implemented in the provider logic.
 
-## API versions and conversion
-
-`LinodeNodeClass` is served as `karpenter.k8s.linode/v1beta1` (storage version) and the deprecated `karpenter.k8s.linode/v1alpha1`. The `v1alpha1` schema keeps its legacy flat mode-specific fields; conversion maps them to and from the `instanceMode` and `lkeMode` objects in `v1beta1`, while shared fields such as `tags` and `kubelet` remain at the spec root. Update your manifests to `apiVersion: karpenter.k8s.linode/v1beta1`.
-
-Conversion is performed by a webhook served by the Karpenter controller (enabled by default in the chart via `webhook.enabled`). The `karpenter-crd` chart declares the webhook on the `linodenodeclasses.karpenter.k8s.linode` CRD (`spec.conversion`, pointing at the Karpenter Service); set `webhook.enabled`, `webhook.serviceName`, `webhook.serviceNamespace` and `webhook.port` there to match the `karpenter` chart. The controller generates and rotates a self-signed CA and serving certificate in the `<karpenter-service-name>-cert` Secret (using [open-policy-agent/cert-controller](https://github.com/open-policy-agent/cert-controller)), publishes the CA to the CRD's `caBundle`, and the chart mounts the Secret into the pod. No cert-manager is required. The controller needs permission to `get`/`list`/`watch`/`update` that Secret and the CRD, which the chart grants.
-
-Objects already persisted as `v1alpha1` are rewritten as `v1beta1` the next time they are updated. To migrate them eagerly, re-apply them, e.g. `kubectl get linodenodeclasses -o json | kubectl replace -f -`.
-
-Regenerate the conversion functions after changing either API version with `just verify` (requires `conversion-gen`, installed by `mise install`).
-
-## LinodeNodeClass Spec
+## LinodeNodeClass Spec (v1beta1)
 
 The `LinodeNodeClass` allows you to configure specific settings for the nodes managed by Karpenter. Support for specific fields depends on the [Mode](#modes) you are running.
 
@@ -96,7 +86,7 @@ Fields marked **Instance** or **LKE** are only meaningful in that mode. Setting 
 | ------- | ------ | ----------------- | ------------- |
 | `tags` | `[]string` | **All** | Tags to apply to Linode instances. Each complete tag is limited to 50 characters. In LKE mode, user tags are reconciled directly on instances; generated Karpenter-managed pool tags also must fit the limit and are rejected rather than shortened. |
 | `instanceMode.firewallID` | `int` | **Instance** | The ID of the Cloud Firewall to attach to a directly created Linode instance. Rejected in `lke` mode; LKE node pools use the cluster's default Firewall. |
-| `kubelet` | `object` | **All** | Kubelet settings (e.g. `kubeReserved`, `systemReserved`, eviction thresholds). Currently used only for Karpenter's allocatable capacity and ephemeral storage estimates; the provider does not push them to nodes. |
+| `instanceMode.kubelet` | `object` | **Instance** | Kubelet settings (e.g. `kubeReserved`, `systemReserved`, eviction thresholds). Used for Karpenter's instance allocatable capacity and ephemeral storage estimates; the provider does not push them to nodes. |
 | `lkeMode.lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for LKE Enterprise worker nodes. Upgrade the cluster control plane to this version first; otherwise reconciliation fails and replacement NodeClaims will not come up on the requested version. For Enterprise clusters, the update strategy automatically defaults to `on_recycle`. Rejected in `instance` mode. |
 | `instanceMode.image` | `string` | **Instance** | The Image ID to deploy (default: `linode/ubuntu22.04`). Rejected in `lke` mode. |
 | `instanceMode.authorizedKeys` | `[]string` | **Instance** | SSH Public Keys to add to the `root` user. Rejected in `lke` mode. |

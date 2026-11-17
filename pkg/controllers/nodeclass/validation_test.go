@@ -118,6 +118,9 @@ var _ = Describe("NodeClass Validation", func() {
 		Entry("diskEncryption", func(nc *v1.LinodeNodeClass) {
 			nc.Spec.InstanceMode = &v1.InstanceMode{DiskEncryption: linodego.InstanceDiskEncryption("enabled")}
 		}, "diskEncryption"),
+		Entry("kubelet", func(nc *v1.LinodeNodeClass) {
+			nc.Spec.InstanceMode = &v1.InstanceMode{Kubelet: &v1.KubeletConfiguration{}}
+		}, "kubelet"),
 	)
 
 	It("should report all unsupported instance-only fields set in LKE mode", func() {
@@ -126,6 +129,7 @@ var _ = Describe("NodeClass Validation", func() {
 			Image:          "linode/ubuntu22.04",
 			BackupsEnabled: true,
 			VPCID:          &vpcID,
+			Kubelet:        &v1.KubeletConfiguration{},
 		}
 
 		ExpectApplied(ctx, env.Client, nodeClass)
@@ -136,7 +140,7 @@ var _ = Describe("NodeClass Validation", func() {
 		condition := nodeClass.StatusConditions().Get(v1.ConditionTypeValidationSucceeded)
 		Expect(condition.IsFalse()).To(BeTrue())
 		Expect(condition.Reason).To(Equal(nodeclass.ConditionReasonUnsupportedInstanceFields))
-		Expect(condition.Message).To(And(ContainSubstring("image"), ContainSubstring("backupsEnabled"), ContainSubstring("vpcID")))
+		Expect(condition.Message).To(And(ContainSubstring("image"), ContainSubstring("backupsEnabled"), ContainSubstring("vpcID"), ContainSubstring("kubelet")))
 		Expect(nodeClass.StatusConditions().Get(status.ConditionReady).IsFalse()).To(BeTrue())
 	})
 

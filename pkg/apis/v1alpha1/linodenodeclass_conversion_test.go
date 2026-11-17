@@ -62,10 +62,10 @@ func TestLinodeNodeClassSpecConversion(t *testing.T) {
 			VPCID:           new(7),
 			IPv6Options:     &v1beta1.IPv6CreateOptions{EnableSLAAC: new(true)},
 			SwapSize:        new(512),
+			Kubelet:         &v1beta1.KubeletConfiguration{},
 		},
 		LKEMode: &v1beta1.LKEMode{LKEK8sVersion: new("v1.32.8+lke13")},
 		Tags:    []string{"env=production"},
-		Kubelet: &v1beta1.KubeletConfiguration{},
 	}
 
 	hub := &v1beta1.LinodeNodeClass{}
@@ -82,6 +82,37 @@ func TestLinodeNodeClassSpecConversion(t *testing.T) {
 	}
 	if !reflect.DeepEqual(roundTripped.Spec, input.Spec) {
 		t.Fatalf("round-tripped spec mismatch:\n got: %#v\nwant: %#v", roundTripped.Spec, input.Spec)
+	}
+}
+
+func TestLinodeNodeClassSpecConversionKubeletOnly(t *testing.T) {
+	t.Parallel()
+
+	maxPods := int32(110)
+	input := &LinodeNodeClass{
+		Spec: LinodeNodeClassSpec{
+			Kubelet: &KubeletConfiguration{MaxPods: &maxPods},
+		},
+	}
+	hub := &v1beta1.LinodeNodeClass{}
+	if err := input.ConvertTo(hub); err != nil {
+		t.Fatalf("converting kubelet-only spec to v1beta1: %v", err)
+	}
+	want := v1beta1.LinodeNodeClassSpec{
+		InstanceMode: &v1beta1.InstanceMode{
+			Kubelet: &v1beta1.KubeletConfiguration{MaxPods: &maxPods},
+		},
+	}
+	if !reflect.DeepEqual(hub.Spec, want) {
+		t.Fatalf("converted kubelet-only spec mismatch:\n got: %#v\nwant: %#v", hub.Spec, want)
+	}
+
+	roundTripped := &LinodeNodeClass{}
+	if err := roundTripped.ConvertFrom(hub); err != nil {
+		t.Fatalf("converting kubelet-only spec from v1beta1: %v", err)
+	}
+	if !reflect.DeepEqual(roundTripped.Spec, input.Spec) {
+		t.Fatalf("round-tripped kubelet-only spec mismatch:\n got: %#v\nwant: %#v", roundTripped.Spec, input.Spec)
 	}
 }
 

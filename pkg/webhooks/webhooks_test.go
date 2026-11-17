@@ -64,10 +64,10 @@ func convert(t *testing.T, h http.Handler, desiredVersion string, in map[string]
 func nodeClass(version string) map[string]any {
 	spec := map[string]any{
 		"tags": []any{"tag"},
-		"kubelet": map[string]any{
-			"maxPods":        float64(110),
-			"systemReserved": map[string]any{"cpu": "100m"},
-		},
+	}
+	kubelet := map[string]any{
+		"maxPods":        float64(110),
+		"systemReserved": map[string]any{"cpu": "100m"},
 	}
 	instanceFields := map[string]any{
 		"image":          "linode/ubuntu24.04",
@@ -75,10 +75,12 @@ func nodeClass(version string) map[string]any {
 		"firewallID":     float64(1234),
 	}
 	if version == "v1alpha1" {
+		spec["kubelet"] = kubelet
 		for k, v := range instanceFields {
 			spec[k] = v
 		}
 	} else {
+		instanceFields["kubelet"] = kubelet
 		spec["instanceMode"] = instanceFields
 	}
 	return map[string]any{

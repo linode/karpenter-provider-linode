@@ -87,7 +87,8 @@ type LinodeNodeClassSpec struct {
 	// swapSize is the size of the swap disk in MiB.
 	SwapSize *int `json:"swap_size,omitempty"`
 
-	// Kubelet defines args to be used when configuring kubelet on provisioned nodes.
+	// Kubelet is the legacy v1alpha1 field for kubelet settings. In v1beta1, set it under instanceMode.
+	// It defines args to be used when configuring kubelet on provisioned nodes.
 	// They are a subset of the upstream types, recognizing not all options may be supported.
 	// Wherever possible, the types and names should reflect the upstream kubelet types.
 	// +kubebuilder:validation:XValidation:message="evictionSoft OwnerKey does not have a matching evictionSoftGracePeriod",rule="has(self.evictionSoft) ? self.evictionSoft.all(e, (e in self.evictionSoftGracePeriod)):true"

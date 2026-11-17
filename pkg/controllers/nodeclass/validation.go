@@ -228,6 +228,9 @@ func instanceOnlyFieldsSet(spec *v1beta1.LinodeNodeClassSpec) []string {
 	if instanceMode.DiskEncryption != "" {
 		setFields = append(setFields, "diskEncryption")
 	}
+	if instanceMode.Kubelet != nil {
+		setFields = append(setFields, "kubelet")
+	}
 
 	return setFields
 }

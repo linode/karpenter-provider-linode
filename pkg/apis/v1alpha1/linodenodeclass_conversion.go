@@ -47,12 +47,6 @@ func Convert_v1alpha1_LinodeNodeClassSpec_To_v1beta1_LinodeNodeClassSpec(in *Lin
 	*out = v1beta1.LinodeNodeClassSpec{
 		Tags: in.Tags,
 	}
-	if in.Kubelet != nil {
-		out.Kubelet = new(v1beta1.KubeletConfiguration)
-		if err := Convert_v1alpha1_KubeletConfiguration_To_v1beta1_KubeletConfiguration(in.Kubelet, out.Kubelet, s); err != nil {
-			return err
-		}
-	}
 	if in.LKEK8sVersion != nil {
 		out.LKEMode = &v1beta1.LKEMode{LKEK8sVersion: in.LKEK8sVersion}
 	}
@@ -69,6 +63,12 @@ func Convert_v1alpha1_LinodeNodeClassSpec_To_v1beta1_LinodeNodeClassSpec(in *Lin
 		DiskEncryption:  in.DiskEncryption,
 		VPCID:           in.VPCID,
 		SwapSize:        in.SwapSize,
+	}
+	if in.Kubelet != nil {
+		out.InstanceMode.Kubelet = new(v1beta1.KubeletConfiguration)
+		if err := Convert_v1alpha1_KubeletConfiguration_To_v1beta1_KubeletConfiguration(in.Kubelet, out.InstanceMode.Kubelet, s); err != nil {
+			return err
+		}
 	}
 	if in.OSDisk != nil {
 		out.InstanceMode.OSDisk = new(v1beta1.InstanceDisk)
@@ -107,12 +107,6 @@ func Convert_v1beta1_LinodeNodeClassSpec_To_v1alpha1_LinodeNodeClassSpec(in *v1b
 	*out = LinodeNodeClassSpec{
 		Tags: in.Tags,
 	}
-	if in.Kubelet != nil {
-		out.Kubelet = new(KubeletConfiguration)
-		if err := Convert_v1beta1_KubeletConfiguration_To_v1alpha1_KubeletConfiguration(in.Kubelet, out.Kubelet, s); err != nil {
-			return err
-		}
-	}
 	if in.LKEMode != nil {
 		out.LKEK8sVersion = in.LKEMode.LKEK8sVersion
 	}
@@ -128,6 +122,12 @@ func Convert_v1beta1_LinodeNodeClassSpec_To_v1alpha1_LinodeNodeClassSpec(in *v1b
 	out.DiskEncryption = in.InstanceMode.DiskEncryption
 	out.VPCID = in.InstanceMode.VPCID
 	out.SwapSize = in.InstanceMode.SwapSize
+	if in.InstanceMode.Kubelet != nil {
+		out.Kubelet = new(KubeletConfiguration)
+		if err := Convert_v1beta1_KubeletConfiguration_To_v1alpha1_KubeletConfiguration(in.InstanceMode.Kubelet, out.Kubelet, s); err != nil {
+			return err
+		}
+	}
 
 	if in.InstanceMode.OSDisk != nil {
 		out.OSDisk = new(InstanceDisk)
@@ -175,5 +175,6 @@ func hasInstanceModeFields(spec *LinodeNodeClassSpec) bool {
 		spec.PlacementGroup != nil ||
 		spec.VPCID != nil ||
 		spec.IPv6Options != nil ||
-		spec.SwapSize != nil
+		spec.SwapSize != nil ||
+		spec.Kubelet != nil
 }

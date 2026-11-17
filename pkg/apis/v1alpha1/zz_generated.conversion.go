@@ -636,7 +636,7 @@ func autoConvert_v1alpha1_LinodeNodeClassSpec_To_v1beta1_LinodeNodeClassSpec(in 
 	// WARNING: in.VPCID requires manual conversion: does not exist in peer-type
 	// WARNING: in.IPv6Options requires manual conversion: does not exist in peer-type
 	// WARNING: in.SwapSize requires manual conversion: does not exist in peer-type
-	out.Kubelet = (*v1beta1.KubeletConfiguration)(unsafe.Pointer(in.Kubelet))
+	// WARNING: in.Kubelet requires manual conversion: does not exist in peer-type
 	// WARNING: in.LKEK8sVersion requires manual conversion: does not exist in peer-type
 	return nil
 }
@@ -645,7 +645,6 @@ func autoConvert_v1beta1_LinodeNodeClassSpec_To_v1alpha1_LinodeNodeClassSpec(in 
 	// WARNING: in.InstanceMode requires manual conversion: does not exist in peer-type
 	// WARNING: in.LKEMode requires manual conversion: does not exist in peer-type
 	out.Tags = *(*[]string)(unsafe.Pointer(&in.Tags))
-	out.Kubelet = (*KubeletConfiguration)(unsafe.Pointer(in.Kubelet))
 	return nil
 }
 

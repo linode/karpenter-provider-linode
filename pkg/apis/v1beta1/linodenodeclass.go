@@ -40,14 +40,6 @@ type LinodeNodeClassSpec struct {
 	// +optional
 	// +listType=set
 	Tags []string `json:"tags,omitempty"`
-
-	// Kubelet defines args to be used when configuring kubelet on provisioned nodes.
-	// They are a subset of the upstream types, recognizing not all options may be supported.
-	// Wherever possible, the types and names should reflect the upstream kubelet types.
-	// +kubebuilder:validation:XValidation:message="evictionSoft OwnerKey does not have a matching evictionSoftGracePeriod",rule="has(self.evictionSoft) ? self.evictionSoft.all(e, (e in self.evictionSoftGracePeriod)):true"
-	// +kubebuilder:validation:XValidation:message="evictionSoftGracePeriod OwnerKey does not have a matching evictionSoft",rule="has(self.evictionSoftGracePeriod) ? self.evictionSoftGracePeriod.all(e, (e in self.evictionSoft)):true"
-	// +optional
-	Kubelet *KubeletConfiguration `json:"kubelet,omitempty"`
 }
 
 // InstanceMode contains configuration for directly created Linode instances.
@@ -110,6 +102,14 @@ type InstanceMode struct {
 	// swapSize is the size of the swap disk in MiB.
 	// +optional
 	SwapSize *int `json:"swapSize,omitempty"`
+
+	// Kubelet defines args to be used when configuring kubelet on provisioned nodes.
+	// They are a subset of the upstream types, recognizing not all options may be supported.
+	// Wherever possible, the types and names should reflect the upstream kubelet types.
+	// +kubebuilder:validation:XValidation:message="evictionSoft OwnerKey does not have a matching evictionSoftGracePeriod",rule="has(self.evictionSoft) ? self.evictionSoft.all(e, (e in self.evictionSoftGracePeriod)):true"
+	// +kubebuilder:validation:XValidation:message="evictionSoftGracePeriod OwnerKey does not have a matching evictionSoft",rule="has(self.evictionSoftGracePeriod) ? self.evictionSoftGracePeriod.all(e, (e in self.evictionSoft)):true"
+	// +optional
+	Kubelet *KubeletConfiguration `json:"kubelet,omitempty"`
 }
 
 // LKEMode contains configuration for LKE node pools.
@@ -518,7 +518,7 @@ type LinodeNodeClass struct {
 // 2. A field is added to the hash calculation with an already-set value
 // 3. A field is removed from the hash calculations
 // 4. A hashed field moves to a different position in the spec structure.
-const LinodeNodeClassHashVersion = "v1alpha2"
+const LinodeNodeClassHashVersion = "v1alpha3"
 
 // Hash generates a hash of the LinodeNodeClass spec and annotations, excluding fields that can we update in-place (e.g. tags).
 // This is used to determine if a NodeClaim needs to be replaced due to changes in the NodeClass.
@@ -535,7 +535,10 @@ func (in *LinodeNodeClass) Hash() string {
 }
 
 func (in *LinodeNodeClass) KubeletConfiguration() *KubeletConfiguration {
-	return in.Spec.Kubelet
+	if in.Spec.InstanceMode == nil {
+		return nil
+	}
+	return in.Spec.InstanceMode.Kubelet
 }
 
 func (in *LinodeNodeClass) GetConditions() []status.Condition {
