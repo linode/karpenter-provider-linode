@@ -1044,6 +1044,151 @@ var _ = Describe("LKENodeProvider", func() {
 					Entry("after scaling an existing pool", 1),
 				)
 
+				DescribeTable("should not claim ineligible Enterprise workers", func(candidateTags []string, clusterID int) {
+					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+					Expect(err).ToNot(HaveOccurred())
+					cheapestType, err := utils.CheapestInstanceType(instanceTypes)
+					Expect(err).ToNot(HaveOccurred())
+
+					poolID, instanceID := 202, 3002
+					linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), &linodego.LKENodePool{
+						ID: poolID, Type: cheapestType.Name, Count: 1, Tags: enterprisePoolTags(nodePoolObj.Name),
+					})
+					linodeEnv.LinodeAPI.Instances.Store(instanceID, linodego.Instance{
+						ID: instanceID, Type: cheapestType.Name, Tags: candidateTags,
+						LKEClusterID: clusterID, Created: new(time.Now()),
+					})
+					// End Create once it requests capacity instead of claiming the ineligible worker.
+					linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Error.Set(&linodego.Error{Code: http.StatusBadRequest, Message: "scale disabled"})
+
+					node, err := enterpriseProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+					Expect(err).To(HaveOccurred())
+					Expect(node).To(BeNil())
+					worker, err := linodeEnv.LinodeAPI.GetInstance(ctx, instanceID)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(worker.Tags).To(Equal(candidateTags))
+				},
+					Entry("from another pool", enterpriseInstanceTags("other-pool", 203), fake.DefaultClusterID),
+					Entry("from another cluster", append(enterprisePoolTags("lke-pool"), "nodepool=202", "lke999"), 999),
+					Entry("without a managed tag", []string{"nodepool=202", fmt.Sprintf("lke%d", fake.DefaultClusterID)}, fake.DefaultClusterID),
+					Entry("with managed=false", []string{v1.LabelLKEManaged + "=false", "nodepool=202", fmt.Sprintf("lke%d", fake.DefaultClusterID)}, fake.DefaultClusterID),
+				)
+
+				It("should preserve distinct worker ownership across concurrent pool claims", func() {
+					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+					Expect(err).ToNot(HaveOccurred())
+					cheapestType, err := utils.CheapestInstanceType(instanceTypes)
+					Expect(err).ToNot(HaveOccurred())
+
+					poolID, otherPoolID, instanceID := 210, 211, 3100
+					linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID), &linodego.LKENodePool{
+						ID: poolID, Type: cheapestType.Name, Count: 1, Tags: enterprisePoolTags(nodePoolObj.Name),
+						Linodes: []linodego.LKENodePoolLinode{{InstanceID: instanceID}},
+					})
+					linodeEnv.LinodeAPI.NodePools.Store(fmt.Sprintf("%d-%d", fake.DefaultClusterID, otherPoolID), &linodego.LKENodePool{
+						ID: otherPoolID, Type: cheapestType.Name,
+						Tags: enterpriseInstanceTags("other-pool", otherPoolID),
+					})
+					linodeEnv.LinodeAPI.Instances.Store(instanceID, linodego.Instance{
+						ID: instanceID, Type: cheapestType.Name, Tags: enterpriseInstanceTags(nodePoolObj.Name, poolID),
+						LKEClusterID: fake.DefaultClusterID, Created: new(time.Now()),
+					})
+					otherClaim := nodeClaim.DeepCopy()
+					otherClaim.Name = "other-claim"
+					otherClaim.Labels[karpv1.NodePoolLabelKey] = "other-pool"
+					provider := lke.NewDefaultProvider(
+						fake.DefaultClusterID, linodego.LKEVersionEnterprise, fake.DefaultClusterName, fake.DefaultRegion,
+						recorder, linodeEnv.LinodeAPI, linodeEnv.UnavailableOfferingsCache, linodeEnv.NodePoolCache,
+						lke.ProviderConfig{CreateDeadline: 5 * time.Second, RetryDelay: time.Millisecond},
+					)
+
+					createCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+					var creates sync.WaitGroup
+					defer func() {
+						cancel()
+						creates.Wait()
+					}()
+					snapshots := make(chan struct{}, 2)
+					resumeFirst, resumeSecond := make(chan struct{}), make(chan struct{})
+					gates := make(chan chan struct{}, 2)
+					gates <- resumeFirst
+					gates <- resumeSecond
+					linodeEnv.LinodeAPI.AfterListInstances = func(listCtx context.Context, opts *linodego.ListOptions) {
+						if strings.Contains(opts.Filter, v1.NodeClaimTagKey) {
+							return
+						}
+						select {
+						case gate := <-gates:
+							snapshots <- struct{}{}
+							select {
+							case <-gate:
+							case <-listCtx.Done():
+							}
+						default:
+						}
+					}
+					type result struct {
+						node *instance.Instance
+						err  error
+					}
+					firstResult, secondResult := make(chan result, 1), make(chan result, 1)
+					creates.Add(1)
+					go func() {
+						defer creates.Done()
+						node, err := provider.Create(createCtx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+						firstResult <- result{node: node, err: err}
+					}()
+					select {
+					case <-snapshots:
+					case <-createCtx.Done():
+						Fail("first claim did not reach candidate discovery")
+					}
+					creates.Add(1)
+					go func() {
+						defer creates.Done()
+						node, err := provider.Create(createCtx, nodeClass, otherClaim, map[string]string{}, instanceTypes)
+						secondResult <- result{node: node, err: err}
+					}()
+					select {
+					case <-snapshots:
+					case <-createCtx.Done():
+						Fail("second claim did not reach candidate discovery")
+					}
+					// Capture both unclaimed snapshots, then let the first claim verify
+					// before the second can write stale ownership tags.
+					close(resumeFirst)
+					var first, second result
+					select {
+					case first = <-firstResult:
+					case <-createCtx.Done():
+						Fail("first claim did not complete")
+					}
+					Expect(first.err).ToNot(HaveOccurred())
+					Expect(first.node).ToNot(BeNil())
+					Expect(first.node.ID).To(Equal(instanceID))
+					close(resumeSecond)
+					select {
+					case second = <-secondResult:
+					case <-createCtx.Done():
+						Fail("second claim did not complete")
+					}
+					Expect(second.err).ToNot(HaveOccurred())
+					Expect(second.node).ToNot(BeNil())
+					Expect(second.node.ID).ToNot(Equal(first.node.ID))
+					otherPool, err := linodeEnv.LinodeAPI.GetLKENodePool(ctx, fake.DefaultClusterID, otherPoolID)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(otherPool.Linodes).To(ContainElement(HaveField("InstanceID", second.node.ID)))
+					for claimName, workerID := range map[string]int{nodeClaim.Name: first.node.ID, otherClaim.Name: second.node.ID} {
+						worker, err := linodeEnv.LinodeAPI.GetInstance(ctx, workerID)
+						Expect(err).ToNot(HaveOccurred())
+						Expect(worker.Tags).To(ContainElement(utils.NodeClaimTag(claimName)))
+					}
+				})
+
 				It("should surface instance lookup errors", func() {
 					linodeEnv.LinodeAPI.ListInstancesBehavior.Error.Set(&linodego.Error{Code: http.StatusServiceUnavailable, Message: retryMessage})
 
@@ -1916,7 +2061,7 @@ var _ = Describe("LKENodeProvider", func() {
 				enterpriseProvider = newEnterpriseProvider(linodeEnv, recorder)
 			})
 
-			It("should return all nodes from all pools", func() {
+			DescribeTable("should return only managed nodes from all pools", func(excludedTags []string, excludedClusterID int) {
 				poolID1 := 331
 				poolID2 := 332
 				instanceID1 := 4301
@@ -1947,6 +2092,9 @@ var _ = Describe("LKENodeProvider", func() {
 				inst2 := linodego.Instance{ID: instanceID2, Tags: enterpriseInstanceTags(nodePoolObj.Name, poolID2), Created: &now, LKEClusterID: fake.DefaultClusterID, Label: "node-4302"}
 				linodeEnv.LinodeAPI.Instances.Store(instanceID1, inst1)
 				linodeEnv.LinodeAPI.Instances.Store(instanceID2, inst2)
+				linodeEnv.LinodeAPI.Instances.Store(4303, linodego.Instance{
+					ID: 4303, Tags: excludedTags, LKEClusterID: excludedClusterID,
+				})
 
 				nodes, err := enterpriseProvider.List(ctx)
 				Expect(err).ToNot(HaveOccurred())
@@ -1955,7 +2103,11 @@ var _ = Describe("LKENodeProvider", func() {
 				instanceIDs := lo.Map(nodes, func(n *instance.Instance, _ int) int { return n.ID })
 				Expect(instanceIDs).To(ContainElement(instanceID1))
 				Expect(instanceIDs).To(ContainElement(instanceID2))
-			})
+			},
+				Entry("excluding seed workers", []string{fmt.Sprintf("lke%d", fake.DefaultClusterID)}, fake.DefaultClusterID),
+				Entry("excluding managed=false", []string{v1.LabelLKEManaged + "=false", fmt.Sprintf("lke%d", fake.DefaultClusterID)}, fake.DefaultClusterID),
+				Entry("excluding another cluster", []string{v1.LabelLKEManaged + "=true", "lke999"}, 999),
+			)
 
 			It("should return empty list when no pools exist", func() {
 				nodes, err := enterpriseProvider.List(ctx)

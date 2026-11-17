@@ -166,6 +166,8 @@ type LinodeClient struct {
 	ClusterVersion string
 	// AfterListLKENodePools runs after the fake has captured the list result.
 	AfterListLKENodePools func(context.Context)
+	// AfterListInstances runs after the fake has captured the filtered list result.
+	AfterListInstances func(context.Context, *linodego.ListOptions)
 }
 
 func (l *LinodeClient) GetType(_ context.Context, typeID string) (*linodego.LinodeType, error) {
@@ -249,6 +251,7 @@ func (l *LinodeClient) Reset() {
 	l.DeleteLKENodePoolNodeBehavior.Reset()
 	l.UpdateInstanceBehavior.Reset()
 	l.AfterListLKENodePools = nil
+	l.AfterListInstances = nil
 	l.ClusterTier = DefaultClusterTier
 	l.ClusterVersion = DefaultClusterVersion
 }
@@ -294,7 +297,7 @@ func (l *LinodeClient) CreateInstance(_ context.Context, opts linodego.InstanceC
 	return *instance, err
 }
 
-func (l *LinodeClient) ListInstances(_ context.Context, opts *linodego.ListOptions) ([]linodego.Instance, error) {
+func (l *LinodeClient) ListInstances(ctx context.Context, opts *linodego.ListOptions) ([]linodego.Instance, error) {
 	instances, err := l.ListInstancesBehavior.Invoke(opts, func(opts *linodego.ListOptions) (*[]linodego.Instance, error) {
 		var instances []linodego.Instance
 		requiredTags := extractTagsFromFilter(opts)
@@ -311,6 +314,9 @@ func (l *LinodeClient) ListInstances(_ context.Context, opts *linodego.ListOptio
 	})
 	if instances == nil {
 		return nil, err
+	}
+	if l.AfterListInstances != nil {
+		l.AfterListInstances(ctx, opts)
 	}
 	return *instances, err
 }
