@@ -543,7 +543,8 @@ func (p *DefaultProvider) findClaimableInstanceStandard(ctx context.Context, poo
 
 func (p *DefaultProvider) findClaimableInstanceEnterprise(ctx context.Context, pool *linodego.LKENodePool) (*linodego.Instance, error) {
 	// Use Linode's automatic nodepool=<id> tag for enterprise discovery
-	filter := linodego.Filter{}
+	// Repeated tag predicates need an explicit conjunction to avoid overwriting each other.
+	filter := linodego.Filter{Operator: "+and"}
 	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("nodepool=%d", pool.ID))
 	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("lke%d", p.clusterID))
 	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%v=%v", v1alpha1.LabelLKEManaged, "true"))
@@ -673,7 +674,7 @@ func (p *DefaultProvider) Get(ctx context.Context, id string, opts ...instance.O
 }
 
 func (p *DefaultProvider) List(ctx context.Context) ([]*instance.Instance, error) {
-	filter := linodego.Filter{}
+	filter := linodego.Filter{Operator: "+and"}
 	filter.AddField(linodego.Contains, "tags", fmt.Sprintf("%s=%s", v1alpha1.LabelLKEManaged, "true"))
 	if p.clusterTier == linodego.LKEVersionEnterprise {
 		filter.AddField(linodego.Contains, "tags", fmt.Sprintf("lke%d", p.clusterID))
