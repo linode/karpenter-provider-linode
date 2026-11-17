@@ -95,12 +95,12 @@ lint-chart target_branch='main':
 vulncheck: tools
 	govulncheck ./pkg/...
 
-# Run unit tests
+# Run unit tests with race detection
 test: tools
 	#!/usr/bin/env bash
 	set -euo pipefail
 	export KUBEBUILDER_ASSETS="$(setup-envtest use "{{ ENVTEST_K8S_VERSION }}" --bin-dir "{{ ENVTEST_BIN_DIR }}" -p path)"
-	go test ./pkg/... -cover -coverprofile=coverage.out -outputdir=. -coverpkg=./...
+	go test -race ./pkg/... -cover -coverprofile=coverage.out -outputdir=. -coverpkg=./...
 
 # Run randomized, racing tests until a failure occurs
 deflake:

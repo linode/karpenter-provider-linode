@@ -1107,11 +1107,7 @@ var _ = Describe("LKENodeProvider", func() {
 					)
 
 					createCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-					var creates sync.WaitGroup
-					defer func() {
-						cancel()
-						creates.Wait()
-					}()
+					defer cancel()
 					snapshots := make(chan struct{}, 2)
 					resumeFirst, resumeSecond := make(chan struct{}), make(chan struct{})
 					gates := make(chan chan struct{}, 2)
@@ -1135,24 +1131,21 @@ var _ = Describe("LKENodeProvider", func() {
 						node *instance.Instance
 						err  error
 					}
-					firstResult, secondResult := make(chan result, 1), make(chan result, 1)
-					creates.Add(1)
-					go func() {
-						defer creates.Done()
-						node, err := provider.Create(createCtx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
-						firstResult <- result{node: node, err: err}
-					}()
+					firstResult, stopFirst := test.StartAsync(createCtx, func(asyncCtx context.Context) result {
+						node, err := provider.Create(asyncCtx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+						return result{node: node, err: err}
+					})
+					defer stopFirst()
 					select {
 					case <-snapshots:
 					case <-createCtx.Done():
 						Fail("first claim did not reach candidate discovery")
 					}
-					creates.Add(1)
-					go func() {
-						defer creates.Done()
-						node, err := provider.Create(createCtx, nodeClass, otherClaim, map[string]string{}, instanceTypes)
-						secondResult <- result{node: node, err: err}
-					}()
+					secondResult, stopSecond := test.StartAsync(createCtx, func(asyncCtx context.Context) result {
+						node, err := provider.Create(asyncCtx, nodeClass, otherClaim, map[string]string{}, instanceTypes)
+						return result{node: node, err: err}
+					})
+					defer stopSecond()
 					select {
 					case <-snapshots:
 					case <-createCtx.Done():
@@ -2199,20 +2192,11 @@ var _ = Describe("LKENodeProvider", func() {
 					lke.ProviderConfig{CreateDeadline: 5 * time.Second, RetryDelay: time.Millisecond},
 				)
 
-				deleteResult := make(chan error, 1)
-				go func() {
-					deleteResult <- provider.Delete(ctx, strconv.Itoa(instanceID))
-				}()
-				deleteFinished := false
-				defer func() {
-					resumeList()
-					if !deleteFinished {
-						select {
-						case <-deleteResult:
-						case <-time.After(5 * time.Second):
-						}
-					}
-				}()
+				deleteResult, stopDelete := test.StartAsync(ctx, func(asyncCtx context.Context) error {
+					return provider.Delete(asyncCtx, strconv.Itoa(instanceID))
+				})
+				defer stopDelete()
+				defer resumeList()
 				select {
 				case <-firstListRead:
 				case <-time.After(5 * time.Second):
@@ -2228,7 +2212,6 @@ var _ = Describe("LKENodeProvider", func() {
 				resumeList()
 				select {
 				case err := <-deleteResult:
-					deleteFinished = true
 					Expect(err).ToNot(HaveOccurred())
 				case <-time.After(5 * time.Second):
 					Fail("Delete did not finish after the stale lookup was released")
