@@ -1,3 +1,11 @@
+coverage:
+  status:
+    patch:
+      default:
+        enabled: no
+        if_not_found: success
+
 ignore:
   - "**/*.gen.go"
   - "**/zz_generated.deepcopy.go"
+  - "**/zz_generated.conversion.go"

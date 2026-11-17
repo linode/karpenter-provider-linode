@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/operator/injection"
 	nodeclaimutils "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
 
-	v1alpha1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 )
 
 type Controller struct {
@@ -41,18 +41,18 @@ func NewController(kubeClient client.Client) *Controller {
 	return &Controller{kubeClient: kubeClient}
 }
 
-func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) (reconcile.Result, error) {
+func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass) (reconcile.Result, error) {
 	ctx = injection.WithControllerName(ctx, "nodeclass.hash")
 
 	stored := nodeClass.DeepCopy()
-	if nodeClass.Annotations[v1alpha1.AnnotationLinodeNodeClassHashVersion] != v1alpha1.LinodeNodeClassHashVersion {
+	if nodeClass.Annotations[v1beta1.AnnotationLinodeNodeClassHashVersion] != v1beta1.LinodeNodeClassHashVersion {
 		if err := c.updateNodeClaimHash(ctx, nodeClass); err != nil {
 			return reconcile.Result{}, err
 		}
 	}
 	nodeClass.Annotations = lo.Assign(nodeClass.Annotations, map[string]string{
-		v1alpha1.AnnotationLinodeNodeClassHash:        nodeClass.Hash(),
-		v1alpha1.AnnotationLinodeNodeClassHashVersion: v1alpha1.LinodeNodeClassHashVersion,
+		v1beta1.AnnotationLinodeNodeClassHash:        nodeClass.Hash(),
+		v1beta1.AnnotationLinodeNodeClassHashVersion: v1beta1.LinodeNodeClassHashVersion,
 	})
 
 	if !equality.Semantic.DeepEqual(stored, nodeClass) {
@@ -66,7 +66,7 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return controllerruntime.NewControllerManagedBy(m).
 		Named("nodeclass.hash").
-		For(&v1alpha1.LinodeNodeClass{}).
+		For(&v1beta1.LinodeNodeClass{}).
 		WithOptions(controller.Options{
 			RateLimiter:             reasonable.RateLimiter(),
 			MaxConcurrentReconciles: 10,
@@ -74,7 +74,7 @@ func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 		Complete(reconcile.AsReconciler(m.GetClient(), c))
 }
 
-func (c *Controller) updateNodeClaimHash(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) error {
+func (c *Controller) updateNodeClaimHash(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass) error {
 	nodeClaims := &karpv1.NodeClaimList{}
 	if err := c.kubeClient.List(ctx, nodeClaims, nodeclaimutils.ForNodeClass(nodeClass)); err != nil {
 		return err
@@ -85,13 +85,13 @@ func (c *Controller) updateNodeClaimHash(ctx context.Context, nodeClass *v1alpha
 		nc := &nodeClaims.Items[i]
 		stored := nc.DeepCopy()
 
-		if nc.Annotations[v1alpha1.AnnotationLinodeNodeClassHashVersion] != v1alpha1.LinodeNodeClassHashVersion {
+		if nc.Annotations[v1beta1.AnnotationLinodeNodeClassHashVersion] != v1beta1.LinodeNodeClassHashVersion {
 			nc.Annotations = lo.Assign(nc.Annotations, map[string]string{
-				v1alpha1.AnnotationLinodeNodeClassHashVersion: v1alpha1.LinodeNodeClassHashVersion,
+				v1beta1.AnnotationLinodeNodeClassHashVersion: v1beta1.LinodeNodeClassHashVersion,
 			})
 			if nc.StatusConditions().Get(karpv1.ConditionTypeDrifted) == nil {
 				nc.Annotations = lo.Assign(nc.Annotations, map[string]string{
-					v1alpha1.AnnotationLinodeNodeClassHash: nodeClass.Hash(),
+					v1beta1.AnnotationLinodeNodeClassHash: nodeClass.Hash(),
 				})
 			}
 			if !equality.Semantic.DeepEqual(stored, nc) {
