@@ -21,6 +21,7 @@ import (
 	"github.com/linode/linodego/v2"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/samber/lo"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -518,13 +519,21 @@ type LinodeNodeClass struct {
 // 2. A field is added to the hash calculation with an already-set value
 // 3. A field is removed from the hash calculations
 // 4. A hashed field moves to a different position in the spec structure.
-const LinodeNodeClassHashVersion = "v1alpha3"
+const LinodeNodeClassHashVersion = "v1alpha4"
 
 // Hash generates a hash of the LinodeNodeClass spec and annotations, excluding fields that can we update in-place (e.g. tags).
 // This is used to determine if a NodeClaim needs to be replaced due to changes in the NodeClass.
 func (in *LinodeNodeClass) Hash() string {
 	hashableSpec := in.Spec
 	hashableSpec.Tags = nil // Tags are not part of the hash calculation since we do in-place updates for it
+	// Empty mode blocks are equivalent to absent ones: clients that don't know about the fields drop empty blocks on save.
+	// Semantic equality treats nil and empty slices as equal.
+	if hashableSpec.InstanceMode != nil && equality.Semantic.DeepEqual(*hashableSpec.InstanceMode, InstanceMode{}) {
+		hashableSpec.InstanceMode = nil
+	}
+	if hashableSpec.LKEMode != nil && equality.Semantic.DeepEqual(*hashableSpec.LKEMode, LKEMode{}) {
+		hashableSpec.LKEMode = nil
+	}
 	return fmt.Sprint(lo.Must(hashstructure.Hash([]interface{}{
 		hashableSpec,
 	}, hashstructure.FormatV2, &hashstructure.HashOptions{
