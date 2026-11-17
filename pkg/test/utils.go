@@ -13,3 +13,27 @@ limitations under the License.
 */
 
 package test
+
+import (
+	"context"
+
+	"github.com/onsi/ginkgo/v2"
+)
+
+// StartAsync runs fn in a goroutine and returns its buffered result channel.
+// Defer cleanup to cancel the operation, discard any unread result, and wait
+// for the goroutine to exit. The operation must honor context cancellation.
+func StartAsync[T any](ctx context.Context, fn func(context.Context) T) (results <-chan T, cleanup func()) {
+	runCtx, cancel := context.WithCancel(ctx)
+	result := make(chan T, 1)
+	go func() {
+		defer close(result)
+		defer ginkgo.GinkgoRecover()
+		result <- fn(runCtx)
+	}()
+	return result, func() {
+		cancel()
+		for range result {
+		}
+	}
+}
