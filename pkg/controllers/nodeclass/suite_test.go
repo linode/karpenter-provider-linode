@@ -29,7 +29,7 @@ import (
 	karpv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
 	"github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclass"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
@@ -45,7 +45,7 @@ import (
 var ctx context.Context
 var env *coretest.Environment
 var linodeEnv *test.Environment
-var nodeClass *v1alpha1.LinodeNodeClass
+var nodeClass *v1beta1.LinodeNodeClass
 var controller *nodeclass.Controller
 var cloudProvider *cloudprovider.CloudProvider
 
@@ -117,7 +117,7 @@ var _ = Describe("NodeClass Termination", func() {
 			nodeClaims = append(nodeClaims, nc)
 		}
 
-		controllerutil.AddFinalizer(nodeClass, v1alpha1.TerminationFinalizer)
+		controllerutil.AddFinalizer(nodeClass, v1beta1.TerminationFinalizer)
 		ExpectApplied(ctx, env.Client, nodeClass)
 		ExpectObjectReconciled(ctx, env.Client, controller, nodeClass)
 

@@ -31,7 +31,7 @@ import (
 	testv1alpha1 "sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
@@ -89,6 +89,8 @@ var _ = Describe("InstanceProvider", func() {
 	BeforeEach(func() {
 		nodeClass = test.LinodeNodeClass()
 		nodePool = coretest.NodePool(karpv1.NodePool{
+			// Keep the name short: Linode limits tags to 50 characters and the nodepool tag is "karpenter.sh/nodepool=<name>".
+			ObjectMeta: metav1.ObjectMeta{Name: "test-nodepool"},
 			Spec: karpv1.NodePoolSpec{
 				Template: karpv1.NodeClaimTemplate{
 					Spec: karpv1.NodeClaimTemplateSpec{

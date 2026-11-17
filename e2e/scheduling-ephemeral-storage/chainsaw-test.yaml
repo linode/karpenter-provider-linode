@@ -183,6 +183,6 @@ spec:
       try:
       - delete:
           ref:
-            apiVersion: karpenter.k8s.linode/v1alpha1
+            apiVersion: karpenter.k8s.linode/v1beta1
             kind: LinodeNodeClass
             name: storage-test

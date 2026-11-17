@@ -24,6 +24,7 @@ import (
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	clock "k8s.io/utils/clock/testing"
 	karpv1 "sigs.k8s.io/karpenter/pkg/apis/v1"
@@ -37,7 +38,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/utils/resources"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
 	"github.com/linode/karpenter-provider-linode/pkg/operator/options"
@@ -107,6 +108,8 @@ var _ = Describe("InstanceTypeProvider", func() {
 		)
 		nodeClass.StatusConditions().SetTrue(status.ConditionReady)
 		nodePool = coretest.NodePool(karpv1.NodePool{
+			// Keep the name short: Linode limits tags to 50 characters and the nodepool tag is "karpenter.sh/nodepool=<name>".
+			ObjectMeta: metav1.ObjectMeta{Name: "test-nodepool"},
 			Spec: karpv1.NodePoolSpec{
 				Template: karpv1.NodeClaimTemplate{
 					Spec: karpv1.NodeClaimTemplateSpec{
@@ -244,38 +247,40 @@ var _ = Describe("InstanceTypeProvider", func() {
 		})
 		Context("System Reserved Resources", func() {
 			It("should use defaults when no kubelet is specified", func() {
-				nodeClass.Spec.Kubelet = &v1.KubeletConfiguration{}
+				nodeClass.Spec.InstanceMode = &v1.InstanceMode{Kubelet: &v1.KubeletConfiguration{}}
 				it := instancetype.NewInstanceType(ctx,
 					&info,
 					fake.DefaultRegion,
-					nodeClass.Spec.Kubelet.MaxPods,
-					nodeClass.Spec.Kubelet.PodsPerCore,
-					nodeClass.Spec.Kubelet.KubeReserved,
-					nodeClass.Spec.Kubelet.SystemReserved,
-					nodeClass.Spec.Kubelet.EvictionHard,
-					nodeClass.Spec.Kubelet.EvictionSoft,
+					nodeClass.Spec.InstanceMode.Kubelet.MaxPods,
+					nodeClass.Spec.InstanceMode.Kubelet.PodsPerCore,
+					nodeClass.Spec.InstanceMode.Kubelet.KubeReserved,
+					nodeClass.Spec.InstanceMode.Kubelet.SystemReserved,
+					nodeClass.Spec.InstanceMode.Kubelet.EvictionHard,
+					nodeClass.Spec.InstanceMode.Kubelet.EvictionSoft,
 				)
 				Expect(it.Overhead.SystemReserved.Cpu().String()).To(Equal("0"))
 				Expect(it.Overhead.SystemReserved.Memory().String()).To(Equal("0"))
 				Expect(it.Overhead.SystemReserved.StorageEphemeral().String()).To(Equal("0"))
 			})
 			It("should override system reserved cpus when specified", func() {
-				nodeClass.Spec.Kubelet = &v1.KubeletConfiguration{
-					SystemReserved: map[string]string{
-						string(corev1.ResourceCPU):              "2",
-						string(corev1.ResourceMemory):           "20Gi",
-						string(corev1.ResourceEphemeralStorage): "10Gi",
+				nodeClass.Spec.InstanceMode = &v1.InstanceMode{
+					Kubelet: &v1.KubeletConfiguration{
+						SystemReserved: map[string]string{
+							string(corev1.ResourceCPU):              "2",
+							string(corev1.ResourceMemory):           "20Gi",
+							string(corev1.ResourceEphemeralStorage): "10Gi",
+						},
 					},
 				}
 				it := instancetype.NewInstanceType(ctx,
 					&info,
 					fake.DefaultRegion,
-					nodeClass.Spec.Kubelet.MaxPods,
-					nodeClass.Spec.Kubelet.PodsPerCore,
-					nodeClass.Spec.Kubelet.KubeReserved,
-					nodeClass.Spec.Kubelet.SystemReserved,
-					nodeClass.Spec.Kubelet.EvictionHard,
-					nodeClass.Spec.Kubelet.EvictionSoft,
+					nodeClass.Spec.InstanceMode.Kubelet.MaxPods,
+					nodeClass.Spec.InstanceMode.Kubelet.PodsPerCore,
+					nodeClass.Spec.InstanceMode.Kubelet.KubeReserved,
+					nodeClass.Spec.InstanceMode.Kubelet.SystemReserved,
+					nodeClass.Spec.InstanceMode.Kubelet.EvictionHard,
+					nodeClass.Spec.InstanceMode.Kubelet.EvictionSoft,
 				)
 				Expect(it.Overhead.SystemReserved.Cpu().String()).To(Equal("2"))
 				Expect(it.Overhead.SystemReserved.Memory().String()).To(Equal("20Gi"))
@@ -335,9 +340,11 @@ var _ = Describe("InstanceTypeProvider", func() {
 		It("should include kubelet settings in the instance type cache key", func() {
 			resolver := instancetype.NewDefaultResolver(fake.DefaultRegion)
 			originalKey := resolver.CacheKey(nodeClass)
-			nodeClass.Spec.Kubelet = &v1.KubeletConfiguration{
-				KubeReserved: map[string]string{
-					string(corev1.ResourceEphemeralStorage): "2Gi",
+			nodeClass.Spec.InstanceMode = &v1.InstanceMode{
+				Kubelet: &v1.KubeletConfiguration{
+					KubeReserved: map[string]string{
+						string(corev1.ResourceEphemeralStorage): "2Gi",
+					},
 				},
 			}
 

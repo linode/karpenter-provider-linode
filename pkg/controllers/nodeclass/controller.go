@@ -43,7 +43,7 @@ import (
 	nodeclaimutils "sigs.k8s.io/karpenter/pkg/utils/nodeclaim"
 	"sigs.k8s.io/karpenter/pkg/utils/result"
 
-	"github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	"github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 	sdk "github.com/linode/karpenter-provider-linode/pkg/linode"
 	"github.com/linode/karpenter-provider-linode/pkg/providers/instancetype"
 )
@@ -53,7 +53,7 @@ type Controller struct {
 	recorder    events.Recorder
 	region      string
 	validation  *Validation
-	reconcilers []reconcile.TypedReconciler[*v1alpha1.LinodeNodeClass]
+	reconcilers []reconcile.TypedReconciler[*v1beta1.LinodeNodeClass]
 }
 
 func NewController(
@@ -82,7 +82,7 @@ func NewController(
 		recorder:   recorder,
 		region:     region,
 		validation: validation,
-		reconcilers: []reconcile.TypedReconciler[*v1alpha1.LinodeNodeClass]{
+		reconcilers: []reconcile.TypedReconciler[*v1beta1.LinodeNodeClass]{
 			validation,
 		},
 	}
@@ -92,15 +92,15 @@ func (c *Controller) Name() string {
 	return "nodeclass"
 }
 
-func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) (reconcile.Result, error) {
+func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass) (reconcile.Result, error) {
 	ctx = injection.WithControllerName(ctx, c.Name())
 
 	if !nodeClass.GetDeletionTimestamp().IsZero() {
 		return c.finalize(ctx, nodeClass)
 	}
-	if !controllerutil.ContainsFinalizer(nodeClass, v1alpha1.TerminationFinalizer) {
+	if !controllerutil.ContainsFinalizer(nodeClass, v1beta1.TerminationFinalizer) {
 		stored := nodeClass.DeepCopy()
-		controllerutil.AddFinalizer(nodeClass, v1alpha1.TerminationFinalizer)
+		controllerutil.AddFinalizer(nodeClass, v1beta1.TerminationFinalizer)
 
 		// We use client.MergeFromWithOptimisticLock because patching a list with a JSON merge patch
 		// can cause races due to the fact that it fully replaces the list on a change
@@ -140,7 +140,7 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1alpha1.LinodeNo
 	return result.Min(results...), nil
 }
 
-func (c *Controller) finalize(ctx context.Context, nodeClass *v1alpha1.LinodeNodeClass) (reconcile.Result, error) {
+func (c *Controller) finalize(ctx context.Context, nodeClass *v1beta1.LinodeNodeClass) (reconcile.Result, error) {
 	stored := nodeClass.DeepCopy()
 	nodeClaims := &karpv1.NodeClaimList{}
 	if err := c.kubeClient.List(ctx, nodeClaims, nodeclaimutils.ForNodeClass(nodeClass)); err != nil {
@@ -150,7 +150,7 @@ func (c *Controller) finalize(ctx context.Context, nodeClass *v1alpha1.LinodeNod
 		c.recorder.Publish(WaitingOnNodeClaimTerminationEvent(nodeClass, lo.Map(nodeClaims.Items, func(nc karpv1.NodeClaim, _ int) string { return nc.Name })))
 		return reconcile.Result{RequeueAfter: time.Minute * 10}, nil // periodically fire the event
 	}
-	controllerutil.RemoveFinalizer(nodeClass, v1alpha1.TerminationFinalizer)
+	controllerutil.RemoveFinalizer(nodeClass, v1beta1.TerminationFinalizer)
 	if !equality.Semantic.DeepEqual(stored, nodeClass) {
 		// We use client.MergeFromWithOptimisticLock because patching a list with a JSON merge patch
 		// can cause races due to the fact that it fully replaces the list on a change
@@ -170,7 +170,7 @@ func (c *Controller) finalize(ctx context.Context, nodeClass *v1alpha1.LinodeNod
 func (c *Controller) Register(_ context.Context, m manager.Manager) error {
 	return controllerruntime.NewControllerManagedBy(m).
 		Named(c.Name()).
-		For(&v1alpha1.LinodeNodeClass{}).
+		For(&v1beta1.LinodeNodeClass{}).
 		Watches(
 			&karpv1.NodeClaim{},
 			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, o client.Object) []reconcile.Request {

@@ -35,7 +35,7 @@ import (
 	"sigs.k8s.io/karpenter/pkg/test/v1alpha1"
 
 	"github.com/linode/karpenter-provider-linode/pkg/apis"
-	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1alpha1"
+	v1 "github.com/linode/karpenter-provider-linode/pkg/apis/v1beta1"
 	"github.com/linode/karpenter-provider-linode/pkg/cloudprovider"
 	"github.com/linode/karpenter-provider-linode/pkg/controllers/nodeclaim/garbagecollection"
 	"github.com/linode/karpenter-provider-linode/pkg/fake"
