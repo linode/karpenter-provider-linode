@@ -183,6 +183,7 @@ func (v *Validation) validateLKEUnsupportedFields(ctx context.Context, nodeClass
 	return reconcile.TerminalError(fmt.Errorf("validating nodeclass: instance-only fields are not supported in LKE mode: %s", strings.Join(setFields, ", ")))
 }
 
+//nolint:cyclop // as simple as possible
 func instanceOnlyFieldsSet(spec *v1beta1.LinodeNodeClassSpec) []string {
 	var setFields []string
 	if spec.InstanceMode == nil {
