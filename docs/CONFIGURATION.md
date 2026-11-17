@@ -21,9 +21,9 @@ This guide details the configuration options for the Karpenter Provider for Lino
 | `VM_MEMORY_OVERHEAD_PERCENT` | Additional memory overhead to simplify calculation (0.075 = 7.5%). | No | `0.075` |
 | `IGNORE_DRA_REQUESTS` | Karpenter core setting. Set to `false` to enable alpha whole-GPU DRA scheduling. See [DRA](DRA.md). | No | `true` |
 | `DISABLE_DRY_RUN` | Set to `true` to disable dry-run validation for LinodeNodeClasses. | No | `false` |
-| `DISABLE_WEBHOOK` | Set to `true` to disable the CRD conversion webhook. The Helm chart sets this from `webhook.enabled`. See [API versions](#api-versions-and-conversion). | No | `true` (`false` in the chart) |
+| `DISABLE_WEBHOOK` | Set to `true` to disable the CRD conversion webhook. The Helm chart always sets it to `false` (the webhook is required while v1alpha1 is served). See [API versions](#api-versions-and-conversion). | No | `true` (`false` in the chart) |
 | `WEBHOOK_PORT` | Port the CRD conversion webhook listens on. | No | `8443` |
-| `SYSTEM_NAMESPACE` | Namespace Karpenter runs in; locates the webhook certificate Secret. The chart sets it from the pod namespace. | **Yes** (when the webhook is enabled) | - |
+| `SYSTEM_NAMESPACE` | Namespace Karpenter runs in; locates the webhook certificate Secret. The chart sets it from the pod namespace. | **Yes** (unless `DISABLE_WEBHOOK=true`) | - |
 
 These environment variables are injected into the controller pod via a Kubernetes Secret. By default, the Helm chart creates a secret called `karpl-credentials` from the `apiToken`, `apiURL`, `apiVersion`, and `region` values.
 

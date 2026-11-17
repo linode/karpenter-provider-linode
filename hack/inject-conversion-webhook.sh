@@ -13,7 +13,6 @@ fi
 awk '
   { print }
   /^spec:$/ {
-    print "  {{- if .Values.webhook.enabled }}"
     print "  conversion:"
     print "    strategy: Webhook"
     print "    webhook:"
@@ -25,6 +24,5 @@ awk '
     print "          namespace: {{ .Values.webhook.serviceNamespace | default .Release.Namespace }}"
     print "          path: /convert"
     print "          port: {{ .Values.webhook.port }}"
-    print "  {{- end }}"
   }
 ' "$crd" >"$crd.new" && mv "$crd.new" "$crd"
