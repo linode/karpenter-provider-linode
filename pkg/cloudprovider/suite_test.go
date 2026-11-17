@@ -124,7 +124,7 @@ var _ = Describe("CloudProvider", func() {
 		nodeClass.StatusConditions().SetTrue(opstatus.ConditionReady)
 		nodePool = coretest.NodePool(karpv1.NodePool{
 			// Keep the name short: Linode limits tags to 50 characters and the nodepool tag is "karpenter.sh/nodepool=<name>".
-			Name: "test-nodepool",
+			ObjectMeta: metav1.ObjectMeta{Name: "test-nodepool"},
 			Spec: karpv1.NodePoolSpec{
 				Template: karpv1.NodeClaimTemplate{
 					Spec: karpv1.NodeClaimTemplateSpec{
