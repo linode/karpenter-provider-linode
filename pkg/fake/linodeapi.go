@@ -352,6 +352,7 @@ func NewPlanUnavailableError(instanceType string) *linodego.Error {
 // This fake only implements the "tags" shapes used by this repo:
 //   - {"tags":"tag-a,tag-b"} => exact tag match (each comma-separated value must equal a tag string)
 //   - {"tags":{"+contains":"substr"}} => contains match (an instance matches if any tag contains substr)
+//   - {"+and":[...]} => all child tag predicates must match
 //
 // If the filter is missing/unparseable or uses unsupported operators, it is treated as no tag filtering.
 // NOTE: This means tests that use other filter operators will silently pass without any filtering
@@ -364,13 +365,24 @@ func extractTagsFromFilter(opts *linodego.ListOptions) []tagFilter {
 	if err := json.Unmarshal([]byte(opts.Filter), &filterMap); err != nil {
 		return nil
 	}
+	return extractTagPredicates(filterMap)
+}
+
+func extractTagPredicates(filterMap map[string]any) []tagFilter {
+	var filters []tagFilter
+	if children, ok := filterMap["+and"].([]any); ok {
+		for _, child := range children {
+			if predicate, ok := child.(map[string]any); ok {
+				filters = append(filters, extractTagPredicates(predicate)...)
+			}
+		}
+	}
 	tagsVal, ok := filterMap["tags"]
 	if !ok {
-		return nil
+		return filters
 	}
 	switch v := tagsVal.(type) {
 	case string:
-		var filters []tagFilter
 		for _, tag := range strings.Split(v, ",") {
 			if tag != "" {
 				filters = append(filters, tagFilter{value: tag, contains: false})
@@ -380,11 +392,11 @@ func extractTagsFromFilter(opts *linodego.ListOptions) []tagFilter {
 	case map[string]any:
 		if containsVal, ok := v["+contains"]; ok {
 			if s, ok := containsVal.(string); ok {
-				return []tagFilter{{value: s, contains: true}}
+				return append(filters, tagFilter{value: s, contains: true})
 			}
 		}
 	}
-	return nil
+	return filters
 }
 
 // instanceMatchesTags applies the tag filters returned by extractTagsFromFilter.

@@ -55,6 +55,7 @@ flowchart LR
   - LKE pool tags propagate to underlying Linode instance tags.
   - Linode automatically applies `nodepool=<poolID>` and `lke<clusterID>` tags to instances.
   - LKE node pool `Linodes` information can be delayed (30-60s); enumerate membership via the Linode Instance API filtered by `nodepool=<poolID>`, `lke<clusterID>`, and `karpenter.k8s.linode/lke-managed:true`, then client-side filter by `instanceType`.
+  - Combine repeated `tags` predicates with an explicit `+and` in linodego filters. Without it, serialization keeps only the last predicate, allowing discovery outside the requested pool or cluster.
   - Instance `Label` is used as the node ID (critical for early discovery before `pool.Linodes` is populated).
 - **Standard tier**
   - LKE pool tags do not propagate to instances.
