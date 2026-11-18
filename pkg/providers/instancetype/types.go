@@ -135,10 +135,7 @@ func kubeReservedResources(ctx context.Context, info *linodego.LinodeType, pods 
 	}))
 }
 
-// Both LKE tiers share this plan-based estimate. Standard uses slightly different
-// increments and rounding. The deviation is small relative to plan capacity and
-// is not expected to materially affect normal scheduling, though exact fit
-// boundaries can differ.
+// Estimating LKE kubereservation
 func lkeReservations(cpus, memoryMi int) (reservedCPUMilli, reservedMemoryMi int64) {
 	cpu := float64(cpus)
 	reservedCPU := 0.06*min(cpu, 1) + 0.01*min(max(cpu-1, 0), 1) +
