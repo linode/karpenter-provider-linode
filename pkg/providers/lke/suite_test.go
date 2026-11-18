@@ -1203,6 +1203,52 @@ var _ = Describe("LKENodeProvider", func() {
 					Expect(input.Opts.UpdateStrategy).To(BeNil())
 				})
 
+				It("should propagate the Kubernetes version without an update strategy", func() {
+					version := fake.DefaultClusterVersion
+					nodeClass.Spec.LKEMode = &v1.LKEMode{LKEK8sVersion: new(version)}
+
+					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+					Expect(err).ToNot(HaveOccurred())
+
+					_, _ = linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+
+					input := linodeEnv.LinodeAPI.CreateLKENodePoolBehavior.CalledWithInput.At(0)
+					Expect(input.Opts.K8sVersion).ToNot(BeNil())
+					Expect(*input.Opts.K8sVersion).To(Equal(version))
+					Expect(input.Opts.UpdateStrategy).To(BeNil())
+				})
+
+				It("should update an existing pool's Kubernetes version without an update strategy", func() {
+					version := fake.DefaultClusterVersion
+					nodeClass.Spec.LKEMode = &v1.LKEMode{LKEK8sVersion: new(version)}
+
+					poolID := 311
+					poolTags := []string{
+						fmt.Sprintf("%s=%s", karpv1.NodePoolLabelKey, nodePoolObj.Name),
+						fmt.Sprintf("%s=%s", v1.LabelLKEManaged, "true"),
+					}
+					linodeEnv.LinodeAPI.NodePools.Store(
+						fmt.Sprintf("%d-%d", fake.DefaultClusterID, poolID),
+						&linodego.LKENodePool{ID: poolID, Type: standardNodeType, Count: 1, Tags: poolTags, K8sVersion: new("1.30")},
+					)
+
+					ExpectApplied(ctx, env.Client, nodeClaim, nodePoolObj, nodeClass)
+					nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+					instanceTypes, err := linodeEnv.InstanceTypesProvider.List(ctx, nodeClass)
+					Expect(err).ToNot(HaveOccurred())
+
+					_, _ = linodeEnv.LKENodeProvider.Create(ctx, nodeClass, nodeClaim, map[string]string{}, instanceTypes)
+
+					Expect(linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.Calls()).To(BeNumerically(">=", 1))
+					input := linodeEnv.LinodeAPI.UpdateLKENodePoolBehavior.CalledWithInput.At(0)
+					Expect(input.PoolID).To(Equal(poolID))
+					Expect(input.Opts.K8sVersion).ToNot(BeNil())
+					Expect(*input.Opts.K8sVersion).To(Equal(version))
+					Expect(input.Opts.UpdateStrategy).To(BeNil())
+				})
+
 			})
 		})
 
