@@ -224,9 +224,15 @@ func (p *DefaultProvider) UpdateInstanceTypes(ctx context.Context) error {
 		p.instanceTypesCache.Flush() // None of the cached instance type info is valid when the instance type info changes
 		log.FromContext(ctx).WithValues("count", len(instanceTypes)).V(1).Info("discovered instance types")
 	}
-	p.instanceTypesInfo = lo.SliceToMap(instanceTypes, func(i linodego.LinodeType) (string, linodego.LinodeType) {
-		return i.ID, i
-	})
+	p.instanceTypesInfo = make(map[string]linodego.LinodeType, len(instanceTypes))
+	lkeMode := options.FromContext(ctx).Mode == "lke"
+	for _, info := range instanceTypes {
+		// Nanodes are available as VMs but are not supported by LKE node pools.
+		if lkeMode && info.Class == linodego.ClassNanode {
+			continue
+		}
+		p.instanceTypesInfo[info.ID] = info
+	}
 
 	return nil
 }

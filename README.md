@@ -79,6 +79,8 @@ Local development uses [Mise](https://mise.jdx.dev/) to install and run the pinn
 mise install
 ```
 
+Keep the Go version in `mise.toml` aligned with the `toolchain` version in `go.mod` so development, CI, and release builds use the same security fixes.
+
 Run common checks through Mise:
 
 ```bash

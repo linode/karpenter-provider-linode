@@ -48,6 +48,7 @@ The provider can operate in two distinct modes, controlled by the `KARPENTER_MOD
 * **Default Mode.**
 * Provisions nodes by creating **LKE Node Pools** with a count of 1.
 * The nodes are automatically joined to your LKE cluster.
+* Excludes Nanode plans, which [LKE does not support](https://techdocs.akamai.com/cloud-computing/docs/manage-nodes-and-node-pools#add-a-node-pool), from the instance-type catalog.
 * **Pros**: Simplest setup, managed by LKE.
 * **Cons**: Limited customization (cannot use custom images or advanced networking/storage options usually available to raw Linodes). Instance-only `LinodeNodeClass` fields are rejected in this mode.
 
@@ -86,7 +87,7 @@ Fields marked **Instance** or **LKE** are only meaningful in that mode. Setting 
 | ------- | ------ | ----------------- | ------------- |
 | `tags` | `[]string` | **All** | Tags to apply to Linode instances. Each complete tag is limited to 50 characters. In LKE mode, user tags are reconciled directly on instances; generated Karpenter-managed pool tags also must fit the limit and are rejected rather than shortened. |
 | `instanceMode.firewallID` | `int` | **Instance** | The ID of the Cloud Firewall to attach to a directly created Linode instance. Rejected in `lke` mode; LKE node pools use the cluster's default Firewall. |
-| `instanceMode.kubelet` | `object` | **Instance** | Kubelet settings (e.g. `kubeReserved`, `systemReserved`, eviction thresholds). Used for Karpenter's instance allocatable capacity and ephemeral storage estimates; the provider does not push them to nodes. |
+| `instanceMode.kubelet` | `object` | **Instance** | Kubelet settings (e.g. `kubeReserved`, `systemReserved`, eviction thresholds). Used for direct-instance resource estimates; explicit `kubeReserved` entries override the corresponding defaults. The provider does not push them to nodes. LKE CPU/memory reservation defaults use a shared plan-based estimate for both tiers. |
 | `lkeMode.lkeK8sVersion` | `string` | **LKE** | Specific Kubernetes version for LKE Enterprise worker nodes. Upgrade the cluster control plane to this version first; otherwise reconciliation fails and replacement NodeClaims will not come up on the requested version. For Enterprise clusters, the update strategy automatically defaults to `on_recycle`. Rejected in `instance` mode. |
 | `instanceMode.image` | `string` | **Instance** | The Image ID to deploy (default: `linode/ubuntu22.04`). Rejected in `lke` mode. |
 | `instanceMode.authorizedKeys` | `[]string` | **Instance** | SSH Public Keys to add to the `root` user. Rejected in `lke` mode. |
