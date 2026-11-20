@@ -97,10 +97,10 @@ type LinodeNodeClassSpec struct {
 	Kubelet *KubeletConfiguration `json:"kubelet,omitempty"`
 
 	// lkeK8sVersion is the Kubernetes version for LKE node pools.
-	// Only used in LKE mode. Only available for Enterprise LKE clusters.
-	// The LKE cluster control plane version must already be upgraded to this version
-	// before setting this field. Otherwise pool reconciliation fails and replacement
-	// NodeClaims won't become ready on the requested worker version.
+	// Only used in LKE mode.
+	// The value must exactly match the LKE cluster control plane version (as reported
+	// by the Linode API), so upgrade the control plane before changing this field.
+	// Otherwise validation fails and replacement NodeClaims won't be launched.
 	// +optional
 	LKEK8sVersion *string `json:"lkeK8sVersion,omitempty"`
 }

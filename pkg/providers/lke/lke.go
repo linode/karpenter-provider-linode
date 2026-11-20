@@ -486,10 +486,11 @@ func (p *DefaultProvider) reconcilePoolVersion(ctx context.Context, nodeClass *v
 	if pool.K8sVersion != nil && *pool.K8sVersion == *nodeClass.Spec.LKEMode.LKEK8sVersion {
 		return nil
 	}
-	_, err := p.client.UpdateLKENodePool(ctx, p.clusterID, pool.ID, linodego.LKENodePoolUpdateOptions{
-		K8sVersion:     nodeClass.Spec.LKEMode.LKEK8sVersion,
-		UpdateStrategy: &defaultPoolUpdateStrategy,
-	})
+	updateOpts := linodego.LKENodePoolUpdateOptions{K8sVersion: nodeClass.Spec.LKEMode.LKEK8sVersion}
+	if p.clusterTier == linodego.LKEVersionEnterprise {
+		updateOpts.UpdateStrategy = &defaultPoolUpdateStrategy
+	}
+	_, err := p.client.UpdateLKENodePool(ctx, p.clusterID, pool.ID, updateOpts)
 	if err != nil {
 		return fmt.Errorf("updating node pool %d kubernetes version: %w", pool.ID, err)
 	}
