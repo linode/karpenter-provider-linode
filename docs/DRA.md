@@ -77,7 +77,7 @@ This feature targets [NVIDIA DRA v0.5.0](https://github.com/kubernetes-sigs/dra-
 
 1. Use an exclusive profile. Do not use Multi-Instance GPU (MIG) or GPU sharing. That is not supported yet.
 2. Disable ComputeDomains. The reference chart enables them by default.
-3. Disable the legacy device plugin for the same devices. Two allocators must not own one GPU.
+3. Disable the legacy device plugin for the same devices. Two allocators must not own one GPU. With DRA enabled, the provider stops advertising `nvidia.com/gpu` capacity, so pods that request it will not scale up nodes.
 4. Use a DeviceClass that selects `gpu.nvidia.com` and `type == "gpu"`.
 5. Check that each node's ResourceSlice pool is complete, has the correct Node owner reference, and holds the GPU count that the API reports.
 
