@@ -283,6 +283,9 @@ func computeCapacity(ctx context.Context, info *linodego.LinodeType, maxPods, po
 		corev1.ResourceEphemeralStorage: *ephemeralStorage(info),
 		corev1.ResourcePods:             *pods(info, maxPods, podsPerCore),
 	}
+	if gpus := nvidiaGPUCount(ctx, info); gpus > 0 {
+		resourceList[nvidiaGPUResource] = *resource.NewQuantity(gpus, resource.DecimalSI)
+	}
 	return resourceList
 }
 

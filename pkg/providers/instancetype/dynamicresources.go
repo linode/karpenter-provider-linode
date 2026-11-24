@@ -15,12 +15,29 @@ limitations under the License.
 package instancetype
 
 import (
+	"context"
 	"fmt"
 	"unique"
 
 	"github.com/linode/linodego/v2"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 )
+
+// nvidiaGPUResource is the extended resource advertised by the NVIDIA device plugin.
+const nvidiaGPUResource corev1.ResourceName = "nvidia.com/gpu"
+
+// nvidiaGPUCount returns the number of nvidia.com/gpu units to advertise for a plan so pods
+// requesting the extended resource can be scheduled before the device plugin registers it on
+// a real node. It returns 0 when DRA scheduling is enabled (IGNORE_DRA_REQUESTS=false), because
+// the NVIDIA DRA driver then owns the GPUs and the legacy device plugin must not.
+func nvidiaGPUCount(ctx context.Context, info *linodego.LinodeType) int64 {
+	if info.GPUs <= 0 || !coreoptions.FromContext(ctx).IgnoreDRARequests {
+		return 0
+	}
+	return int64(info.GPUs)
+}
 
 // nvidiaGPUResources predicts one exclusive whole GPU per GPU the plan reports.
 // Karpenter core ignores the prediction unless DRA scheduling is enabled
