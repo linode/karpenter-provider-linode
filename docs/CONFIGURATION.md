@@ -187,6 +187,13 @@ requirements:
     values: ["on-demand"]
 ```
 
+#### GPUs
+
+Every plan that reports GPUs advertises `nvidia.com/gpu` capacity equal to its GPU count, so pods that set `resources.limits.nvidia.com/gpu` can trigger a scale-up without extra configuration. Select GPU plans on the NodePool, for example with `karpenter.k8s.linode/instance-class In [gpu]`, and taint the pool so other pods stay off it.
+
+- You must install the NVIDIA driver and device plugin (for example, the GPU Operator). A node that was launched for a GPU pod does not become initialized until the device plugin registers `nvidia.com/gpu`.
+- The capacity is not advertised when DRA scheduling is enabled (`IGNORE_DRA_REQUESTS=false`); use `ResourceClaim`s instead. See [DRA](DRA.md).
+
 #### User-Defined Labels
 
 Karpenter is aware of several well-known labels, deriving them from instance type details. If you specify a `nodeSelector` or a required `nodeAffinity` using a label that is not well-known to Karpenter, it will not launch nodes with these labels and pods will remain pending. For Karpenter to become aware that it can schedule for these labels, you must specify the label in the NodePool requirements with the `Exists` operator:

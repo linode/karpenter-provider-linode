@@ -28,6 +28,7 @@ import (
 	dracel "k8s.io/dynamic-resource-allocation/cel"
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/karpenter/pkg/cloudprovider"
+	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
 	"sigs.k8s.io/karpenter/pkg/scheduling"
 	"sigs.k8s.io/karpenter/pkg/scheduling/dynamicresources"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
@@ -147,7 +148,52 @@ func assertAdaMetadataSelectors(t *testing.T, ctx context.Context, it *cloudprov
 
 func draContext(t *testing.T) context.Context {
 	t.Helper()
-	return options.ToContext(t.Context(), test.Options())
+	ctx := coreoptions.ToContext(t.Context(), coretest.Options(coretest.OptionsFields{IgnoreDRARequests: new(false)}))
+	return options.ToContext(ctx, test.Options())
+}
+
+func nonDRAContext(t *testing.T) context.Context {
+	t.Helper()
+	ctx := coreoptions.ToContext(t.Context(), coretest.Options())
+	return options.ToContext(ctx, test.Options())
+}
+
+func TestNvidiaGPUCapacity(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		dra  bool
+		gpus int
+		want int64
+	}{
+		{name: "without DRA advertises plan GPU count", gpus: 4, want: 4},
+		{name: "without DRA single GPU", gpus: 1, want: 1},
+		{name: "without DRA CPU-only plan", gpus: 0},
+		{name: "with DRA does not advertise the device plugin resource", dra: true, gpus: 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := nonDRAContext(t)
+			if tc.dra {
+				ctx = draContext(t)
+			}
+			info := draType(adaGPUInstanceType, tc.gpus)
+			it := instancetype.NewDefaultResolver(fake.DefaultRegion).Resolve(ctx, &info, draNodeClass())
+			got, found := it.Capacity["nvidia.com/gpu"]
+			if tc.want == 0 {
+				if found {
+					t.Fatalf("expected no nvidia.com/gpu capacity, got %s", got.String())
+				}
+				return
+			}
+			if got.Value() != tc.want {
+				t.Fatalf("expected nvidia.com/gpu=%d, got %s", tc.want, got.String())
+			}
+			if allocatable := it.Allocatable(); allocatable["nvidia.com/gpu"] != got {
+				t.Fatalf("expected GPUs to be allocatable, got %v", allocatable)
+			}
+		})
+	}
 }
 
 func draNodeClass() *v1.LinodeNodeClass {
